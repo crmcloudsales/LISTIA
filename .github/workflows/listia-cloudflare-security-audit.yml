@@ -85,12 +85,40 @@ jobs:
           echo "" >> "${GITHUB_STEP_SUMMARY}"
           echo "Read-only audit. No Cloudflare setting is modified." >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Validate token and effective zone access
+      - name: Resolve token and effective zone access
         shell: bash
         run: |
           set -euo pipefail
-          source /tmp/cf-audit.sh
-          audit_endpoint             "Token and zone access"             "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}"             '{success, result: {id: .result.id, name: .result.name, status: .result.status, type: .result.type}, errors}'             true
+          response_file="$(mktemp)"
+          http_code=$(curl --silent --show-error             --output "${response_file}"             --write-out "%{http_code}"             --header "Authorization: Bearer ${CF_TOKEN}"             "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}")
+
+          if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ] && [ "$(jq -r '.success // false' "${response_file}")" = "true" ]; then
+            echo "::add-mask::${CF_ZONE_ID}"
+            echo "EFFECTIVE_CF_ZONE_ID=${CF_ZONE_ID}" >> "${GITHUB_ENV}"
+            echo "- ✅ Token and zone access: available using configured Zone ID" >> "${GITHUB_STEP_SUMMARY}"
+            rm -f "${response_file}"
+            exit 0
+          fi
+
+          echo "::warning::Configured CLOUDFLARE_ZONE_ID was rejected; attempting read-only zone discovery."
+          discovery_file="$(mktemp)"
+          discovery_code=$(curl --silent --show-error             --get             --output "${discovery_file}"             --write-out "%{http_code}"             --header "Authorization: Bearer ${CF_TOKEN}"             --data-urlencode "name=listiaapp.com"             --data-urlencode "account.id=${CF_ACCOUNT_ID}"             "https://api.cloudflare.com/client/v4/zones")
+
+          discovered_zone_id=$(jq -r '.result[0].id // empty' "${discovery_file}" 2>/dev/null || true)
+          if [ "${discovery_code}" -ge 200 ] && [ "${discovery_code}" -lt 300 ] && [ -n "${discovered_zone_id}" ]; then
+            echo "::add-mask::${discovered_zone_id}"
+            echo "EFFECTIVE_CF_ZONE_ID=${discovered_zone_id}" >> "${GITHUB_ENV}"
+            echo "- ✅ Token and zone access: available; zone resolved safely by name and account" >> "${GITHUB_STEP_SUMMARY}"
+            echo "- ⚠️ Stored CLOUDFLARE_ZONE_ID should be corrected later" >> "${GITHUB_STEP_SUMMARY}"
+            rm -f "${response_file}" "${discovery_file}"
+            exit 0
+          fi
+
+          echo "::error::Unable to access or discover the LISTIA zone with the configured token/account."
+          jq '{success, errors: [.errors[]? | {code, message}]}' "${discovery_file}" || true
+          echo "- ❌ Token and zone access: unavailable" >> "${GITHUB_STEP_SUMMARY}"
+          rm -f "${response_file}" "${discovery_file}"
+          exit 1
 
       - name: Audit account access
         shell: bash
