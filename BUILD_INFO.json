@@ -1,0 +1,13 @@
+{
+  "version": "0.8.6.1",
+  "status": "office_dashboard_property_material_intake",
+  "languages": {"supported":["es","en","fr"],"automatic_detection":true,"manual_override":true,"preference_key":"listia_language","fallback":"en"},
+  "supabase": {"auth_connected":true,"organizations_connected":true,"onboarding_state_connected":true,"integration_connections_connected":true,"google_oauth_start_active":true,"google_oauth_callback_active":true,"tokens_server_side_only":true},
+  "journey": ["1/5 Business identity","2/5 Plan intent","3/5 Connect Google","4/5 Discovery/import","5/5 Business DNA baseline"],
+  "google_initial_scopes": ["openid","email","profile","drive.file","calendar.app.created","calendar.events.freebusy"],
+  "security": ["OAuth authorization URL generated server-side","PKCE + one-time state + expiry","OAuth client secret stored in Edge Function Secrets","Per-user OAuth tokens stored server-side in Vault","No paid entitlement granted by plan selection"],
+  "fixed_runtime_cost_target": "US$0 during MVP where provider free tiers allow",
+  "office_v086": {"dashboard_cards":["Today appointments","New opportunities","Leads managed","Active properties"],"primary_action":"Give LISTIA property material","data_source":"live Supabase tenant-scoped tables"},
+  "property_intake_v086": {"experience":"material-first; no portal-style long form","accepted_inputs":["PDF","photos","video","price list","description","price","sale/rent","commission","location","postal code"],"storage":"private Supabase Storage bucket property-materials","max_file_bytes":52428800,"free_plan_limit":"1 non-archived property enforced server-side by property-intake-start","backend":"property-intake-start Edge Function v1"},
+  "layout_refinement_v0861": {"scope":"top row only","affected_elements":["logo","language selector"],"mobile_behavior":"moves the top row slightly lower and gives it its own vertical slot","goal":"visually center logo and language selector between the upper safe area and the panel top without moving the form","form_changed":false}
+}
