@@ -69,7 +69,7 @@ jobs:
           echo >> "${GITHUB_STEP_SUMMARY}"
 
           projects_file="${work_dir}/pages-projects.json"
-          projects_http="$(cf_get "${CLOUDFLARE_API_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects?per_page=100" "${projects_file}")"
+          projects_http="$(cf_get "${CLOUDFLARE_API_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects" "${projects_file}")"
           echo "Pages projects API: HTTP ${projects_http}"
           if [[ "${projects_http}" == '200' ]]; then
             jq -c '[.result[] | {
@@ -168,6 +168,8 @@ jobs:
             local body="${probe_dir}/${label}.body"
             local headers="${probe_dir}/${label}.headers"
             local metadata
+            : > "${body}"
+            : > "${headers}"
             metadata="$(curl --silent --show-error --location --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 45               --dump-header "${headers}"               --output "${body}"               --write-out '%{url_effective}|%{http_code}|%{content_type}|%{size_download}|%{num_redirects}'               "${url}" || true)"
             title="$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' "${body}" | head -n1)"
             location="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/\r$/,""); print substr($0,11)}' "${headers}" | tail -n1)"
