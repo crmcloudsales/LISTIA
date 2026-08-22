@@ -231,6 +231,7 @@
       'msg.google_error': 'No pudimos conectar Google',
       'msg.email_not_confirmed': 'Primero confirma tu correo electrónico para continuar.',
       'msg.user_exists': 'Ya existe una cuenta con este correo electrónico.',
+      'msg.rate_limited': 'Demasiados intentos. Espera un momento y vuelve a intentarlo.',
       'msg.generic_error': 'Ocurrió un error. Intenta nuevamente.'
     },
     en: {
@@ -459,6 +460,7 @@
       'msg.google_error': 'We couldn’t connect Google',
       'msg.email_not_confirmed': 'Confirm your email address before continuing.',
       'msg.user_exists': 'An account with this email already exists.',
+      'msg.rate_limited': 'Too many attempts. Wait a moment and try again.',
       'msg.generic_error': 'Something went wrong. Please try again.'
     },
     fr: {
@@ -687,6 +689,7 @@
       'msg.google_error': 'Nous n’avons pas pu connecter Google',
       'msg.email_not_confirmed': 'Confirmez votre adresse e-mail avant de continuer.',
       'msg.user_exists': 'Un compte existe déjà avec cette adresse e-mail.',
+      'msg.rate_limited': 'Trop de tentatives. Patientez un instant puis réessayez.',
       'msg.generic_error': 'Une erreur est survenue. Réessayez.'
     }
   };

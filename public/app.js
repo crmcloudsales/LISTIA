@@ -13,7 +13,8 @@ function localizeError(error) {
     "User already registered": "msg.user_exists",
     "Signup requires a valid password": "msg.password_min8_signup",
     "free_property_limit": "msg.free_property_limit",
-    "material_required": "msg.property_material_required"
+    "material_required": "msg.property_material_required",
+    "rate_limited": "msg.rate_limited"
   };
   if (known[raw]) return t(known[raw]);
   const localKeys = [

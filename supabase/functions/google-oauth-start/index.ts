@@ -8,6 +8,52 @@ const SUPABASE_DB_URL = Deno.env.get('SUPABASE_DB_URL')!
 const GOOGLE_OAUTH_CLIENT_ID = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID')
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
 
+type RateLimitDecision = { allowed: boolean; retryAfter: number }
+
+async function consumeSecurityRateLimit(
+  principalId: string,
+  organizationId: string,
+  action: string,
+  maxRequests: number,
+  windowSeconds: number,
+): Promise<RateLimitDecision> {
+  const lockKey = `${principalId}:${organizationId}:${action}`
+  return await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+    const [bucket] = await tx`
+      insert into private.security_rate_limits
+        (principal_id, organization_id, action, window_started_at, request_count, updated_at)
+      values
+        (${principalId}::uuid, ${organizationId}::uuid, ${action}, now(), 1, now())
+      on conflict (principal_id, organization_id, action) do update
+      set window_started_at = case
+            when private.security_rate_limits.window_started_at <= now() - (${windowSeconds} * interval '1 second')
+              then now()
+            else private.security_rate_limits.window_started_at
+          end,
+          request_count = case
+            when private.security_rate_limits.window_started_at <= now() - (${windowSeconds} * interval '1 second')
+              then 1
+            else private.security_rate_limits.request_count + 1
+          end,
+          updated_at = now()
+      returning request_count,
+        greatest(
+          1,
+          ceil(extract(epoch from (
+            window_started_at + (${windowSeconds} * interval '1 second') - now()
+          )))
+        )::int as retry_after
+    `
+    const requestCount = Number(bucket?.request_count || 1)
+    return {
+      allowed: requestCount <= maxRequests,
+      retryAfter: Math.max(1, Number(bucket?.retry_after || windowSeconds)),
+    }
+  })
+}
+
+
 const allowedRedirects = new Set([
   'https://listia-pwa.pages.dev/',
   'https://app.listiaapp.com/',
@@ -60,6 +106,8 @@ function json(req: Request, body: unknown, status = 200) {
       ...corsHeaders(req),
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
     },
   })
 }
@@ -102,6 +150,11 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (memberError || !member) return json(req, { error: 'organization_access_denied' }, 403)
+
+    const rateLimit = await consumeSecurityRateLimit(user.id, body.organization_id, 'google_oauth_start', 5, 60)
+    if (!rateLimit.allowed) {
+      return json(req, { error: 'rate_limited', retry_after: rateLimit.retryAfter }, 429)
+    }
     if (!GOOGLE_OAUTH_CLIENT_ID) return json(req, { error: 'google_oauth_not_configured', setup_required: true }, 503)
 
     const stateBytes = crypto.getRandomValues(new Uint8Array(32))
@@ -112,12 +165,12 @@ Deno.serve(async (req: Request) => {
     const stateHash = await sha256Hex(state)
 
     await sql`
-      delete from public.oauth_connection_states
+      delete from private.oauth_connection_states
       where expires_at < now() or used_at is not null
     `
 
     await sql`
-      insert into public.oauth_connection_states
+      insert into private.oauth_connection_states
         (state_hash, provider, organization_id, user_id, code_verifier, redirect_to, expires_at)
       values
         (${stateHash}, 'google', ${body.organization_id}::uuid, ${user.id}::uuid, ${codeVerifier}, ${redirectTo}, now() + interval '10 minutes')

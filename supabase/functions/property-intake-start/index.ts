@@ -7,6 +7,52 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SUPABASE_DB_URL = Deno.env.get('SUPABASE_DB_URL')!
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
 
+type RateLimitDecision = { allowed: boolean; retryAfter: number }
+
+async function consumeSecurityRateLimit(
+  principalId: string,
+  organizationId: string,
+  action: string,
+  maxRequests: number,
+  windowSeconds: number,
+): Promise<RateLimitDecision> {
+  const lockKey = `${principalId}:${organizationId}:${action}`
+  return await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+    const [bucket] = await tx`
+      insert into private.security_rate_limits
+        (principal_id, organization_id, action, window_started_at, request_count, updated_at)
+      values
+        (${principalId}::uuid, ${organizationId}::uuid, ${action}, now(), 1, now())
+      on conflict (principal_id, organization_id, action) do update
+      set window_started_at = case
+            when private.security_rate_limits.window_started_at <= now() - (${windowSeconds} * interval '1 second')
+              then now()
+            else private.security_rate_limits.window_started_at
+          end,
+          request_count = case
+            when private.security_rate_limits.window_started_at <= now() - (${windowSeconds} * interval '1 second')
+              then 1
+            else private.security_rate_limits.request_count + 1
+          end,
+          updated_at = now()
+      returning request_count,
+        greatest(
+          1,
+          ceil(extract(epoch from (
+            window_started_at + (${windowSeconds} * interval '1 second') - now()
+          )))
+        )::int as retry_after
+    `
+    const requestCount = Number(bucket?.request_count || 1)
+    return {
+      allowed: requestCount <= maxRequests,
+      retryAfter: Math.max(1, Number(bucket?.retry_after || windowSeconds)),
+    }
+  })
+}
+
+
 const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com'])
 
 function cors(req: Request) {
@@ -68,6 +114,11 @@ Deno.serve(async (req: Request) => {
       .eq('status', 'active')
       .maybeSingle()
     if (!member) return json(req, { error: 'organization_access_denied' }, 403)
+
+    const rateLimit = await consumeSecurityRateLimit(user.id, body.organization_id, 'property_intake_start', 5, 60)
+    if (!rateLimit.allowed) {
+      return json(req, { error: 'rate_limited', retry_after: rateLimit.retryAfter }, 429)
+    }
 
     const [org] = await sql`
       select id,name,onboarding_completed

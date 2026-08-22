@@ -7,6 +7,14 @@ const GOOGLE_OAUTH_CLIENT_ID = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID')
 const GOOGLE_OAUTH_CLIENT_SECRET = Deno.env.get('GOOGLE_OAUTH_CLIENT_SECRET')
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
 
+const securityHeaders = {
+  'cache-control': 'no-store, max-age=0',
+  'pragma': 'no-cache',
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+}
+
 async function sha256Hex(value: string) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
   return Array.from(digest).map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -17,7 +25,17 @@ function safeRedirect(base: string, status: string, detail?: string) {
   url.searchParams.set('integration', 'google')
   url.searchParams.set('status', status)
   if (detail) url.searchParams.set('detail', detail)
-  return Response.redirect(url.toString(), 302)
+  return new Response(null, {
+    status: 302,
+    headers: { ...securityHeaders, location: url.toString() },
+  })
+}
+
+function text(body: string, status: number) {
+  return new Response(body, {
+    status,
+    headers: { ...securityHeaders, 'content-type': 'text/plain; charset=utf-8' },
+  })
 }
 
 function normalizeEmail(value: unknown) {
@@ -37,34 +55,46 @@ async function revokeGoogleToken(token: string | undefined) {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 })
+  if (req.method !== 'GET') return text('Method not allowed', 405)
 
   const requestUrl = new URL(req.url)
   const state = requestUrl.searchParams.get('state')
   const code = requestUrl.searchParams.get('code')
   const providerError = requestUrl.searchParams.get('error')
 
-  if (!state) return new Response('Invalid OAuth state', { status: 400 })
+  if (!state || state.length > 256) return text('Invalid OAuth state', 400)
+  if (code && code.length > 8192) return text('Invalid OAuth code', 400)
+
+  let issuedAccessToken: string | undefined
+  let tokenPersisted = false
 
   try {
     const stateHash = await sha256Hex(state)
+
+    // Atomically claim the state. Only one callback can ever proceed.
     const [oauthState] = await sql`
-      select id, organization_id, user_id, code_verifier, redirect_to, expires_at, used_at
-      from public.oauth_connection_states
+      update private.oauth_connection_states
+      set used_at = now()
       where state_hash = ${stateHash}
         and provider = 'google'
-      limit 1
+        and used_at is null
+        and expires_at >= now()
+      returning id, organization_id, user_id, code_verifier, redirect_to, expires_at, used_at
     `
 
-    if (!oauthState) return new Response('OAuth state not found', { status: 400 })
-    if (oauthState.used_at) return safeRedirect(oauthState.redirect_to, 'error', 'state_already_used')
-    if (new Date(oauthState.expires_at).getTime() < Date.now()) return safeRedirect(oauthState.redirect_to, 'error', 'state_expired')
-
-    await sql`
-      update public.oauth_connection_states
-      set used_at = now()
-      where id = ${oauthState.id}::uuid and used_at is null
-    `
+    if (!oauthState) {
+      const [existingState] = await sql`
+        select used_at, expires_at
+        from private.oauth_connection_states
+        where state_hash = ${stateHash}
+          and provider = 'google'
+        limit 1
+      `
+      if (!existingState) return text('OAuth state not found', 400)
+      if (existingState.used_at) return text('OAuth state already used', 400)
+      if (new Date(existingState.expires_at).getTime() < Date.now()) return text('OAuth state expired', 400)
+      return text('Invalid OAuth state', 400)
+    }
 
     if (providerError) return safeRedirect(oauthState.redirect_to, 'cancelled', providerError)
     if (!code) return safeRedirect(oauthState.redirect_to, 'error', 'missing_code')
@@ -88,17 +118,19 @@ Deno.serve(async (req: Request) => {
 
     const tokenData = await tokenResponse.json()
     if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error('google token exchange failed', tokenData)
+      console.error('google token exchange failed', { status: tokenResponse.status, error: tokenData?.error || null })
       return safeRedirect(oauthState.redirect_to, 'error', 'token_exchange_failed')
     }
+    issuedAccessToken = tokenData.access_token
 
     const userInfoResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
       headers: { authorization: `Bearer ${tokenData.access_token}` },
     })
     const userInfo = await userInfoResponse.json()
     if (!userInfoResponse.ok || !userInfo.sub) {
-      console.error('google userinfo failed', userInfo)
+      console.error('google userinfo failed', { status: userInfoResponse.status })
       await revokeGoogleToken(tokenData.access_token)
+      issuedAccessToken = undefined
       return safeRedirect(oauthState.redirect_to, 'error', 'userinfo_failed')
     }
 
@@ -116,6 +148,7 @@ Deno.serve(async (req: Request) => {
         organization_id: oauthState.organization_id,
       })
       await revokeGoogleToken(tokenData.access_token)
+      issuedAccessToken = undefined
       return safeRedirect(oauthState.redirect_to, 'error', 'google_email_mismatch')
     }
 
@@ -130,6 +163,7 @@ Deno.serve(async (req: Request) => {
     `
     if (lockedConnection?.external_account_id && lockedConnection.external_account_id !== userInfo.sub) {
       await revokeGoogleToken(tokenData.access_token)
+      issuedAccessToken = undefined
       return safeRedirect(oauthState.redirect_to, 'error', 'google_account_locked')
     }
 
@@ -250,10 +284,12 @@ Deno.serve(async (req: Request) => {
       return { connectionId }
     })
 
+    tokenPersisted = true
     console.log('google oauth connected', { organization_id: oauthState.organization_id, connection_id: result.connectionId })
     return safeRedirect(oauthState.redirect_to, 'connected')
   } catch (error) {
+    if (issuedAccessToken && !tokenPersisted) await revokeGoogleToken(issuedAccessToken)
     console.error('google-oauth-callback', error)
-    return new Response('OAuth connection failed', { status: 500 })
+    return text('OAuth connection failed', 500)
   }
 })

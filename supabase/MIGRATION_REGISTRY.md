@@ -2,7 +2,7 @@
 
 Live project: `zvzafiarwerbuoaccnoz`
 
-This registry was reconciled against the live Supabase migration table on 2026-08-21. The database currently reports these applied migrations, in order:
+This registry was reconciled against the live Supabase migration table on 2026-08-22. The database currently reports these applied migrations, in order:
 
 1. `20260820053941` — `secure_rls_auto_enable_function`
 2. `20260820060655` — `create_identity_organizations_memberships`
@@ -20,6 +20,11 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 14. `20260821100744` — `add_discovery_selection_constraints`
 15. `20260821105929` — `add_mvp_office_properties_leads_appointments`
 16. `20260821110312` — `add_property_assets_property_index`
+17. `20260822062704` — `max_lockdown_phase1_least_privilege`
+18. `20260822062827` — `max_lockdown_phase2_private_oauth_state`
+19. `20260822063004` — `max_lockdown_phase3_remove_oauth_compat`
+20. `20260822063027` — `max_lockdown_phase4_service_role_allowlist`
+21. `20260822121958` — `add_edge_function_security_rate_limits`
 
 The newest product migrations are stored as SQL files in this repository. Historical migrations 1–12 remain recorded here while their exact SQL snapshots are progressively reconciled from the live migration history; do not re-run them against production simply because a local SQL file is added later.
 
