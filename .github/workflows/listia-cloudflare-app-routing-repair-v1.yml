@@ -279,6 +279,7 @@ jobs:
           dns_records_http='not-attempted'
           dns_token=''
           dns_token_source=''
+          dns_public_existing='false'
 
           for token_source in security pages; do
             if [[ "${token_source}" == 'security' ]]; then
@@ -314,12 +315,21 @@ jobs:
             public_dns_rcode="$(jq -r '.Status // -1' "${public_dns_file}" 2>/dev/null || echo -1)"
             public_dns_answers="$(jq -r '(.Answer // []) | length' "${public_dns_file}" 2>/dev/null || echo -1)"
             echo "Public DNS safety check: HTTP ${public_dns_http} rcode=${public_dns_rcode} answers=${public_dns_answers}"
-            if [[ "${public_dns_http}" != '200' || "${public_dns_rcode}" != '3' || "${public_dns_answers}" != '0' ]]; then
-              echo 'Refusing DNS write-only fallback because public DNS does not prove NXDOMAIN.'
+            if [[ "${public_dns_http}" != '200' ]]; then
+              echo 'Refusing DNS fallback because the public resolver check failed.'
               exit 1
             fi
-            dns_record_count='0'
-            echo 'Authenticated DNS reads are unavailable; public NXDOMAIN permits only the exact authorized CNAME create attempt.'
+            if [[ "${public_dns_rcode}" == '3' && "${public_dns_answers}" == '0' ]]; then
+              dns_record_count='0'
+              echo 'Authenticated DNS reads are unavailable; public NXDOMAIN permits only the exact authorized CNAME create attempt.'
+            elif [[ "${public_dns_rcode}" == '0' && "${public_dns_answers}" -gt 0 ]]; then
+              dns_record_count='0'
+              dns_public_existing='true'
+              echo 'Public DNS exists. No DNS mutation will be attempted; Pages status and byte-level smoke tests must prove the routing target.'
+            else
+              echo 'Refusing DNS fallback because public DNS is neither NXDOMAIN nor a resolved hostname.'
+              exit 1
+            fi
           fi
 
           if (( dns_record_count > 1 )); then
@@ -329,7 +339,10 @@ jobs:
           fi
 
           dns_action='kept existing exact Pages CNAME'
-          if (( dns_record_count == 1 )); then
+          if [[ "${dns_public_existing}" == 'true' ]]; then
+            dns_action='accepted existing public DNS; Pages and content verification required'
+            dns_token_source='manual/public DNS'
+          elif (( dns_record_count == 1 )); then
             dns_type="$(jq -r --arg hostname "${APP_HOSTNAME}" '.result[] | select(.name == $hostname) | .type' "${dns_records_file}")"
             dns_content="$(jq -r --arg hostname "${APP_HOSTNAME}" '.result[] | select(.name == $hostname) | .content | rtrimstr(".")' "${dns_records_file}")"
             dns_proxied="$(jq -r --arg hostname "${APP_HOSTNAME}" '.result[] | select(.name == $hostname) | .proxied' "${dns_records_file}")"
@@ -381,7 +394,7 @@ jobs:
             fi
             dns_action='created exact Pages CNAME'
           fi
-          echo "DNS authorization source: ${dns_token_source:-pre-existing record}"
+          echo "DNS source: ${dns_token_source:-pre-existing authenticated record}"
 
           final_status='unknown'
           final_validation='unknown'
@@ -431,7 +444,7 @@ jobs:
             echo "- Placeholder Worker routing change: ${routing_change}"
             echo "- Pages domain action: ${pages_domain_action}"
             echo "- DNS action: ${dns_action}"
-            echo "- DNS authorization source: ${dns_token_source} token"
+            echo "- DNS source: ${dns_token_source:-pre-existing authenticated record}"
             echo '- Other hostnames changed: none'
           } >> "${GITHUB_STEP_SUMMARY}"
 
