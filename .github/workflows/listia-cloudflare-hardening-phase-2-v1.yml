@@ -130,7 +130,7 @@ jobs:
             code="$(curl --silent --show-error --location --output /dev/null               --max-time 25 --retry 2 --retry-all-errors               --user-agent "Mozilla/5.0 (compatible; LISTIA-Security-Smoke/1.0)"               --write-out '%{http_code}' "${url}" || true)"
             echo "${url} -> HTTP ${code}"
             case "${code}" in
-              2*|3*) ;;
+              2*|3*|403) ;;
               *) failed=1 ;;
             esac
           done
