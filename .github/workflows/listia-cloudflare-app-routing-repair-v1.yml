@@ -252,6 +252,16 @@ jobs:
             echo "Routing change: ${routing_change}"
           elif [[ "${worker_domains_http}" != '200' && "${worker_routes_http}" != '200' ]]; then
             echo 'Cannot inspect or detach the placeholder Worker with the existing tokens; Workers Scripts/Routes read-write permission is required.'
+            blocked_root="${work_dir}/blocked-placeholder-root.body"
+            blocked_asset="${work_dir}/blocked-placeholder-app-js.body"
+            blocked_root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${blocked_root}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/")"
+            blocked_asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${blocked_asset}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js")"
+            if [[ "${blocked_root_http}" == '200' && "${blocked_asset_http}" == '200' ]] && \
+               grep -Fxq 'Hello World!' "${blocked_root}" && \
+               grep -Fxq 'Hello World!' "${blocked_asset}"; then
+              echo 'BLOCKED: exact placeholder fingerprint remains active and neither token can read or detach its Worker ownership.'
+              exit 1
+            fi
           else
             echo 'No exact Worker custom domain or exact Worker route was found with the accessible APIs.'
           fi
