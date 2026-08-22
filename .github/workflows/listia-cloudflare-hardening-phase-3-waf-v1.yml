@@ -1,0 +1,213 @@
+name: LISTIA Cloudflare Hardening Phase 3 WAF
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/listia-cloudflare-hardening-phase-3-waf-v1.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-cloudflare-hardening-phase-3-waf
+  cancel-in-progress: false
+
+jobs:
+  harden-waf:
+    name: Apply and verify high-confidence WAF rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CF_API_BASE: https://api.cloudflare.com/client/v4
+      CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      RULE_PREFIX: LISTIA P3
+    steps:
+      - name: Validate secret and read current WAF state
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_TOKEN:-}" ]; then
+            echo "::error::CLOUDFLARE_SECURITY_TOKEN is not configured"
+            exit 1
+          fi
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+
+          curl -sS --fail-with-body "${auth[@]}"             "${CF_API_BASE}/zones/${CF_ZONE_ID}" > "${RUNNER_TEMP}/zone.json"
+          plan="$(jq -r '.result.plan.legacy_id // "unknown"' "${RUNNER_TEMP}/zone.json")"
+          if [ "${plan}" != "free" ]; then
+            echo "::warning::Expected Free plan but API reported ${plan}; continuing with conservative Free-plan limits."
+          fi
+
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint"
+          status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/entrypoint-before.json" -w '%{http_code}' "${endpoint}")"
+          if [ "${status}" = "200" ]; then
+            jq -e '.success == true' "${RUNNER_TEMP}/entrypoint-before.json" >/dev/null
+            count="$(jq '.result.rules | length' "${RUNNER_TEMP}/entrypoint-before.json")"
+            echo "Entrypoint exists with ${count} rule(s)."
+          elif [ "${status}" = "404" ]; then
+            printf '{"result":{"rules":[]}}' > "${RUNNER_TEMP}/entrypoint-before.json"
+            echo "Entrypoint does not exist yet."
+          else
+            echo "::error::Unable to read WAF entrypoint (HTTP ${status})"
+            jq '{success, errors}' "${RUNNER_TEMP}/entrypoint-before.json" || true
+            exit 1
+          fi
+
+      - name: Create entrypoint if absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint"
+          status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/entrypoint-check.json" -w '%{http_code}' "${endpoint}")"
+          if [ "${status}" = "404" ]; then
+            jq -n '{
+              name: "LISTIA zone custom WAF",
+              description: "LISTIA versioned high-confidence zone WAF rules",
+              kind: "zone",
+              phase: "http_request_firewall_custom",
+              rules: []
+            }' > "${RUNNER_TEMP}/create-entrypoint.json"
+            curl -sS --fail-with-body -X POST "${auth[@]}"               --data @"${RUNNER_TEMP}/create-entrypoint.json"               "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets" > "${RUNNER_TEMP}/created-entrypoint.json"
+            jq -e '.success == true and .result.phase == "http_request_firewall_custom"'               "${RUNNER_TEMP}/created-entrypoint.json" >/dev/null
+            echo "Created zone-level http_request_firewall_custom entrypoint."
+          elif [ "${status}" = "200" ]; then
+            echo "Entrypoint already exists."
+          else
+            echo "::error::Unexpected entrypoint status HTTP ${status}"
+            exit 1
+          fi
+
+      - name: Upsert five idempotent high-confidence rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          entrypoint_url="${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint"
+
+          smoke_legitimate() {
+            local failed=0
+            local urls=(
+              "https://listiaapp.com/"
+              "https://listiaapp.com/?lang=en"
+              "https://app.listiaapp.com/"
+              "https://listiaapp.com/manifest.webmanifest"
+              "https://listiaapp.com/manifest-es.webmanifest"
+              "https://listiaapp.com/manifest-en.webmanifest"
+              "https://listiaapp.com/manifest-fr.webmanifest"
+              "https://listiaapp.com/sw.js"
+              "https://listiaapp.com/app.js"
+              "https://listiaapp.com/config.js"
+              "https://listiaapp.com/i18n.js"
+              "https://listiaapp.com/styles.css"
+              "https://listiaapp.com/listia-logo-transparent.webp"
+              "https://listiaapp.com/icon-192.png"
+            )
+            for url in "${urls[@]}"; do
+              code="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 25                 --user-agent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'                 "${url}" || true)"
+              echo "LEGIT ${url} -> HTTP ${code}"
+              case "${code}" in 2*|3*) ;; *) failed=1 ;; esac
+            done
+            [ "${failed}" -eq 0 ]
+          }
+
+          upsert_rule() {
+            local description="$1"
+            local expression="$2"
+            local current ruleset_id rule_id count
+            local changed="new"
+
+            curl -sS --fail-with-body "${auth[@]}" "${entrypoint_url}" > "${RUNNER_TEMP}/current.json"
+            current="${RUNNER_TEMP}/current.json"
+            ruleset_id="$(jq -r '.result.id' "${current}")"
+            count="$(jq '.result.rules | length' "${current}")"
+            rule_id="$(jq -r --arg d "${description}" '.result.rules[]? | select(.description == $d) | .id' "${current}" | head -n1)"
+
+            jq -n --arg d "${description}" --arg e "${expression}"               '{action:"block", expression:$e, description:$d, enabled:true}'               > "${RUNNER_TEMP}/desired-rule.json"
+
+            if [ -n "${rule_id}" ] && [ "${rule_id}" != "null" ]; then
+              old_expression="$(jq -r --arg id "${rule_id}" '.result.rules[] | select(.id == $id) | .expression' "${current}")"
+              old_action="$(jq -r --arg id "${rule_id}" '.result.rules[] | select(.id == $id) | .action' "${current}")"
+              old_enabled="$(jq -r --arg id "${rule_id}" '.result.rules[] | select(.id == $id) | (.enabled // true)' "${current}")"
+              if [ "${old_expression}" = "${expression}" ] && [ "${old_action}" = "block" ] && [ "${old_enabled}" = "true" ]; then
+                echo "Unchanged: ${description}"
+                return 0
+              fi
+              jq --arg id "${rule_id}" '.result.rules[] | select(.id == $id) |
+                {action, expression, description, enabled}' "${current}" > "${RUNNER_TEMP}/old-rule.json"
+              curl -sS --fail-with-body -X PUT "${auth[@]}"                 --data @"${RUNNER_TEMP}/desired-rule.json"                 "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                 > "${RUNNER_TEMP}/upsert-result.json"
+              changed="updated"
+            else
+              if [ "${count}" -ge 5 ]; then
+                echo "::error::Free-plan limit reached before adding: ${description}"
+                exit 1
+              fi
+              curl -sS --fail-with-body -X POST "${auth[@]}"                 --data @"${RUNNER_TEMP}/desired-rule.json"                 "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules"                 > "${RUNNER_TEMP}/upsert-result.json"
+              rule_id="$(jq -r --arg d "${description}" '.result.rules[] | select(.description == $d) | .id' "${RUNNER_TEMP}/upsert-result.json" | head -n1)"
+            fi
+            jq -e '.success == true' "${RUNNER_TEMP}/upsert-result.json" >/dev/null
+            echo "Applied (${changed}): ${description}"
+
+            sleep 3
+            if ! smoke_legitimate; then
+              echo "::error::Legitimate smoke test failed after: ${description}"
+              if [ "${changed}" = "new" ]; then
+                curl -sS --fail-with-body -X DELETE "${auth[@]}"                   "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                   > "${RUNNER_TEMP}/rollback.json"
+              else
+                curl -sS --fail-with-body -X PUT "${auth[@]}"                   --data @"${RUNNER_TEMP}/old-rule.json"                   "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                   > "${RUNNER_TEMP}/rollback.json"
+              fi
+              jq -e '.success == true' "${RUNNER_TEMP}/rollback.json" >/dev/null
+              echo "::warning::Reverted only the rule that preceded the failure."
+              exit 1
+            fi
+          }
+
+          rule1='(starts_with(lower(http.request.uri.path), "/.env") or lower(http.request.uri.path) eq "/.git" or starts_with(lower(http.request.uri.path), "/.git/") or lower(http.request.uri.path) eq "/.svn" or starts_with(lower(http.request.uri.path), "/.svn/") or lower(http.request.uri.path) eq "/.hg" or starts_with(lower(http.request.uri.path), "/.hg/") or ends_with(lower(http.request.uri.path), "/composer.json") or ends_with(lower(http.request.uri.path), "/composer.lock") or ends_with(lower(http.request.uri.path), "/package-lock.json") or ends_with(lower(http.request.uri.path), "/yarn.lock") or ends_with(lower(http.request.uri.path), "/pnpm-lock.yaml") or ends_with(lower(http.request.uri.path), ".pem") or ends_with(lower(http.request.uri.path), ".key") or ends_with(lower(http.request.uri.path), ".p12") or ends_with(lower(http.request.uri.path), ".pfx") or ends_with(lower(http.request.uri.path), ".sql") or ends_with(lower(http.request.uri.path), ".bak") or ends_with(lower(http.request.uri.path), ".backup") or ends_with(lower(http.request.uri.path), ".old") or ends_with(lower(http.request.uri.path), ".orig") or ends_with(lower(http.request.uri.path), ".swp") or ends_with(lower(http.request.uri.path), ".map") or lower(http.request.uri.path) contains "/backups/" or lower(http.request.uri.path) contains "/dumps/")'
+          rule2='(starts_with(lower(http.request.uri.path), "/wp-admin") or lower(http.request.uri.path) eq "/wp-login.php" or lower(http.request.uri.path) eq "/xmlrpc.php" or starts_with(lower(http.request.uri.path), "/wp-content/") or starts_with(lower(http.request.uri.path), "/wp-includes/") or starts_with(lower(http.request.uri.path), "/wordpress/") or starts_with(lower(http.request.uri.path), "/phpmyadmin") or starts_with(lower(http.request.uri.path), "/pma/") or lower(http.request.uri.path) eq "/adminer.php" or starts_with(lower(http.request.uri.path), "/vendor/phpunit/") or starts_with(lower(http.request.uri.path), "/cgi-bin/"))'
+          rule3='http.request.method in {"TRACE" "TRACK" "CONNECT"}'
+          rule4='(raw.http.request.uri.path contains "../" or lower(raw.http.request.uri.path) contains "%2e%2e" or lower(raw.http.request.uri.path) contains "%252e%252e" or lower(raw.http.request.uri.path) contains "/etc/passwd" or lower(raw.http.request.uri.path) contains "%2fetc%2fpasswd" or lower(raw.http.request.uri.path) contains "win.ini" or lower(raw.http.request.uri.path) contains "/proc/self/environ" or lower(raw.http.request.uri.path) contains "%2fproc%2fself%2fenviron")'
+          rule5='(lower(http.user_agent) contains "sqlmap" or lower(http.user_agent) contains "nikto" or lower(http.user_agent) contains "nmap scripting engine" or lower(http.user_agent) contains "nuclei" or lower(http.user_agent) contains "masscan" or lower(http.user_agent) contains "acunetix" or lower(http.user_agent) contains "nessus" or lower(http.user_agent) contains "wpscan")'
+
+          upsert_rule "LISTIA P3 1/5 - Sensitive files and secrets" "${rule1}"
+          upsert_rule "LISTIA P3 2/5 - Unused technology probes" "${rule2}"
+          upsert_rule "LISTIA P3 3/5 - Unsafe HTTP methods" "${rule3}"
+          upsert_rule "LISTIA P3 4/5 - Traversal and system file probes" "${rule4}"
+          upsert_rule "LISTIA P3 5/5 - Offensive scanner user agents" "${rule5}"
+
+      - name: Verify final ruleset and run negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint"
+          curl -sS --fail-with-body "${auth[@]}" "${endpoint}" > "${RUNNER_TEMP}/final-ruleset.json"
+
+          jq -e '
+            .success == true and
+            ([.result.rules[] | select(.description | startswith("LISTIA P3 "))] | length) == 5 and
+            ([.result.rules[] | select((.description | startswith("LISTIA P3 ")) and .action == "block" and (.enabled // true))] | length) == 5
+          ' "${RUNNER_TEMP}/final-ruleset.json" >/dev/null
+
+          echo "Final LISTIA Phase 3 rules:"
+          jq '[.result.rules[] | select(.description | startswith("LISTIA P3 ")) |
+            {id, description, action, enabled, expression}]' "${RUNNER_TEMP}/final-ruleset.json"
+
+          negative_paths=("/.env" "/.git/config" "/wp-login.php" "/xmlrpc.php" "/phpmyadmin")
+          failed=0
+          for path in "${negative_paths[@]}"; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20               --user-agent 'Mozilla/5.0 LISTIA-WAF-Negative-Test'               "https://listiaapp.com${path}" || true)"
+            echo "NEGATIVE https://listiaapp.com${path} -> HTTP ${code}"
+            if [ "${code}" != "403" ]; then failed=1; fi
+          done
+
+          scanner_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20             --user-agent 'sqlmap/1.8' 'https://listiaapp.com/' || true)"
+          echo "NEGATIVE scanner user-agent -> HTTP ${scanner_code}"
+          if [ "${scanner_code}" != "403" ]; then failed=1; fi
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::One or more negative WAF checks did not return HTTP 403"
+            exit 1
+          fi
