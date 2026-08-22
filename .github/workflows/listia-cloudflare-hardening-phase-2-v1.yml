@@ -70,7 +70,7 @@ jobs:
           endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/bot_management"
           jq -n '{
             ai_bots_protection: "block",
-            content_bots_protection: "block",
+            content_bots_protection: "disabled",
             crawler_protection: "enabled"
           }' > "${RUNNER_TEMP}/bot-phase2-request.json"
 
@@ -104,7 +104,7 @@ jobs:
 
           jq -e '
             .ai_bots_protection == "block" and
-            .content_bots_protection == "block" and
+            .content_bots_protection == "disabled" and
             .crawler_protection == "enabled" and
             .fight_mode == false
           ' "${RUNNER_TEMP}/bot-after-result.json" >/dev/null
