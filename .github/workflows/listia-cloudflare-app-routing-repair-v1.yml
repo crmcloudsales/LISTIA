@@ -273,8 +273,8 @@ jobs:
             # custom-domain API confirms this exact hostname is no longer owned.
             stale_root_body="${work_dir}/stale-pages-root.body"
             stale_asset_body="${work_dir}/stale-pages-app-js.body"
-            stale_root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_root_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/")"
-            stale_asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_asset_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js")"
+            stale_root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_root_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/" || true)"
+            stale_asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_asset_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js" || true)"
             if [[ "${stale_root_http}" == '200' && "${stale_asset_http}" == '200' ]] && \
                grep -Fxq 'Hello World!' "${stale_root_body}" && \
                grep -Fxq 'Hello World!' "${stale_asset_body}"; then
