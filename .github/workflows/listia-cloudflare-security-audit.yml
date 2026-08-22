@@ -9,7 +9,6 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-
     env:
       CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -20,218 +19,129 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ -z "${CF_TOKEN:-}" ]; then
-            echo "CLOUDFLARE_SECURITY_TOKEN is missing"
+          missing=0
+          for variable in CF_TOKEN CF_ZONE_ID CF_ACCOUNT_ID; do
+            if [ -z "${!variable:-}" ]; then
+              echo "::error::Required secret for ${variable} is missing."
+              missing=1
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
             exit 1
           fi
+          echo "Required secrets are present."
 
-          if [ -z "${CF_ZONE_ID:-}" ]; then
-            echo "CLOUDFLARE_ZONE_ID is missing"
-            exit 1
-          fi
+      - name: Prepare read-only audit helper
+        shell: bash
+        run: |
+          cat > /tmp/cf-audit.sh <<'AUDIT_HELPER'
+          audit_endpoint() {
+            local label="$1"
+            local url="$2"
+            local jq_filter="$3"
+            local required="${4:-false}"
+            local response_file
+            response_file="$(mktemp)"
 
-          if [ -z "${CF_ACCOUNT_ID:-}" ]; then
-            echo "CLOUDFLARE_ACCOUNT_ID is missing"
-            exit 1
-          fi
+            local http_code
+            if ! http_code=$(curl --silent --show-error               --output "${response_file}"               --write-out "%{http_code}"               --header "Authorization: Bearer ${CF_TOKEN}"               --header "Content-Type: application/json"               "${url}"); then
+              echo "::warning::${label}: network request failed."
+              echo "- ⚠️ ${label}: network request failed" >> "${GITHUB_STEP_SUMMARY}"
+              rm -f "${response_file}"
+              [ "${required}" = "true" ] && return 1 || return 0
+            fi
 
-          echo "All required LISTIA Cloudflare secrets are present."
+            if ! jq empty "${response_file}" >/dev/null 2>&1; then
+              echo "::warning::${label}: Cloudflare returned a non-JSON response (HTTP ${http_code})."
+              echo "- ⚠️ ${label}: non-JSON response (HTTP ${http_code})" >> "${GITHUB_STEP_SUMMARY}"
+              rm -f "${response_file}"
+              [ "${required}" = "true" ] && return 1 || return 0
+            fi
 
-      - name: Verify Cloudflare Account API token
+            local success
+            success=$(jq -r '.success // false' "${response_file}")
+            if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ] && [ "${success}" = "true" ]; then
+              echo "=== ${label} ==="
+              jq "${jq_filter}" "${response_file}"
+              echo "- ✅ ${label}: available" >> "${GITHUB_STEP_SUMMARY}"
+              rm -f "${response_file}"
+              return 0
+            fi
+
+            echo "::warning::${label}: unavailable or not permitted (HTTP ${http_code})."
+            jq '{success, errors: [.errors[]? | {code, message}]}' "${response_file}"
+            echo "- ⚠️ ${label}: unavailable or not permitted (HTTP ${http_code})" >> "${GITHUB_STEP_SUMMARY}"
+            rm -f "${response_file}"
+            [ "${required}" = "true" ] && return 1 || return 0
+          }
+          AUDIT_HELPER
+
+          echo "## LISTIA Cloudflare Security Audit" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Read-only audit. No Cloudflare setting is modified." >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Validate token and effective zone access
         shell: bash
         run: |
           set -euo pipefail
+          source /tmp/cf-audit.sh
+          audit_endpoint             "Token and zone access"             "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}"             '{success, result: {id: .result.id, name: .result.name, status: .result.status, type: .result.type}, errors}'             true
 
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/tokens/verify")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            status: .result.status,
-            expires_on: .result.expires_on,
-            errors
-          }'
-
-          SUCCESS=$(echo "${RESPONSE}" | jq -r '.success')
-
-          if [ "${SUCCESS}" != "true" ]; then
-            echo "Cloudflare Account API token verification failed."
-            exit 1
-          fi
-
-          echo "Cloudflare Account API token verified successfully."
+      - name: Audit account access
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cf-audit.sh
+          audit_endpoint             "Account access"             "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}"             '{success, result: {id: .result.id, name: .result.name, type: .result.type}, errors}'
 
       - name: Audit Browser Integrity Check
         shell: bash
         run: |
-          set -euo pipefail
-
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/browser_check")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            setting: .result.id,
-            value: .result.value,
-            editable: .result.editable,
-            errors
-          }'
+          source /tmp/cf-audit.sh
+          audit_endpoint "Browser Integrity Check" "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/browser_check" '{success, setting: .result.id, value: .result.value, editable: .result.editable, errors}'
 
       - name: Audit Security Level
         shell: bash
         run: |
-          set -euo pipefail
-
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/security_level")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            setting: .result.id,
-            value: .result.value,
-            editable: .result.editable,
-            errors
-          }'
+          source /tmp/cf-audit.sh
+          audit_endpoint "Security Level" "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/security_level" '{success, setting: .result.id, value: .result.value, editable: .result.editable, errors}'
 
       - name: Audit Bot Management
         shell: bash
         run: |
-          set -euo pipefail
-
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/bot_management")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            ai_bots_protection: .result.ai_bots_protection,
-            content_bots_protection: .result.content_bots_protection,
-            crawler_protection: .result.crawler_protection,
-            cf_robots_variant: .result.cf_robots_variant,
-            fight_mode: .result.fight_mode,
-            sbfm_likely_automated: .result.sbfm_likely_automated,
-            sbfm_definitely_automated: .result.sbfm_definitely_automated,
-            sbfm_verified_bots: .result.sbfm_verified_bots,
-            errors
-          }'
+          source /tmp/cf-audit.sh
+          audit_endpoint "Bot Management" "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/bot_management" '{success, result: {fight_mode: .result.fight_mode, ai_bots_protection: .result.ai_bots_protection, crawler_protection: .result.crawler_protection, cf_robots_variant: .result.cf_robots_variant, sbfm_likely_automated: .result.sbfm_likely_automated, sbfm_definitely_automated: .result.sbfm_definitely_automated, sbfm_verified_bots: .result.sbfm_verified_bots}, errors}'
 
       - name: Audit WAF Custom Rules
         shell: bash
         run: |
-          set -euo pipefail
-
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/waf.json \
-            -w "%{http_code}" \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint")
-
-          echo "WAF HTTP status: ${HTTP_CODE}"
-
-          jq '{
-            success,
-            ruleset_id: .result.id,
-            phase: .result.phase,
-            rules: [
-              (.result.rules[]? | {
-                id,
-                description,
-                expression,
-                action,
-                enabled
-              })
-            ],
-            errors
-          }' /tmp/waf.json
+          source /tmp/cf-audit.sh
+          audit_endpoint "WAF Custom Rules" "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint" '{success, ruleset_id: .result.id, phase: .result.phase, rules: [.result.rules[]? | {id, description, expression, action, enabled}], errors}'
 
       - name: Audit Rate Limiting
         shell: bash
         run: |
-          set -euo pipefail
+          source /tmp/cf-audit.sh
+          audit_endpoint "Rate Limiting" "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint" '{success, ruleset_id: .result.id, phase: .result.phase, rules: [.result.rules[]? | {id, description, expression, action, enabled, ratelimit}], errors}'
 
-          HTTP_CODE=$(curl -sS \
-            -o /tmp/ratelimit.json \
-            -w "%{http_code}" \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint")
-
-          echo "Rate Limit HTTP status: ${HTTP_CODE}"
-
-          jq '{
-            success,
-            ruleset_id: .result.id,
-            phase: .result.phase,
-            rules: [
-              (.result.rules[]? | {
-                id,
-                description,
-                expression,
-                action,
-                enabled,
-                ratelimit
-              })
-            ],
-            errors
-          }' /tmp/ratelimit.json
-
-      - name: Audit HTTPS Enforcement
+      - name: Audit HTTPS and TLS settings
         shell: bash
         run: |
-          set -euo pipefail
+          source /tmp/cf-audit.sh
+          for setting in always_use_https min_tls_version opportunistic_encryption automatic_https_rewrites tls_1_3 ssl; do
+            audit_endpoint               "Zone setting: ${setting}"               "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/${setting}"               '{success, setting: .result.id, value: .result.value, editable: .result.editable, errors}'
+          done
 
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/always_use_https")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            setting: .result.id,
-            value: .result.value,
-            editable: .result.editable,
-            errors
-          }'
-
-      - name: Audit TLS Minimum Version
+      - name: Audit additional security settings
         shell: bash
         run: |
-          set -euo pipefail
+          source /tmp/cf-audit.sh
+          for setting in challenge_ttl privacy_pass origin_error_page_pass_thru always_online; do
+            audit_endpoint               "Zone setting: ${setting}"               "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/${setting}"               '{success, setting: .result.id, value: .result.value, editable: .result.editable, errors}'
+          done
 
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/min_tls_version")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            setting: .result.id,
-            value: .result.value,
-            editable: .result.editable,
-            errors
-          }'
-
-      - name: Audit Opportunistic Encryption
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/opportunistic_encryption")
-
-          echo "${RESPONSE}" | jq '{
-            success,
-            setting: .result.id,
-            value: .result.value,
-            editable: .result.editable,
-            errors
-          }'
-
-      - name: Security Audit Completed
+      - name: Security audit completed
         shell: bash
         run: |
           echo "LISTIA Cloudflare security audit completed."
-          echo "This workflow performed READ-ONLY checks."
-          echo "No Cloudflare security setting was modified."
+          echo "No Cloudflare configuration was modified."
