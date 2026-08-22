@@ -87,9 +87,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          failed=0
           for url in             "https://listiaapp.com/"             "https://listiaapp.com/robots.txt"             "https://app.listiaapp.com/"; do
-            code=$(curl --silent --show-error --location               --output /dev/null               --write-out "%{http_code}"               --max-time 20               "${url}")
+            code=$(curl --silent --show-error --location               --output /dev/null               --write-out "%{http_code}"               --max-time 20               --user-agent "Mozilla/5.0 (compatible; LISTIA-Security-Smoke/1.0)"               "${url}" || true)
             echo "${url} -> HTTP ${code}"
+            case "${code}" in
+              2*|3*) ;;
+              *) failed=1 ;;
+            esac
           done
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::At least one legitimate-browser smoke check failed"
+            exit 1
+          fi
 
 # Phase 2 post-hardening verification
