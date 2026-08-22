@@ -92,3 +92,5 @@ jobs:
             jq '[.rules[]? | {id, description, action, enabled, expression}]' "${RUNNER_TEMP}/entrypoint-result.json"
             echo '~~~'
           } >> "${GITHUB_STEP_SUMMARY}"
+
+# Final Phase 3 WAF read-only verification
