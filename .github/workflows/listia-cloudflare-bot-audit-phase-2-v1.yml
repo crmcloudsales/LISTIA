@@ -37,6 +37,10 @@ jobs:
             success,
             result: {
               ai_bots_protection: .result.ai_bots_protection,
+              ai_training: .result.ai_training,
+              ai_search: .result.ai_search,
+              ai_user: .result.ai_user,
+              ai_bots_migration_opt_out: .result.ai_bots_migration_opt_out,
               content_bots_protection: .result.content_bots_protection,
               crawler_protection: .result.crawler_protection,
               fight_mode: .result.fight_mode,
@@ -59,6 +63,10 @@ jobs:
             echo '~~~json'
             jq '{
               ai_bots_protection: .result.ai_bots_protection,
+              ai_training: .result.ai_training,
+              ai_search: .result.ai_search,
+              ai_user: .result.ai_user,
+              ai_bots_migration_opt_out: .result.ai_bots_migration_opt_out,
               content_bots_protection: .result.content_bots_protection,
               crawler_protection: .result.crawler_protection,
               fight_mode: .result.fight_mode,
