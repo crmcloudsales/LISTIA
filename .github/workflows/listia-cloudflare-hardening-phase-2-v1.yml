@@ -1,0 +1,159 @@
+name: LISTIA Cloudflare Hardening Phase 2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/listia-cloudflare-hardening-phase-2-v1.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-cloudflare-hardening-phase-2
+  cancel-in-progress: false
+
+jobs:
+  harden-bots:
+    name: Apply and verify safe bot protections
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_API_BASE: https://api.cloudflare.com/client/v4
+      CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+    steps:
+      - name: Validate required secret without exposing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_TOKEN:-}" ]; then
+            echo "::error::CLOUDFLARE_SECURITY_TOKEN is not configured"
+            exit 1
+          fi
+
+      - name: Read current Bot Management configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/bot_management"
+          curl --silent --show-error --fail-with-body             --header "Authorization: Bearer ${CF_TOKEN}"             --header "Content-Type: application/json"             "${endpoint}" > "${RUNNER_TEMP}/bot-before.json"
+
+          jq -e '.success == true and (.result | type == "object")' "${RUNNER_TEMP}/bot-before.json" >/dev/null
+          jq '.result' "${RUNNER_TEMP}/bot-before.json" > "${RUNNER_TEMP}/bot-before-result.json"
+
+          echo "Bot Management values before:"
+          jq '{
+            ai_bots_protection,
+            content_bots_protection,
+            crawler_protection,
+            fight_mode,
+            enable_js,
+            is_robots_txt_managed,
+            cf_robots_variant,
+            sbfm_likely_automated,
+            sbfm_definitely_automated,
+            sbfm_verified_bots
+          }' "${RUNNER_TEMP}/bot-before-result.json"
+
+          jq -e '.fight_mode == false' "${RUNNER_TEMP}/bot-before-result.json" >/dev/null || {
+            echo "::error::Safety guard: fight_mode was not OFF before Phase 2"
+            exit 1
+          }
+
+      - name: Apply only targeted Phase 2 settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/bot_management"
+          jq -n '{
+            ai_bots_protection: "block",
+            content_bots_protection: "block",
+            crawler_protection: "enabled"
+          }' > "${RUNNER_TEMP}/bot-phase2-request.json"
+
+          curl --silent --show-error --fail-with-body             --request PUT             --header "Authorization: Bearer ${CF_TOKEN}"             --header "Content-Type: application/json"             --data @"${RUNNER_TEMP}/bot-phase2-request.json"             "${endpoint}" > "${RUNNER_TEMP}/bot-update.json"
+
+          jq -e '.success == true' "${RUNNER_TEMP}/bot-update.json" >/dev/null
+          echo "Cloudflare accepted the targeted Phase 2 update."
+
+      - name: Verify settings and safety invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/bot_management"
+          curl --silent --show-error --fail-with-body             --header "Authorization: Bearer ${CF_TOKEN}"             --header "Content-Type: application/json"             "${endpoint}" > "${RUNNER_TEMP}/bot-after.json"
+          jq -e '.success == true' "${RUNNER_TEMP}/bot-after.json" >/dev/null
+          jq '.result' "${RUNNER_TEMP}/bot-after.json" > "${RUNNER_TEMP}/bot-after-result.json"
+
+          echo "Bot Management values after:"
+          jq '{
+            ai_bots_protection,
+            content_bots_protection,
+            crawler_protection,
+            fight_mode,
+            enable_js,
+            is_robots_txt_managed,
+            cf_robots_variant,
+            sbfm_likely_automated,
+            sbfm_definitely_automated,
+            sbfm_verified_bots
+          }' "${RUNNER_TEMP}/bot-after-result.json"
+
+          jq -e '
+            .ai_bots_protection == "block" and
+            .content_bots_protection == "block" and
+            .crawler_protection == "enabled" and
+            .fight_mode == false
+          ' "${RUNNER_TEMP}/bot-after-result.json" >/dev/null
+
+          for field in enable_js is_robots_txt_managed cf_robots_variant; do
+            before="$(jq -c --arg field "${field}" '.[$field]' "${RUNNER_TEMP}/bot-before-result.json")"
+            after="$(jq -c --arg field "${field}" '.[$field]' "${RUNNER_TEMP}/bot-after-result.json")"
+            if [ "${before}" != "${after}" ]; then
+              echo "::error::Safety invariant changed unexpectedly: ${field}"
+              exit 1
+            fi
+          done
+
+      - name: Non-destructive public smoke checks
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for url in             "https://listiaapp.com/"             "https://listiaapp.com/robots.txt"             "https://app.listiaapp.com/"; do
+            code="$(curl --silent --show-error --location --output /dev/null               --max-time 25 --retry 2 --retry-all-errors               --user-agent "Mozilla/5.0 (compatible; LISTIA-Security-Smoke/1.0)"               --write-out '%{http_code}' "${url}" || true)"
+            echo "${url} -> HTTP ${code}"
+            case "${code}" in
+              2*|3*) ;;
+              *) failed=1 ;;
+            esac
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::At least one public smoke check failed"
+            exit 1
+          fi
+
+      - name: Roll back targeted settings after any failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s "${RUNNER_TEMP}/bot-before-result.json" ]; then
+            echo "No captured pre-change configuration; nothing can be rolled back."
+            exit 0
+          fi
+
+          jq '{
+            ai_bots_protection,
+            content_bots_protection,
+            crawler_protection
+          }' "${RUNNER_TEMP}/bot-before-result.json" > "${RUNNER_TEMP}/bot-rollback-request.json"
+
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/bot_management"
+          curl --silent --show-error --fail-with-body             --request PUT             --header "Authorization: Bearer ${CF_TOKEN}"             --header "Content-Type: application/json"             --data @"${RUNNER_TEMP}/bot-rollback-request.json"             "${endpoint}" > "${RUNNER_TEMP}/bot-rollback.json"
+          jq -e '.success == true' "${RUNNER_TEMP}/bot-rollback.json" >/dev/null
+          echo "::warning::Phase 2 targeted settings were restored to their pre-run values."
