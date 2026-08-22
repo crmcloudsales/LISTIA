@@ -1,0 +1,281 @@
+name: LISTIA Cloudflare Hardening Phase 4 Rate Limit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/listia-cloudflare-hardening-phase-4-rate-limit-v1.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-cloudflare-hardening-phase-4-rate-limit
+  cancel-in-progress: false
+
+jobs:
+  audit-and-decide:
+    name: Audit architecture and rate-limit entitlement
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CF_API_BASE: https://api.cloudflare.com/client/v4
+      CF_ZONE_NAME: listiaapp.com
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ZONE_ID_SECRET: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check out the exact LISTIA revision
+        uses: actions/checkout@v4
+
+      - name: Resolve the Cloudflare zone and read its plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_TOKEN:-}" ]; then
+            echo "::error::CLOUDFLARE_SECURITY_TOKEN is not configured"
+            exit 1
+          fi
+
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          zone_id=""
+          candidate="${CF_ZONE_ID_SECRET:-}"
+
+          if [[ "${candidate}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+            status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/zone-candidate.json" -w '%{http_code}' \
+              "${CF_API_BASE}/zones/${candidate}")"
+            if [ "${status}" = "200" ] && \
+               jq -e --arg name "${CF_ZONE_NAME}" '.success == true and .result.name == $name' \
+                 "${RUNNER_TEMP}/zone-candidate.json" >/dev/null; then
+              zone_id="${candidate}"
+              cp "${RUNNER_TEMP}/zone-candidate.json" "${RUNNER_TEMP}/zone.json"
+            fi
+          fi
+
+          if [ -z "${zone_id}" ]; then
+            query=(--get --data-urlencode "name=${CF_ZONE_NAME}" --data-urlencode "status=active" --data-urlencode "per_page=50")
+            if [ -n "${CF_ACCOUNT_ID:-}" ]; then
+              query+=(--data-urlencode "account.id=${CF_ACCOUNT_ID}")
+            fi
+            curl -sS --fail-with-body "${auth[@]}" "${query[@]}" \
+              "${CF_API_BASE}/zones" > "${RUNNER_TEMP}/zones.json"
+            zone_count="$(jq --arg name "${CF_ZONE_NAME}" '[.result[] | select(.name == $name)] | length' "${RUNNER_TEMP}/zones.json")"
+            if [ "${zone_count}" -ne 1 ]; then
+              echo "::error::Expected exactly one active ${CF_ZONE_NAME} zone; API returned ${zone_count}"
+              exit 1
+            fi
+            zone_id="$(jq -r --arg name "${CF_ZONE_NAME}" '.result[] | select(.name == $name) | .id' "${RUNNER_TEMP}/zones.json")"
+            curl -sS --fail-with-body "${auth[@]}" \
+              "${CF_API_BASE}/zones/${zone_id}" > "${RUNNER_TEMP}/zone.json"
+          fi
+
+          jq -e '.success == true' "${RUNNER_TEMP}/zone.json" >/dev/null
+          plan_name="$(jq -r '.result.plan.name // "unknown"' "${RUNNER_TEMP}/zone.json")"
+          plan_legacy="$(jq -r '.result.plan.legacy_id // "unknown"' "${RUNNER_TEMP}/zone.json")"
+          echo "ZONE_ID=${zone_id}" >> "${GITHUB_ENV}"
+          echo "PLAN_NAME=${plan_name}" >> "${GITHUB_ENV}"
+          echo "PLAN_LEGACY=${plan_legacy}" >> "${GITHUB_ENV}"
+          echo "Resolved zone ${CF_ZONE_NAME}: ${zone_id}"
+          echo "Cloudflare plan: ${plan_name} (${plan_legacy})"
+
+      - name: Audit which sensitive requests traverse the LISTIA zone
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          supabase_url="$(sed -nE 's/^[[:space:]]*SUPABASE_URL:[[:space:]]*"([^"]+)".*/\1/p' public/config.js | head -n1)"
+          if [ -z "${supabase_url}" ]; then
+            echo "::error::Unable to derive SUPABASE_URL from public/config.js"
+            exit 1
+          fi
+          supabase_host="$(node -e 'console.log(new URL(process.argv[1]).hostname)' "${supabase_url}")"
+          if [[ ! "${supabase_host}" =~ \.supabase\.co$ ]]; then
+            echo "::error::Expected the browser API origin to be a Supabase host; found ${supabase_host}"
+            exit 1
+          fi
+
+          auth_calls="$(grep -Ec 'api\("/auth/v1/' public/app.js || true)"
+          rest_calls="$(grep -Ec '(api\(`/rest/v1/|api\("/rest/v1/)' public/app.js || true)"
+          function_calls="$(grep -Ec 'api\("/functions/v1/' public/app.js || true)"
+          storage_calls="$(grep -Ec 'CFG\.SUPABASE_URL.*/storage/v1/' public/app.js || true)"
+          direct_total=$((auth_calls + rest_calls + function_calls + storage_calls))
+
+          same_origin_matches="$(
+            {
+              grep -Eh \
+                'fetch\([[:space:]]*["`]/(api|auth|login|signup|register|recover|reset|oauth|functions|rest|storage|properties|property|leads)' \
+                public/*.js || true
+              grep -Eh \
+                "fetch\\([[:space:]]*'/(api|auth|login|signup|register|recover|reset|oauth|functions|rest|storage|properties|property|leads)" \
+                public/*.js || true
+            } | wc -l | tr -d ' '
+          )"
+          form_actions="$(grep -Eci '<form[^>]+action=' public/index.html || true)"
+
+          echo "Browser API origin: ${supabase_host}"
+          echo "Direct Supabase calls found: auth=${auth_calls}, rest=${rest_calls}, functions=${function_calls}, storage=${storage_calls}"
+          echo "Sensitive same-origin fetch matches: ${same_origin_matches}"
+          echo "HTML form actions: ${form_actions}"
+
+          if [ "${direct_total}" -le 0 ] || [ "${same_origin_matches}" -ne 0 ] || [ "${form_actions}" -ne 0 ]; then
+            echo "::error::Architecture does not satisfy the safe DEFERRED decision; no Cloudflare mutation was attempted"
+            exit 1
+          fi
+
+          echo "ARCH_DECISION=DEFERRED" >> "${GITHUB_ENV}"
+          echo "DIRECT_SUPABASE_TOTAL=${direct_total}" >> "${GITHUB_ENV}"
+          echo "SAME_ORIGIN_SENSITIVE=${same_origin_matches}" >> "${GITHUB_ENV}"
+
+          {
+            echo "## Phase 4 architecture audit"
+            echo "- Decision: **DEFERRED**"
+            echo "- Sensitive requests through listiaapp.com/app.listiaapp.com: none found"
+            echo "- Browser API origin: ${supabase_host}"
+            echo "- Direct Supabase request sites found: ${direct_total}"
+            echo "- The LISTIA origins serve navigation and static PWA files; forms have no HTML action"
+            echo "- OAuth returns to the LISTIA origin only after processing at the Supabase callback"
+            echo ""
+            echo "### Direct external request families"
+            echo "- Supabase Auth: token, signup, recovery, user update, logout"
+            echo "- Supabase Edge Functions: Google OAuth start/discovery, Business DNA finalize, property intake"
+            echo "- Supabase PostgREST: organizations, onboarding, integrations, discovery, properties, leads, appointments, assets"
+            echo "- Supabase Storage: property-material uploads"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Read current Rate Limiting entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          endpoint="${CF_API_BASE}/zones/${ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint"
+          status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/ratelimit-before.json" -w '%{http_code}' "${endpoint}")"
+
+          if [ "${status}" = "200" ]; then
+            jq -e '.success == true and .result.phase == "http_ratelimit"' "${RUNNER_TEMP}/ratelimit-before.json" >/dev/null
+            rules_before="$(jq '.result.rules | length' "${RUNNER_TEMP}/ratelimit-before.json")"
+            entrypoint_before=EXISTS
+            jq '[.result.rules[]? | {id, description, action, enabled, expression, ratelimit}]' \
+              "${RUNNER_TEMP}/ratelimit-before.json"
+          elif [ "${status}" = "404" ]; then
+            rules_before=0
+            entrypoint_before=ABSENT
+            printf '{"result":{"rules":[]}}' > "${RUNNER_TEMP}/ratelimit-before.json"
+            echo "Rate Limiting entrypoint is absent (HTTP 404)."
+          else
+            echo "::error::Unable to read http_ratelimit entrypoint (HTTP ${status})"
+            jq '{success, errors}' "${RUNNER_TEMP}/ratelimit-before.json" || true
+            exit 1
+          fi
+
+          if [ "${PLAN_LEGACY}" = "free" ]; then
+            max_rules=1
+          else
+            max_rules=unknown
+          fi
+          echo "ENTRYPOINT_BEFORE=${entrypoint_before}" >> "${GITHUB_ENV}"
+          echo "RULES_BEFORE=${rules_before}" >> "${GITHUB_ENV}"
+          echo "MAX_RULES=${max_rules}" >> "${GITHUB_ENV}"
+
+          echo "Free-plan Rate Limiting entitlement used for this audit:"
+          echo "- Maximum rules: ${max_rules}"
+          echo "- Expression fields: Path (http.request.uri.path), Verified Bot (cf.client.bot)"
+          echo "- Counting: IP (ip.src) plus mandatory cf.colo.id"
+          echo "- Counting period: 10 seconds"
+          echo "- Mitigation timeout: 10 seconds"
+
+      - name: Preserve the only rule because no eligible LISTIA path exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${ARCH_DECISION}" != "DEFERRED" ]; then
+            echo "::error::Unexpected architecture decision"
+            exit 1
+          fi
+          echo "No entrypoint or Rate Limiting rule will be created."
+          echo "Reason: Cloudflare zone Rate Limiting cannot see browser requests sent directly to external Supabase APIs."
+          echo "Verified bots remain unaffected because no rule is installed."
+          echo "No threshold or production burst test is applicable."
+
+      - name: Verify Rate Limiting state is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          endpoint="${CF_API_BASE}/zones/${ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint"
+          status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/ratelimit-after.json" -w '%{http_code}' "${endpoint}")"
+
+          if [ "${status}" = "200" ]; then
+            jq -e '.success == true' "${RUNNER_TEMP}/ratelimit-after.json" >/dev/null
+            rules_after="$(jq '.result.rules | length' "${RUNNER_TEMP}/ratelimit-after.json")"
+            entrypoint_after=EXISTS
+          elif [ "${status}" = "404" ]; then
+            rules_after=0
+            entrypoint_after=ABSENT
+            printf '{"result":{"rules":[]}}' > "${RUNNER_TEMP}/ratelimit-after.json"
+          else
+            echo "::error::Unable to verify http_ratelimit entrypoint (HTTP ${status})"
+            exit 1
+          fi
+
+          if [ "${ENTRYPOINT_BEFORE}" != "${entrypoint_after}" ] || [ "${RULES_BEFORE}" != "${rules_after}" ]; then
+            echo "::error::Rate Limiting state changed unexpectedly"
+            exit 1
+          fi
+          if [ "${entrypoint_after}" = "EXISTS" ]; then
+            before_hash="$(jq -S '.result.rules' "${RUNNER_TEMP}/ratelimit-before.json" | sha256sum | cut -d' ' -f1)"
+            after_hash="$(jq -S '.result.rules' "${RUNNER_TEMP}/ratelimit-after.json" | sha256sum | cut -d' ' -f1)"
+            if [ "${before_hash}" != "${after_hash}" ]; then
+              echo "::error::Existing Rate Limiting rules changed unexpectedly"
+              exit 1
+            fi
+          fi
+
+          echo "ENTRYPOINT_AFTER=${entrypoint_after}" >> "${GITHUB_ENV}"
+          echo "RULES_AFTER=${rules_after}" >> "${GITHUB_ENV}"
+          echo "Rate Limiting state preserved: entrypoint=${entrypoint_after}, rules=${rules_after}."
+
+      - name: Run legitimate public smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "listiaapp.com|https://listiaapp.com/"
+            "app.listiaapp.com|https://app.listiaapp.com/"
+            "manifest|https://app.listiaapp.com/manifest.webmanifest"
+            "service worker|https://app.listiaapp.com/sw.js"
+            "asset app.js|https://app.listiaapp.com/app.js"
+            "asset styles.css|https://app.listiaapp.com/styles.css"
+            "asset icon|https://app.listiaapp.com/icon-192.png"
+          )
+          for item in "${urls[@]}"; do
+            label="${item%%|*}"
+            url="${item#*|}"
+            code="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 25 \
+              --user-agent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36' \
+              "${url}" || true)"
+            echo "SMOKE ${label}: HTTP ${code}"
+            if [ "${code}" != "200" ]; then
+              echo "::error::Smoke test failed for ${label}: HTTP ${code}"
+              exit 1
+            fi
+          done
+
+      - name: Publish final Phase 4 decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## LISTIA Cloudflare Hardening Phase 4 Rate Limit"
+            echo "- Status: **DEFERRED**"
+            echo "- Plan: ${PLAN_NAME} (${PLAN_LEGACY})"
+            echo "- Maximum rules: ${MAX_RULES}"
+            echo "- Rules before: ${RULES_BEFORE}"
+            echo "- Rules after: ${RULES_AFTER}"
+            echo "- Entrypoint before: ${ENTRYPOINT_BEFORE}"
+            echo "- Entrypoint after: ${ENTRYPOINT_AFTER}"
+            echo "- Cloudflare configuration modified: **NONE**"
+            echo "- Rate-limit test: not applicable; no eligible same-origin sensitive endpoint and no rule"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+# Phase 4 v1 intentionally defers mutation until a sensitive request traverses the LISTIA zone.
