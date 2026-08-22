@@ -1,0 +1,85 @@
+name: LISTIA Cloudflare Bot Audit Phase 2 v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-bot-audit-phase-2-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-bots:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+
+    steps:
+      - name: Read Bot Management configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          zone_id="cb7b05213bf99ff0700becf4aebdf2ab"
+          response_file="$(mktemp)"
+          http_code=$(curl --silent --show-error             --output "${response_file}"             --write-out "%{http_code}"             --header "Authorization: Bearer ${CF_TOKEN}"             "https://api.cloudflare.com/client/v4/zones/${zone_id}/bot_management")
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ] || [ "$(jq -r '.success // false' "${response_file}")" != "true" ]; then
+            echo "::error::Unable to read Bot Management configuration (HTTP ${http_code})."
+            jq '{success, errors: [.errors[]? | {code, message}]}' "${response_file}" || true
+            rm -f "${response_file}"
+            exit 1
+          fi
+
+          jq '{
+            success,
+            result: {
+              ai_bots_protection: .result.ai_bots_protection,
+              content_bots_protection: .result.content_bots_protection,
+              crawler_protection: .result.crawler_protection,
+              fight_mode: .result.fight_mode,
+              enable_js: .result.enable_js,
+              is_robots_txt_managed: .result.is_robots_txt_managed,
+              cf_robots_variant: .result.cf_robots_variant,
+              sbfm_likely_automated: .result.sbfm_likely_automated,
+              sbfm_definitely_automated: .result.sbfm_definitely_automated,
+              sbfm_verified_bots: .result.sbfm_verified_bots,
+              sbfm_static_resource_protection: .result.sbfm_static_resource_protection,
+              using_latest_model: .result.using_latest_model,
+              stale_zone_configuration: .result.stale_zone_configuration
+            },
+            available_fields: (.result | keys)
+          }' "${response_file}"
+
+          {
+            echo "## LISTIA Bot Management Preflight"
+            echo ""
+            echo '~~~json'
+            jq '{
+              ai_bots_protection: .result.ai_bots_protection,
+              content_bots_protection: .result.content_bots_protection,
+              crawler_protection: .result.crawler_protection,
+              fight_mode: .result.fight_mode,
+              enable_js: .result.enable_js,
+              is_robots_txt_managed: .result.is_robots_txt_managed,
+              cf_robots_variant: .result.cf_robots_variant,
+              sbfm_likely_automated: .result.sbfm_likely_automated,
+              sbfm_definitely_automated: .result.sbfm_definitely_automated,
+              sbfm_verified_bots: .result.sbfm_verified_bots,
+              using_latest_model: .result.using_latest_model,
+              available_fields: (.result | keys)
+            }' "${response_file}"
+            echo '~~~'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          rm -f "${response_file}"
+
+      - name: Public robots and availability smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in             "https://listiaapp.com/"             "https://listiaapp.com/robots.txt"             "https://app.listiaapp.com/"; do
+            code=$(curl --silent --show-error --location               --output /dev/null               --write-out "%{http_code}"               --max-time 20               "${url}")
+            echo "${url} -> HTTP ${code}"
+          done
