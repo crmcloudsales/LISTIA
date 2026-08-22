@@ -1,0 +1,94 @@
+name: LISTIA Cloudflare WAF Audit Phase 3 v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/listia-cloudflare-waf-audit-phase-3-v1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit-waf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_API_BASE: https://api.cloudflare.com/client/v4
+      CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+    steps:
+      - name: Read zone plan and WAF custom rules entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+
+          curl -sS --fail-with-body "${auth[@]}"             "${CF_API_BASE}/zones/${CF_ZONE_ID}" > "${RUNNER_TEMP}/zone.json"
+          jq -e '.success == true' "${RUNNER_TEMP}/zone.json" >/dev/null
+
+          plan_name="$(jq -r '.result.plan.name // .result.plan.legacy_id // "unknown"' "${RUNNER_TEMP}/zone.json")"
+          plan_legacy="$(jq -r '.result.plan.legacy_id // "unknown"' "${RUNNER_TEMP}/zone.json")"
+          case "${plan_legacy}" in
+            free) max_rules=5; regex=no ;;
+            pro) max_rules=20; regex=no ;;
+            business) max_rules=100; regex=yes ;;
+            enterprise) max_rules=1000; regex=yes ;;
+            *) max_rules=unknown; regex=unknown ;;
+          esac
+          echo "PLAN_NAME=${plan_name}" >> "${GITHUB_ENV}"
+          echo "PLAN_LEGACY=${plan_legacy}" >> "${GITHUB_ENV}"
+          echo "MAX_RULES=${max_rules}" >> "${GITHUB_ENV}"
+          echo "REGEX_SUPPORT=${regex}" >> "${GITHUB_ENV}"
+
+          endpoint="${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint"
+          status="$(curl -sS "${auth[@]}" -o "${RUNNER_TEMP}/entrypoint.json" -w '%{http_code}' "${endpoint}")"
+          echo "ENTRYPOINT_STATUS=${status}" >> "${GITHUB_ENV}"
+
+          if [ "${status}" = "200" ]; then
+            jq -e '.success == true' "${RUNNER_TEMP}/entrypoint.json" >/dev/null
+            jq '.result' "${RUNNER_TEMP}/entrypoint.json" > "${RUNNER_TEMP}/entrypoint-result.json"
+            used="$(jq '.rules | length' "${RUNNER_TEMP}/entrypoint-result.json")"
+            echo "ENTRYPOINT_EXISTS=yes" >> "${GITHUB_ENV}"
+            echo "USED_RULES=${used}" >> "${GITHUB_ENV}"
+          elif [ "${status}" = "404" ]; then
+            echo "ENTRYPOINT_EXISTS=no" >> "${GITHUB_ENV}"
+            echo "USED_RULES=0" >> "${GITHUB_ENV}"
+            printf '{"rules":[]}' > "${RUNNER_TEMP}/entrypoint-result.json"
+          else
+            echo "::error::Unexpected entrypoint response HTTP ${status}"
+            jq '{success, errors}' "${RUNNER_TEMP}/entrypoint.json" || true
+            exit 1
+          fi
+
+      - name: Report existing rules and supported expression surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Cloudflare zone plan: ${PLAN_NAME} (${PLAN_LEGACY})"
+          echo "Custom rules maximum: ${MAX_RULES}"
+          echo "Regex support: ${REGEX_SUPPORT}"
+          echo "Entrypoint HTTP status: ${ENTRYPOINT_STATUS}"
+          echo "Custom rules used: ${USED_RULES}"
+          echo "Existing rules:"
+          jq '[.rules[]? | {id, description, action, enabled, expression}]' "${RUNNER_TEMP}/entrypoint-result.json"
+
+          echo "Expression surface selected for this plan:"
+          echo "- Fields: http.request.uri.path, raw.http.request.uri.path, http.request.method, http.user_agent"
+          echo "- Operators/functions: eq, in, contains, starts_with(), ends_with(), lower(), and/or/not"
+          echo "- Regex intentionally excluded"
+
+          {
+            echo "## LISTIA WAF Phase 3 preflight"
+            echo "- Plan: ${PLAN_NAME} (${PLAN_LEGACY})"
+            echo "- Maximum custom rules: ${MAX_RULES}"
+            echo "- Used custom rules: ${USED_RULES}"
+            echo "- Entrypoint exists: ${ENTRYPOINT_EXISTS} (HTTP ${ENTRYPOINT_STATUS})"
+            echo "- Regex support: ${REGEX_SUPPORT}"
+            echo ""
+            echo "### Existing rules"
+            echo '~~~json'
+            jq '[.rules[]? | {id, description, action, enabled, expression}]' "${RUNNER_TEMP}/entrypoint-result.json"
+            echo '~~~'
+          } >> "${GITHUB_STEP_SUMMARY}"
