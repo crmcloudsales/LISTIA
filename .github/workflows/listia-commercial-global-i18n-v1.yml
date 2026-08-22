@@ -1,0 +1,120 @@
+name: LISTIA Commercial Global i18n
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/localize-commercial-worker.py'
+      - '.github/workflows/listia-commercial-global-i18n-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-commercial-global-i18n
+  cancel-in-progress: false
+
+jobs:
+  localize-commercial-worker:
+    name: Localize commercial Worker without exposing source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKER_NAME: listia
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate prerequisites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          python3 -m py_compile scripts/localize-commercial-worker.py
+
+      - name: Download and localize current Worker in the runner
+        id: prepare
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --dump-header /tmp/listia-worker-headers.txt \
+            --output /tmp/listia-worker-original.bin \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}"
+          python3 scripts/localize-commercial-worker.py \
+            /tmp/listia-worker-original.bin \
+            /tmp/listia-worker-localized.bin
+          content_type="$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value=$0} END{print value}' /tmp/listia-worker-headers.txt)"
+          test -n "${content_type}" || content_type='application/javascript'
+          {
+            echo "content_type<<LISTIA_CONTENT_TYPE"
+            echo "${content_type}"
+            echo "LISTIA_CONTENT_TYPE"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy localized commercial Worker
+        id: deploy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --silent --show-error --fail-with-body \
+            --request PUT \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: ${{ steps.prepare.outputs.content_type }}" \
+            --data-binary @/tmp/listia-worker-localized.bin \
+            --output /tmp/listia-worker-deploy-result.json \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}"
+          jq -e '.success == true' /tmp/listia-worker-deploy-result.json >/dev/null
+          echo 'Commercial Worker localized successfully.'
+
+      - name: Verify commercial locales and preserve PWA routing
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in {1..6}; do
+            if curl --silent --show-error --fail --max-time 20 \
+              "https://listiaapp.com/?lang=ar-AE" \
+              --output /tmp/listia-commercial-live.html; then
+              break
+            fi
+            sleep 5
+          done
+          python3 scripts/localize-commercial-worker.py --check-stdin < /tmp/listia-commercial-live.html
+          grep -Fq '<option value="it">Italiano</option>' /tmp/listia-commercial-live.html
+          grep -Fq '<option value="pt-BR">Português</option>' /tmp/listia-commercial-live.html
+          grep -Fq '<option value="de">Deutsch</option>' /tmp/listia-commercial-live.html
+          grep -Fq '<option value="ar-AE">العربية</option>' /tmp/listia-commercial-live.html
+          for url in \
+            'https://listiaapp.com/?lang=it' \
+            'https://listiaapp.com/?lang=pt-BR' \
+            'https://listiaapp.com/?lang=de' \
+            'https://listiaapp.com/?lang=ar-AE' \
+            'https://www.listiaapp.com/?lang=ar-AE' \
+            'https://app.listiaapp.com/?lang=ar-AE'
+          do
+            code="$(curl --silent --show-error --location --max-time 20 --output /dev/null --write-out '%{http_code}' "${url}")"
+            test "${code}" = '200' || { echo "Smoke test failed for ${url}: HTTP ${code}"; exit 1; }
+            echo "HTTP 200: ${url}"
+          done
+
+      - name: Roll back Worker if post-deployment verification fails
+        if: failure() && steps.deploy.outcome == 'success'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --silent --show-error --fail-with-body \
+            --request PUT \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: ${{ steps.prepare.outputs.content_type }}" \
+            --data-binary @/tmp/listia-worker-original.bin \
+            --output /tmp/listia-worker-rollback-result.json \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}"
+          jq -e '.success == true' /tmp/listia-worker-rollback-result.json >/dev/null
+          echo 'Commercial Worker rollback completed.'
