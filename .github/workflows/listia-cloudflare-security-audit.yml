@@ -1,5 +1,7 @@
 name: LISTIA Cloudflare Security Audit
 
+# Phase 1 verification trigger
+
 on:
   workflow_dispatch:
   push:
