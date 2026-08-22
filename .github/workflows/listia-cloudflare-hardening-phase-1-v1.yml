@@ -1,0 +1,137 @@
+name: LISTIA Cloudflare Hardening Phase 1 v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-hardening-phase-1-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Apply and verify Phase 1
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CF_TOKEN:-}" ] || [ -z "${CF_ACCOUNT_ID:-}" ]; then
+            echo "::error::Required Cloudflare credentials are missing."
+            exit 1
+          fi
+
+          discovery_file="$(mktemp)"
+          discovery_code=$(curl --silent --show-error             --get             --output "${discovery_file}"             --write-out "%{http_code}"             --header "Authorization: Bearer ${CF_TOKEN}"             --data-urlencode "name=listiaapp.com"             --data-urlencode "account.id=${CF_ACCOUNT_ID}"             "https://api.cloudflare.com/client/v4/zones")
+
+          zone_id=$(jq -r '.result[0].id // empty' "${discovery_file}" 2>/dev/null || true)
+          zone_name=$(jq -r '.result[0].name // empty' "${discovery_file}" 2>/dev/null || true)
+          if [ "${discovery_code}" -lt 200 ] || [ "${discovery_code}" -ge 300 ] || [ "${zone_name}" != "listiaapp.com" ] || [ -z "${zone_id}" ]; then
+            echo "::error::Unable to resolve listiaapp.com through the Cloudflare API."
+            jq '{success, errors: [.errors[]? | {code, message}]}' "${discovery_file}" || true
+            rm -f "${discovery_file}"
+            exit 1
+          fi
+          rm -f "${discovery_file}"
+
+          echo "Resolved LISTIA Zone ID: ${zone_id}"
+          {
+            echo "## LISTIA Cloudflare Hardening Phase 1"
+            echo ""
+            echo "Resolved zone: listiaapp.com"
+            echo "Zone ID: ${zone_id}"
+            echo ""
+            echo "### Values before"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          declare -A desired=(
+            [always_use_https]="on"
+            [min_tls_version]="1.2"
+            [tls_1_3]="on"
+            [browser_check]="on"
+            [automatic_https_rewrites]="on"
+          )
+          settings=(
+            always_use_https
+            min_tls_version
+            tls_1_3
+            browser_check
+            automatic_https_rewrites
+          )
+
+          read_setting() {
+            local setting="$1"
+            local file
+            file="$(mktemp)"
+            local code
+            code=$(curl --silent --show-error               --output "${file}"               --write-out "%{http_code}"               --header "Authorization: Bearer ${CF_TOKEN}"               "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/${setting}")
+            if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ] || [ "$(jq -r '.success // false' "${file}")" != "true" ]; then
+              echo "::error::Unable to read ${setting} (HTTP ${code})."
+              jq '{success, errors: [.errors[]? | {code, message}]}' "${file}" || true
+              rm -f "${file}"
+              return 1
+            fi
+            jq -r '.result.value' "${file}"
+            rm -f "${file}"
+          }
+
+          update_setting() {
+            local setting="$1"
+            local target="$2"
+            local file
+            file="$(mktemp)"
+            local code
+            code=$(curl --silent --show-error               --request PATCH               --output "${file}"               --write-out "%{http_code}"               --header "Authorization: Bearer ${CF_TOKEN}"               --header "Content-Type: application/json"               --data "$(jq -nc --arg value "${target}" '{value: $value}')"               "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/${setting}")
+            if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ] || [ "$(jq -r '.success // false' "${file}")" != "true" ]; then
+              echo "::error::Unable to update ${setting} (HTTP ${code})."
+              jq '{success, errors: [.errors[]? | {code, message}]}' "${file}" || true
+              rm -f "${file}"
+              return 1
+            fi
+            rm -f "${file}"
+          }
+
+          for setting in "${settings[@]}"; do
+            current=$(read_setting "${setting}")
+            echo "${setting}: ${current}"
+            echo "- ${setting}: ${current}" >> "${GITHUB_STEP_SUMMARY}"
+            if [ "${current}" = "${desired[${setting}]}" ]; then
+              echo "No change required for ${setting}."
+            else
+              echo "Updating ${setting} to ${desired[${setting}]}."
+              update_setting "${setting}" "${desired[${setting}]}"
+            fi
+          done
+
+          {
+            echo ""
+            echo "### Values after"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          verification_failed=0
+          for setting in "${settings[@]}"; do
+            actual=$(read_setting "${setting}")
+            expected="${desired[${setting}]}"
+            echo "${setting}: ${actual}"
+            if [ "${actual}" = "${expected}" ]; then
+              echo "- ✅ ${setting}: ${actual}" >> "${GITHUB_STEP_SUMMARY}"
+            else
+              echo "::error::Verification failed for ${setting}: expected ${expected}, got ${actual}."
+              echo "- ❌ ${setting}: expected ${expected}, got ${actual}" >> "${GITHUB_STEP_SUMMARY}"
+              verification_failed=1
+            fi
+          done
+
+          if [ "${verification_failed}" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "Phase 1 completed. No other Cloudflare configuration was modified."
