@@ -271,8 +271,9 @@ jobs:
           # Repeated delete/recreate cycles reset validation and are unnecessary.
           pages_domain_action='kept existing Pages domain'
 
-          # Ensure exact Pages CNAME idempotently. Refuse to replace or delete
-          # any conflicting DNS record.
+          # Ensure the exact Pages CNAME idempotently. Prefer an authenticated
+          # read; if reads are denied but public DNS proves the hostname is
+          # NXDOMAIN, attempt only the pre-authorized exact create operation.
           dns_records_url="${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${APP_HOSTNAME}"
           dns_records_file="${work_dir}/dns-records.json"
           dns_records_http='not-attempted'
@@ -300,13 +301,27 @@ jobs:
             dns_records_http="${candidate_http}"
           done
 
-          if [[ "${dns_records_http}" != '200' ]]; then
-            echo 'BLOCKED: neither existing token can read DNS for listiaapp.com; Zone DNS Edit must be saved on one token scoped to this zone.'
-            exit 1
+          if [[ "${dns_records_http}" == '200' ]]; then
+            dns_record_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)] | length' "${dns_records_file}")"
+          else
+            public_dns_file="${work_dir}/public-dns.json"
+            public_dns_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --header 'Accept: application/dns-json' \
+              --output "${public_dns_file}" \
+              --write-out '%{http_code}' \
+              "https://cloudflare-dns.com/dns-query?name=${APP_HOSTNAME}&type=A")"
+            public_dns_rcode="$(jq -r '.Status // -1' "${public_dns_file}" 2>/dev/null || echo -1)"
+            public_dns_answers="$(jq -r '(.Answer // []) | length' "${public_dns_file}" 2>/dev/null || echo -1)"
+            echo "Public DNS safety check: HTTP ${public_dns_http} rcode=${public_dns_rcode} answers=${public_dns_answers}"
+            if [[ "${public_dns_http}" != '200' || "${public_dns_rcode}" != '3' || "${public_dns_answers}" != '0' ]]; then
+              echo 'Refusing DNS write-only fallback because public DNS does not prove NXDOMAIN.'
+              exit 1
+            fi
+            dns_record_count='0'
+            echo 'Authenticated DNS reads are unavailable; public NXDOMAIN permits only the exact authorized CNAME create attempt.'
           fi
-          echo "DNS authorization source: ${dns_token_source} token"
 
-          dns_record_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)] | length' "${dns_records_file}")"
           if (( dns_record_count > 1 )); then
             jq -c --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname) | {id, type, name, content, proxied}]' "${dns_records_file}"
             echo "Refusing ambiguous DNS mutation: exact_records=${dns_record_count}"
@@ -324,31 +339,49 @@ jobs:
               exit 1
             fi
           else
-            dns_create_file="${work_dir}/dns-create.json"
             dns_create_body="$(jq -nc \
               --arg type 'CNAME' \
               --arg name "${APP_HOSTNAME}" \
               --arg content "${PAGES_CNAME_TARGET}" \
               --arg comment 'LISTIA PWA on Cloudflare Pages' \
               '{type: $type, name: $name, content: $content, ttl: 1, proxied: true, comment: $comment}')"
-            dns_create_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
-              --connect-timeout 15 --max-time 45 \
-              --request POST \
-              --header "Authorization: Bearer ${dns_token}" \
-              --header 'Accept: application/json' \
-              --header 'Content-Type: application/json' \
-              --data "${dns_create_body}" \
-              --output "${dns_create_file}" \
-              --write-out '%{http_code}' \
-              "${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
-            echo "Create exact Pages CNAME: HTTP ${dns_create_http}"
-            if [[ ! "${dns_create_http}" =~ ^2[0-9][0-9]$ ]]; then
+            dns_create_success='false'
+
+            for token_source in security pages; do
+              if [[ "${token_source}" == 'security' ]]; then
+                candidate_token="${CLOUDFLARE_SECURITY_TOKEN}"
+              else
+                candidate_token="${CLOUDFLARE_API_TOKEN}"
+              fi
+
+              dns_create_file="${work_dir}/dns-create-${token_source}.json"
+              dns_create_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
+                --connect-timeout 15 --max-time 45 \
+                --request POST \
+                --header "Authorization: Bearer ${candidate_token}" \
+                --header 'Accept: application/json' \
+                --header 'Content-Type: application/json' \
+                --data "${dns_create_body}" \
+                --output "${dns_create_file}" \
+                --write-out '%{http_code}' \
+                "${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
+              echo "Create exact Pages CNAME (${token_source} token): HTTP ${dns_create_http}"
+              if [[ "${dns_create_http}" =~ ^2[0-9][0-9]$ ]]; then
+                jq -c '.result | {id, type, name, content, proxied, ttl}' "${dns_create_file}"
+                dns_create_success='true'
+                dns_token_source="${token_source}"
+                break
+              fi
               safe_error "${dns_create_file}"
+            done
+
+            if [[ "${dns_create_success}" != 'true' ]]; then
+              echo 'BLOCKED: neither existing token can create the exact Pages CNAME. Zone DNS Write is not effective for the token stored in GitHub.'
               exit 1
             fi
-            jq -c '.result | {id, type, name, content, proxied, ttl}' "${dns_create_file}"
             dns_action='created exact Pages CNAME'
           fi
+          echo "DNS authorization source: ${dns_token_source:-pre-existing record}"
 
           final_status='unknown'
           final_validation='unknown'
