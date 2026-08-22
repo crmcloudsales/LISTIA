@@ -19,6 +19,8 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       PAGES_PROJECT: listia-pwa
       APP_HOSTNAME: app.listiaapp.com
 
@@ -32,6 +34,7 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
           test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          test -n "${CLOUDFLARE_SECURITY_TOKEN}" || { echo 'CLOUDFLARE_SECURITY_TOKEN is missing'; exit 1; }
 
       - name: Read current Pages routing and attach only if absent
         shell: bash
@@ -48,6 +51,33 @@ jobs:
             curl --silent --show-error --retry 2 --retry-all-errors \
               --connect-timeout 15 --max-time 45 \
               --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              --output "${output}" \
+              --write-out '%{http_code}' \
+              "${url}"
+          }
+
+          cf_get_with_token() {
+            local token="$1"
+            local url="$2"
+            local output="$3"
+            curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --header "Authorization: Bearer ${token}" \
+              --header 'Accept: application/json' \
+              --output "${output}" \
+              --write-out '%{http_code}' \
+              "${url}"
+          }
+
+          cf_delete_with_token() {
+            local token="$1"
+            local url="$2"
+            local output="$3"
+            curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --request DELETE \
+              --header "Authorization: Bearer ${token}" \
               --header 'Accept: application/json' \
               --output "${output}" \
               --write-out '%{http_code}' \
@@ -122,6 +152,110 @@ jobs:
             echo 'Pages custom domain already exists; no create request needed.'
           fi
 
+          # A pre-existing placeholder Worker currently owns this exact hostname.
+          # Detach only an exact Worker custom domain or exact Worker route, and
+          # only after two independent public probes reproduce the placeholder.
+          worker_domains_file="${work_dir}/worker-domains.json"
+          worker_routes_file="${work_dir}/worker-routes.json"
+          worker_domains_http='not-attempted'
+          worker_routes_http='not-attempted'
+          worker_domains_token=''
+          worker_routes_token=''
+
+          for token_source in pages security; do
+            if [[ "${token_source}" == 'pages' ]]; then
+              candidate_token="${CLOUDFLARE_API_TOKEN}"
+            else
+              candidate_token="${CLOUDFLARE_SECURITY_TOKEN}"
+            fi
+
+            candidate_file="${work_dir}/worker-domains-${token_source}.json"
+            candidate_http="$(cf_get_with_token "${candidate_token}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains?hostname=${APP_HOSTNAME}" "${candidate_file}")"
+            echo "Worker custom domains API (${token_source} token): HTTP ${candidate_http}"
+            if [[ "${candidate_http}" == '200' ]]; then
+              cp "${candidate_file}" "${worker_domains_file}"
+              worker_domains_http='200'
+              worker_domains_token="${candidate_token}"
+              break
+            fi
+            safe_error "${candidate_file}"
+            worker_domains_http="${candidate_http}"
+          done
+
+          for token_source in pages security; do
+            if [[ "${token_source}" == 'pages' ]]; then
+              candidate_token="${CLOUDFLARE_API_TOKEN}"
+            else
+              candidate_token="${CLOUDFLARE_SECURITY_TOKEN}"
+            fi
+
+            candidate_file="${work_dir}/worker-routes-${token_source}.json"
+            candidate_http="$(cf_get_with_token "${candidate_token}" "${api}/zones/${CLOUDFLARE_ZONE_ID}/workers/routes" "${candidate_file}")"
+            echo "Worker routes API (${token_source} token): HTTP ${candidate_http}"
+            if [[ "${candidate_http}" == '200' ]]; then
+              cp "${candidate_file}" "${worker_routes_file}"
+              worker_routes_http='200'
+              worker_routes_token="${candidate_token}"
+              break
+            fi
+            safe_error "${candidate_file}"
+            worker_routes_http="${candidate_http}"
+          done
+
+          worker_domain_count='0'
+          worker_route_count='0'
+          if [[ "${worker_domains_http}" == '200' ]]; then
+            worker_domain_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.hostname == $hostname)] | length' "${worker_domains_file}")"
+            jq -c --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.hostname == $hostname) | {id, hostname, service, environment, zone_id, zone_name}]' "${worker_domains_file}"
+          fi
+          if [[ "${worker_routes_http}" == '200' ]]; then
+            worker_route_count="$(jq --arg pattern "${APP_HOSTNAME}/*" '[.result[] | select(.pattern == $pattern)] | length' "${worker_routes_file}")"
+            jq -c --arg pattern "${APP_HOSTNAME}/*" '[.result[] | select(.pattern == $pattern) | {id, pattern, script}]' "${worker_routes_file}"
+          fi
+
+          worker_target_count="$((worker_domain_count + worker_route_count))"
+          if (( worker_target_count > 1 )); then
+            echo "Refusing to detach ambiguous Worker routing: exact_targets=${worker_target_count}"
+            exit 1
+          fi
+
+          routing_change='none'
+          if (( worker_target_count == 1 )); then
+            root_body="${work_dir}/placeholder-root.body"
+            asset_body="${work_dir}/placeholder-app-js.body"
+            root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${root_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/")"
+            asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${asset_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js")"
+            echo "Placeholder safety probes: root_http=${root_http} app_js_http=${asset_http}"
+            if [[ "${root_http}" != '200' || "${asset_http}" != '200' ]] || \
+               ! grep -Fxq 'Hello World!' "${root_body}" || \
+               ! grep -Fxq 'Hello World!' "${asset_body}"; then
+              echo 'Refusing to detach Worker routing because the exact placeholder fingerprint was not reproduced twice.'
+              exit 1
+            fi
+
+            delete_file="${work_dir}/worker-delete.json"
+            if (( worker_domain_count == 1 )); then
+              worker_domain_id="$(jq -r --arg hostname "${APP_HOSTNAME}" '.result[] | select(.hostname == $hostname) | .id' "${worker_domains_file}")"
+              delete_http="$(cf_delete_with_token "${worker_domains_token}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains/${worker_domain_id}" "${delete_file}")"
+              routing_change='detached exact Worker custom domain app.listiaapp.com'
+            else
+              worker_route_id="$(jq -r --arg pattern "${APP_HOSTNAME}/*" '.result[] | select(.pattern == $pattern) | .id' "${worker_routes_file}")"
+              delete_http="$(cf_delete_with_token "${worker_routes_token}" "${api}/zones/${CLOUDFLARE_ZONE_ID}/workers/routes/${worker_route_id}" "${delete_file}")"
+              routing_change='deleted exact Worker route app.listiaapp.com/*'
+            fi
+
+            echo "Remove placeholder Worker ownership: HTTP ${delete_http}"
+            if [[ ! "${delete_http}" =~ ^(200|204)$ ]]; then
+              safe_error "${delete_file}"
+              exit 1
+            fi
+            echo "Routing change: ${routing_change}"
+          elif [[ "${worker_domains_http}" != '200' && "${worker_routes_http}" != '200' ]]; then
+            echo 'Cannot inspect or detach the placeholder Worker with the existing tokens; Workers Scripts/Routes read-write permission is required.'
+          else
+            echo 'No exact Worker custom domain or exact Worker route was found with the accessible APIs.'
+          fi
+
           final_status='unknown'
           final_validation='unknown'
           final_verification='unknown'
@@ -167,6 +301,7 @@ jobs:
             echo "- Before: count=${before_count}, status=${before_status}"
             echo "- After: status=${final_status}, validation=${final_validation}, verification=${final_verification}"
             echo '- Target Pages project: listia-pwa'
+            echo "- Placeholder Worker routing change: ${routing_change}"
             echo '- Other hostnames changed: none'
           } >> "${GITHUB_STEP_SUMMARY}"
 
