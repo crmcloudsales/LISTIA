@@ -29,3 +29,6 @@ These are active project rules unless explicitly changed later.
 20. MVP intake may include PDF, photos, video, brochure/price list, description, price, sale/rent, commission, location and postal code. Only some usable material/context is required at intake.
 21. Free-plan limits are enforced server-side. Current QA rule: one non-archived property.
 22. Office is the operational home after onboarding and surfaces appointments, opportunities/leads and active properties.
+23. Every user-facing screen is internationalized from its first release. Current complete locales are es, en, fr, it, pt-BR, de and ar-AE; English is the fallback.
+24. Locale priority is explicit ?lang=, shared .listiaapp.com cookie, local preference, browser languages, then English. Manual selection remains available and authenticated preferences sync to user metadata/profile when permitted.
+25. Arabic UAE uses ar-AE with document-level RTL. Do not apply RTL to non-Arabic locales or mirror brand assets.

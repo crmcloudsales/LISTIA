@@ -62,6 +62,38 @@ if (languageSelect && I18N) {
   });
 }
 
+let localeSyncTimer = 0;
+window.addEventListener("listia:languagechange", event => {
+  clearTimeout(localeSyncTimer);
+  localeSyncTimer = window.setTimeout(async () => {
+    const language = event.detail?.language;
+    const session = readSession();
+    if (!language || !session?.access_token) return;
+
+    try {
+      const user = session.user?.id ? session.user : await getCurrentUser(session);
+      const updates = [
+        api("/auth/v1/user", {
+          method: "PUT",
+          accessToken: session.access_token,
+          body: { data: { locale: language } }
+        })
+      ];
+      if (user?.id) {
+        updates.push(api(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`, {
+          method: "PATCH",
+          accessToken: session.access_token,
+          extraHeaders: { Prefer: "return=minimal" },
+          body: { locale: language }
+        }));
+      }
+      await Promise.allSettled(updates);
+    } catch (error) {
+      console.warn("LISTIA locale preference could not be synchronized", error);
+    }
+  }, 250);
+});
+
 function message(text, type = "") {
   toast.textContent = text;
   toast.className = `toast ${type}`.trim();

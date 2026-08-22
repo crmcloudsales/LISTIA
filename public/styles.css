@@ -10,6 +10,18 @@
 .language-select:focus{border-color:#8052ff;box-shadow:0 0 0 3px rgba(128,82,255,.13)}
 .language-select option{background:#121219;color:#fff}
 
+/* RTL is enabled only for locales that require it (currently ar-AE). */
+html[dir="rtl"] body{direction:rtl}
+html[dir="rtl"] .language-control{margin-left:0;margin-right:auto}
+html[dir="rtl"] .brand-logo{margin-left:0;margin-right:10px}
+html[dir="rtl"] .panel,
+html[dir="rtl"] .plan-card{text-align:right}
+html[dir="rtl"] .ready-panel{text-align:center}
+html[dir="rtl"] .back{right:auto;left:18px}
+html[dir="rtl"] .password-wrap input{padding-right:14px;padding-left:64px}
+html[dir="rtl"] .showpass{right:auto;left:8px}
+html[dir="rtl"] .checkpoint-list{text-align:right}
+
 /* v0.8.2 — centered full-page composition
    Logo + language selector + active panel behave as one visual unit.
    No top black navigation band. */

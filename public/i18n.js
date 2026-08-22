@@ -1,7 +1,21 @@
 (() => {
   const STORAGE_KEY = 'listia_language';
   const COOKIE_KEY = 'listia_lang';
-  const SUPPORTED = ['es', 'en', 'fr'];
+  const LOCALES = {
+    es: { html: 'es-MX', manifest: 'es', direction: 'ltr', aliases: ['es', 'es-mx'] },
+    en: { html: 'en-US', manifest: 'en', direction: 'ltr', aliases: ['en', 'en-us', 'en-gb'] },
+    fr: { html: 'fr-FR', manifest: 'fr', direction: 'ltr', aliases: ['fr', 'fr-fr', 'fr-ca'] },
+    it: { html: 'it-IT', manifest: 'it', direction: 'ltr', aliases: ['it', 'it-it'] },
+    'pt-BR': { html: 'pt-BR', manifest: 'pt-br', direction: 'ltr', aliases: ['pt', 'pt-br', 'pt-pt'] },
+    de: { html: 'de-DE', manifest: 'de', direction: 'ltr', aliases: ['de', 'de-de', 'de-at', 'de-ch'] },
+    'ar-AE': { html: 'ar-AE', manifest: 'ar-ae', direction: 'rtl', aliases: ['ar', 'ar-ae'] }
+  };
+  const SUPPORTED = Object.keys(LOCALES);
+  const ALIASES = Object.fromEntries(
+    Object.entries(LOCALES).flatMap(([locale, config]) =>
+      config.aliases.map(alias => [alias.toLowerCase(), locale])
+    )
+  );
   const FALLBACK = 'en';
 
   const TRANSLATIONS = {
@@ -694,9 +708,12 @@
     }
   };
 
+  Object.assign(TRANSLATIONS, window.LISTIA_EXTRA_TRANSLATIONS || {});
+
   function normalizeLanguage(value) {
-    const code = String(value || '').trim().toLowerCase().split(/[-_]/)[0];
-    return SUPPORTED.includes(code) ? code : null;
+    const code = String(value || '').trim().toLowerCase().replaceAll('_', '-');
+    if (!code) return null;
+    return ALIASES[code] || ALIASES[code.split('-')[0]] || null;
   }
 
   function readCookie() {
@@ -740,7 +757,9 @@
   }
 
   function applyTranslations() {
-    document.documentElement.lang = currentLanguage === 'en' ? 'en-US' : currentLanguage === 'fr' ? 'fr-FR' : 'es-MX';
+    const locale = LOCALES[currentLanguage] || LOCALES[FALLBACK];
+    document.documentElement.lang = locale.html;
+    document.documentElement.dir = locale.direction;
     document.documentElement.dataset.listiaLanguage = currentLanguage;
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -761,9 +780,11 @@
     }
 
     const manifest = document.getElementById('appManifest');
-    if (manifest) manifest.setAttribute('href', `/manifest-${currentLanguage}.webmanifest`);
+    if (manifest) manifest.setAttribute('href', `/manifest-${locale.manifest}.webmanifest`);
 
-    window.dispatchEvent(new CustomEvent('listia:languagechange', { detail: { language: currentLanguage } }));
+    window.dispatchEvent(new CustomEvent('listia:languagechange', {
+      detail: { language: currentLanguage, htmlLanguage: locale.html, direction: locale.direction }
+    }));
   }
 
   function setLanguage(lang, { persist = true } = {}) {

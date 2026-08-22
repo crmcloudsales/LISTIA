@@ -1,0 +1,19 @@
+{
+  "name": "LISTIA — Immobiliare con IA",
+  "short_name": "LISTIA",
+  "description": "LISTIA — il tuo spazio di lavoro immobiliare potenziato dall’IA.",
+  "lang": "it-IT",
+  "id": "/",
+  "start_url": "/?lang=it",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07070A",
+  "theme_color": "#6D35F2",
+  "orientation": "portrait-primary",
+  "icons": [
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
+}
+
