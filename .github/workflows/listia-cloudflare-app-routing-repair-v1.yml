@@ -267,71 +267,44 @@ jobs:
             echo 'No exact Worker custom domain or exact Worker route was found with the accessible APIs.'
           fi
 
+          # Keep an existing pending Pages domain stable while DNS is provisioned.
+          # Repeated delete/recreate cycles reset validation and are unnecessary.
           pages_domain_action='kept existing Pages domain'
-          if [[ "${before_count}" == '1' && "${before_status}" == 'pending' && \
-                "${worker_domains_http}" == '200' && "${worker_domain_count}" == '0' ]]; then
-            # Reinitialize stale pending Pages domain only after the Worker
-            # custom-domain API confirms this exact hostname is no longer owned.
-            stale_root_body="${work_dir}/stale-pages-root.body"
-            stale_asset_body="${work_dir}/stale-pages-app-js.body"
-            stale_root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_root_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/" || true)"
-            stale_asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_asset_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js" || true)"
-            if [[ "${stale_root_http}" == '200' && "${stale_asset_http}" == '200' ]] && \
-               grep -Fxq 'Hello World!' "${stale_root_body}" && \
-               grep -Fxq 'Hello World!' "${stale_asset_body}"; then
-              echo 'Refusing to recreate Pages domain because the placeholder Worker fingerprint is still active.'
-              exit 1
-            fi
-
-            echo 'Reinitialize stale pending Pages domain after confirming Worker custom-domain ownership is absent.'
-            pages_delete_file="${work_dir}/pages-domain-delete.json"
-            pages_delete_http="$(cf_delete_with_token "${CLOUDFLARE_API_TOKEN}" "${domains_url}/${APP_HOSTNAME}" "${pages_delete_file}")"
-            echo "Delete stale pending Pages domain: HTTP ${pages_delete_http}"
-            if [[ ! "${pages_delete_http}" =~ ^(200|204)$ ]]; then
-              safe_error "${pages_delete_file}"
-              exit 1
-            fi
-
-            sleep 2
-            pages_recreate_file="${work_dir}/pages-domain-recreate.json"
-            pages_recreate_body="$(jq -nc --arg name "${APP_HOSTNAME}" '{name: $name}')"
-            pages_recreate_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
-              --connect-timeout 15 --max-time 45 \
-              --request POST \
-              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              --header 'Accept: application/json' \
-              --header 'Content-Type: application/json' \
-              --data "${pages_recreate_body}" \
-              --output "${pages_recreate_file}" \
-              --write-out '%{http_code}' \
-              "${domains_url}")"
-            echo "Recreate Pages custom domain: HTTP ${pages_recreate_http}"
-            if [[ ! "${pages_recreate_http}" =~ ^2[0-9][0-9]$ ]]; then
-              safe_error "${pages_recreate_file}"
-              exit 1
-            fi
-            jq -c '.result | {
-              id,
-              name,
-              status,
-              validation_status: (.validation_data.status // null),
-              verification_status: (.verification_data.status // null),
-              zone_tag
-            }' "${pages_recreate_file}"
-            pages_domain_action='recreated stale pending Pages custom domain'
-          fi
 
           # Ensure exact Pages CNAME idempotently. Refuse to replace or delete
           # any conflicting DNS record.
           dns_records_url="${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${APP_HOSTNAME}"
           dns_records_file="${work_dir}/dns-records.json"
-          dns_records_http="$(cf_get_with_token "${CLOUDFLARE_SECURITY_TOKEN}" "${dns_records_url}" "${dns_records_file}")"
-          echo "Read exact app DNS record: HTTP ${dns_records_http}"
+          dns_records_http='not-attempted'
+          dns_token=''
+          dns_token_source=''
+
+          for token_source in security pages; do
+            if [[ "${token_source}" == 'security' ]]; then
+              candidate_token="${CLOUDFLARE_SECURITY_TOKEN}"
+            else
+              candidate_token="${CLOUDFLARE_API_TOKEN}"
+            fi
+
+            candidate_file="${work_dir}/dns-records-${token_source}.json"
+            candidate_http="$(cf_get_with_token "${candidate_token}" "${dns_records_url}" "${candidate_file}")"
+            echo "Read exact app DNS record (${token_source} token): HTTP ${candidate_http}"
+            if [[ "${candidate_http}" == '200' ]]; then
+              cp "${candidate_file}" "${dns_records_file}"
+              dns_records_http='200'
+              dns_token="${candidate_token}"
+              dns_token_source="${token_source}"
+              break
+            fi
+            safe_error "${candidate_file}"
+            dns_records_http="${candidate_http}"
+          done
+
           if [[ "${dns_records_http}" != '200' ]]; then
-            safe_error "${dns_records_file}"
-            echo 'BLOCKED: LISTIA Security needs Zone DNS Edit for listiaapp.com to create the exact Pages CNAME.'
+            echo 'BLOCKED: neither existing token can read DNS for listiaapp.com; Zone DNS Edit must be saved on one token scoped to this zone.'
             exit 1
           fi
+          echo "DNS authorization source: ${dns_token_source} token"
 
           dns_record_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)] | length' "${dns_records_file}")"
           if (( dns_record_count > 1 )); then
@@ -361,7 +334,7 @@ jobs:
             dns_create_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
               --connect-timeout 15 --max-time 45 \
               --request POST \
-              --header "Authorization: Bearer ${CLOUDFLARE_SECURITY_TOKEN}" \
+              --header "Authorization: Bearer ${dns_token}" \
               --header 'Accept: application/json' \
               --header 'Content-Type: application/json' \
               --data "${dns_create_body}" \
@@ -425,6 +398,7 @@ jobs:
             echo "- Placeholder Worker routing change: ${routing_change}"
             echo "- Pages domain action: ${pages_domain_action}"
             echo "- DNS action: ${dns_action}"
+            echo "- DNS authorization source: ${dns_token_source} token"
             echo '- Other hostnames changed: none'
           } >> "${GITHUB_STEP_SUMMARY}"
 
