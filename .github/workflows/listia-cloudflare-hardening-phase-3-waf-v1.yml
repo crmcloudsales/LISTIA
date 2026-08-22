@@ -138,7 +138,7 @@ jobs:
               fi
               jq --arg id "${rule_id}" '.result.rules[] | select(.id == $id) |
                 {action, expression, description, enabled}' "${current}" > "${RUNNER_TEMP}/old-rule.json"
-              curl -sS --fail-with-body -X PUT "${auth[@]}"                 --data @"${RUNNER_TEMP}/desired-rule.json"                 "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                 > "${RUNNER_TEMP}/upsert-result.json"
+              curl -sS --fail-with-body -X PATCH "${auth[@]}"                 --data @"${RUNNER_TEMP}/desired-rule.json"                 "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                 > "${RUNNER_TEMP}/upsert-result.json"
               changed="updated"
             else
               if [ "${count}" -ge 5 ]; then
@@ -157,7 +157,7 @@ jobs:
               if [ "${changed}" = "new" ]; then
                 curl -sS --fail-with-body -X DELETE "${auth[@]}"                   "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                   > "${RUNNER_TEMP}/rollback.json"
               else
-                curl -sS --fail-with-body -X PUT "${auth[@]}"                   --data @"${RUNNER_TEMP}/old-rule.json"                   "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                   > "${RUNNER_TEMP}/rollback.json"
+                curl -sS --fail-with-body -X PATCH "${auth[@]}"                   --data @"${RUNNER_TEMP}/old-rule.json"                   "${CF_API_BASE}/zones/${CF_ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}"                   > "${RUNNER_TEMP}/rollback.json"
               fi
               jq -e '.success == true' "${RUNNER_TEMP}/rollback.json" >/dev/null
               echo "::warning::Reverted only the rule that preceded the failure."
