@@ -123,6 +123,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Allow Cloudflare edge configuration to converge before testing.
+          sleep 25
           failed=0
           for url in             "https://listiaapp.com/"             "https://listiaapp.com/robots.txt"             "https://app.listiaapp.com/"; do
             code="$(curl --silent --show-error --location --output /dev/null               --max-time 25 --retry 2 --retry-all-errors               --user-agent "Mozilla/5.0 (compatible; LISTIA-Security-Smoke/1.0)"               --write-out '%{http_code}' "${url}" || true)"
