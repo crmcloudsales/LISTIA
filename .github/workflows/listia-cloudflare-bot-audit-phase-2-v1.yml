@@ -91,3 +91,5 @@ jobs:
             code=$(curl --silent --show-error --location               --output /dev/null               --write-out "%{http_code}"               --max-time 20               "${url}")
             echo "${url} -> HTTP ${code}"
           done
+
+# Phase 2 post-hardening verification
