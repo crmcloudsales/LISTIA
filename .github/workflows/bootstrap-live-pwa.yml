@@ -1,0 +1,49 @@
+name: Bootstrap current Cloudflare PWA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-live-pwa.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot-live-pwa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Snapshot current LISTIA QA deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://listia-pwa.pages.dev'
+          mkdir -p public
+          files=(
+            index.html styles.css app.js i18n.js config.js sw.js
+            manifest.webmanifest manifest-es.webmanifest manifest-en.webmanifest manifest-fr.webmanifest
+            _headers _redirects
+            listia-logo-transparent.webp listia-character-transparent.webp listia-mark-transparent.webp
+            icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png favicon-32.png
+          )
+          for file in "${files[@]}"; do
+            echo "Fetching $file"
+            curl --fail --silent --show-error --location "$BASE/$file" --output "public/$file"
+          done
+
+      - name: Commit exact live snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'crmcloudsales@gmail.com'
+          git add public
+          if git diff --cached --quiet; then
+            echo 'Live snapshot already matches repository.'
+            exit 0
+          fi
+          git commit -m 'Bootstrap exact Cloudflare PWA snapshot [skip ci]'
+          git push origin HEAD:main
