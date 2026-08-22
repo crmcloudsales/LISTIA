@@ -1,0 +1,197 @@
+name: LISTIA Cloudflare Commercial Routing Audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-commercial-routing-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-cloudflare-commercial-routing-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-commercial-routing:
+    name: Audit listiaapp.com and www.listiaapp.com
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      APEX_HOSTNAME: listiaapp.com
+      WWW_HOSTNAME: www.listiaapp.com
+      APP_HOSTNAME: app.listiaapp.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required secrets without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          test -n "${CLOUDFLARE_SECURITY_TOKEN}" || { echo 'CLOUDFLARE_SECURITY_TOKEN is missing'; exit 1; }
+
+      - name: Audit Cloudflare routing objects
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api='https://api.cloudflare.com/client/v4'
+          work_dir="$(mktemp -d)"
+          trap 'rm -rf "${work_dir}"' EXIT
+
+          cf_get() {
+            local token="$1"
+            local url="$2"
+            local output="$3"
+            curl --silent --show-error --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 45               --header "Authorization: Bearer ${token}"               --header 'Accept: application/json'               --output "${output}"               --write-out '%{http_code}'               "${url}"
+          }
+
+          safe_error() {
+            local input="$1"
+            if jq -e . "${input}" >/dev/null 2>&1; then
+              jq -c '{success, errors: [(.errors // [])[] | {code, message}], messages: [(.messages // [])[] | {code, message}]}' "${input}"
+            else
+              echo '{"success":false,"errors":[{"message":"Non-JSON API response"}]}'
+            fi
+          }
+
+          echo '## LISTIA commercial routing audit' >> "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+
+          projects_file="${work_dir}/pages-projects.json"
+          projects_http="$(cf_get "${CLOUDFLARE_API_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects?per_page=100" "${projects_file}")"
+          echo "Pages projects API: HTTP ${projects_http}"
+          if [[ "${projects_http}" == '200' ]]; then
+            jq -c '[.result[] | {
+              name,
+              subdomain,
+              domains,
+              production_branch,
+              canonical_url: (.canonical_deployment.url // null),
+              canonical_status: (.canonical_deployment.latest_stage.status // null)
+            }]' "${projects_file}"
+            apex_pages_matches="$(jq --arg host "${APEX_HOSTNAME}" '[.result[] | select((.domains // []) | index($host))] | length' "${projects_file}")"
+            www_pages_matches="$(jq --arg host "${WWW_HOSTNAME}" '[.result[] | select((.domains // []) | index($host))] | length' "${projects_file}")"
+            echo "Pages matches: apex=${apex_pages_matches} www=${www_pages_matches}"
+          else
+            safe_error "${projects_file}"
+            apex_pages_matches='unknown'
+            www_pages_matches='unknown'
+          fi
+
+          audit_token_endpoint() {
+            local label="$1"
+            local url="$2"
+            local filter="$3"
+            local successful='false'
+            local final_http='not-attempted'
+            local token_source
+            for token_source in security pages; do
+              if [[ "${token_source}" == 'security' ]]; then
+                token="${CLOUDFLARE_SECURITY_TOKEN}"
+              else
+                token="${CLOUDFLARE_API_TOKEN}"
+              fi
+              output="${work_dir}/${label//[^a-zA-Z0-9]/_}-${token_source}.json"
+              http="$(cf_get "${token}" "${url}" "${output}")"
+              echo "${label} (${token_source} token): HTTP ${http}"
+              final_http="${http}"
+              if [[ "${http}" == '200' ]]; then
+                jq -c "${filter}" "${output}"
+                successful='true'
+                echo "${label}_TOKEN=${token_source}" >> "${GITHUB_ENV}"
+                break
+              fi
+              safe_error "${output}"
+            done
+            echo "${label}_HTTP=${final_http}" >> "${GITHUB_ENV}"
+            echo "${label}_AVAILABLE=${successful}" >> "${GITHUB_ENV}"
+          }
+
+          audit_token_endpoint 'DNS_APEX'             "${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${APEX_HOSTNAME}&per_page=100"             '[.result[] | {id, type, name, content, proxied, ttl, comment}]'
+
+          audit_token_endpoint 'DNS_WWW'             "${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${WWW_HOSTNAME}&per_page=100"             '[.result[] | {id, type, name, content, proxied, ttl, comment}]'
+
+          audit_token_endpoint 'WORKER_ROUTES'             "${api}/zones/${CLOUDFLARE_ZONE_ID}/workers/routes"             '[.result[] | select((.pattern // "") | test("(^|\\.)((www|app)\\.)?listiaapp\\.com")) | {id, pattern, script}]'
+
+          audit_token_endpoint 'WORKER_DOMAINS'             "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains"             '[.result[] | select(.hostname == "listiaapp.com" or .hostname == "www.listiaapp.com" or .hostname == "app.listiaapp.com") | {id, hostname, service, environment, zone_id, zone_name}]'
+
+          audit_token_endpoint 'REDIRECT_RULESET'             "${api}/zones/${CLOUDFLARE_ZONE_ID}/rulesets/phases/http_request_dynamic_redirect/entrypoint"             '{id: .result.id, phase: .result.phase, rules: [.result.rules[]? | {id, description, expression, action, enabled, action_parameters}]}'
+
+          audit_token_endpoint 'PAGE_RULES'             "${api}/zones/${CLOUDFLARE_ZONE_ID}/pagerules?status=active&per_page=100"             '[.result[] | {id, status, priority, targets, actions}]'
+
+          {
+            echo "- Pages projects API: HTTP ${projects_http}"
+            echo "- Pages project matches for apex: ${apex_pages_matches}"
+            echo "- Pages project matches for www: ${www_pages_matches}"
+            echo "- DNS apex API available: ${DNS_APEX_AVAILABLE:-false}"
+            echo "- DNS www API available: ${DNS_WWW_AVAILABLE:-false}"
+            echo "- Worker routes API available: ${WORKER_ROUTES_AVAILABLE:-false}"
+            echo "- Worker custom domains API available: ${WORKER_DOMAINS_AVAILABLE:-false}"
+            echo "- Redirect rules API available: ${REDIRECT_RULESET_AVAILABLE:-false}"
+            echo "- Page Rules API available: ${PAGE_RULES_AVAILABLE:-false}"
+            echo "- Configuration changed: none"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Audit public DNS and HTTP fingerprints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          probe_dir="$(mktemp -d)"
+          trap 'rm -rf "${probe_dir}"' EXIT
+
+          dns_probe() {
+            local host="$1"
+            local type
+            for type in A AAAA CNAME; do
+              response="$(curl --silent --show-error --retry 2 --max-time 30                 --header 'accept: application/dns-json'                 "https://cloudflare-dns.com/dns-query?name=${host}&type=${type}")"
+              status="$(jq -r '.Status' <<<"${response}")"
+              answers="$(jq '[.Answer[]?] | length' <<<"${response}")"
+              values="$(jq -c '[.Answer[]? | {type, data, TTL}]' <<<"${response}")"
+              echo "DNS ${host} ${type}: status=${status} answers=${answers} values=${values}"
+            done
+          }
+
+          http_probe() {
+            local label="$1"
+            local url="$2"
+            local body="${probe_dir}/${label}.body"
+            local headers="${probe_dir}/${label}.headers"
+            local metadata
+            metadata="$(curl --silent --show-error --location --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 45               --dump-header "${headers}"               --output "${body}"               --write-out '%{url_effective}|%{http_code}|%{content_type}|%{size_download}|%{num_redirects}'               "${url}" || true)"
+            title="$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' "${body}" | head -n1)"
+            location="$(awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/\r$/,""); print substr($0,11)}' "${headers}" | tail -n1)"
+            echo "${label}: ${metadata}|location=${location:-none}|sha256=$(sha256sum "${body}" | awk '{print $1}')|title=${title:-none}"
+          }
+
+          dns_probe "${APEX_HOSTNAME}"
+          dns_probe "${WWW_HOSTNAME}"
+          dns_probe "${APP_HOSTNAME}"
+
+          http_probe apex_https "https://${APEX_HOSTNAME}/"
+          http_probe apex_http "http://${APEX_HOSTNAME}/"
+          http_probe www_https "https://${WWW_HOSTNAME}/"
+          http_probe www_http "http://${WWW_HOSTNAME}/"
+          http_probe app_https "https://${APP_HOSTNAME}/"
+
+          apex_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "https://${APEX_HOSTNAME}/")"
+          app_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "https://${APP_HOSTNAME}/")"
+          [[ "${apex_code}" == '200' ]] || { echo "Apex expected HTTP 200; got ${apex_code}"; exit 1; }
+          [[ "${app_code}" == '200' ]] || { echo "app.listiaapp.com preservation check failed: HTTP ${app_code}"; exit 1; }
+
+          {
+            echo
+            echo "- Public apex HTTPS: HTTP ${apex_code}"
+            echo "- Public app HTTPS: HTTP ${app_code}"
+            echo "- app.listiaapp.com changed: no"
+          } >> "${GITHUB_STEP_SUMMARY}"
