@@ -1,0 +1,174 @@
+name: LISTIA Cloudflare Commercial Routing Repair
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-commercial-routing-repair-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-cloudflare-commercial-routing-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-commercial-routing:
+    name: Repair www.listiaapp.com without touching app
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      APEX_HOSTNAME: listiaapp.com
+      WWW_HOSTNAME: www.listiaapp.com
+      APP_HOSTNAME: app.listiaapp.com
+      EXPECTED_WORKER: listia
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate prerequisites and exact existing Worker ownership
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          test -n "${CLOUDFLARE_SECURITY_TOKEN}" || { echo 'CLOUDFLARE_SECURITY_TOKEN is missing'; exit 1; }
+
+          api='https://api.cloudflare.com/client/v4'
+          work_dir="$(mktemp -d)"
+          echo "WORK_DIR=${work_dir}" >> "${GITHUB_ENV}"
+
+          cf_get() {
+            local token="$1"
+            local url="$2"
+            local output="$3"
+            curl --silent --show-error --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 45               --header "Authorization: Bearer ${token}"               --header 'Accept: application/json'               --output "${output}"               --write-out '%{http_code}'               "${url}"
+          }
+
+          domains_file="${work_dir}/worker-domains-before.json"
+          domains_http="$(cf_get "${CLOUDFLARE_SECURITY_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains" "${domains_file}")"
+          echo "Worker custom domains before: HTTP ${domains_http}"
+          [[ "${domains_http}" == '200' ]] || { jq -c '{success, errors}' "${domains_file}" || true; exit 1; }
+
+          apex_count="$(jq --arg host "${APEX_HOSTNAME}" '[.result[] | select(.hostname == $host)] | length' "${domains_file}")"
+          apex_service="$(jq -r --arg host "${APEX_HOSTNAME}" '[.result[] | select(.hostname == $host)][0].service // "absent"' "${domains_file}")"
+          www_count="$(jq --arg host "${WWW_HOSTNAME}" '[.result[] | select(.hostname == $host)] | length' "${domains_file}")"
+          app_count="$(jq --arg host "${APP_HOSTNAME}" '[.result[] | select(.hostname == $host)] | length' "${domains_file}")"
+
+          echo "Exact Worker ownership: apex_count=${apex_count} apex_service=${apex_service} www_count=${www_count} app_count=${app_count}"
+          jq -c '[.result[] | select(.hostname == "listiaapp.com" or .hostname == "www.listiaapp.com" or .hostname == "app.listiaapp.com") | {id, hostname, service, environment, zone_id, zone_name}]' "${domains_file}"
+
+          [[ "${apex_count}" == '1' ]] || { echo 'Refusing repair: apex Worker ownership is ambiguous.'; exit 1; }
+          [[ "${apex_service}" == "${EXPECTED_WORKER}" ]] || { echo 'Refusing repair: apex is not owned by the expected commercial Worker.'; exit 1; }
+          [[ "${www_count}" -le 1 ]] || { echo 'Refusing repair: multiple www Worker custom domains exist.'; exit 1; }
+          [[ "${app_count}" == '0' ]] || { echo 'Refusing repair: app.listiaapp.com must remain on Pages, not Workers.'; exit 1; }
+
+          apex_code="$(curl --silent --show-error --output "${work_dir}/apex-before.body" --write-out '%{http_code}' --max-time 30 "https://${APEX_HOSTNAME}/")"
+          app_code="$(curl --silent --show-error --output "${work_dir}/app-before.body" --write-out '%{http_code}' --max-time 30 "https://${APP_HOSTNAME}/")"
+          apex_title="$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' "${work_dir}/apex-before.body" | head -n1)"
+          echo "Safety probes before: apex=${apex_code} title=${apex_title:-none} app=${app_code}"
+          [[ "${apex_code}" == '200' && "${apex_title}" == 'Listia — AI for Real Estate' ]] || { echo 'Commercial apex safety probe failed.'; exit 1; }
+          [[ "${app_code}" == '200' ]] || { echo 'PWA preservation probe failed.'; exit 1; }
+
+          echo "WWW_COUNT_BEFORE=${www_count}" >> "${GITHUB_ENV}"
+
+      - name: Attach www to the verified commercial Worker only if absent
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api='https://api.cloudflare.com/client/v4'
+          domains_url="${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains"
+
+          if [[ "${WWW_COUNT_BEFORE}" == '1' ]]; then
+            echo 'www Worker custom domain already exists; no attach request needed.'
+            echo 'ATTACH_ACTION=kept existing custom domain' >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          body="$(jq -nc             --arg environment 'production'             --arg hostname "${WWW_HOSTNAME}"             --arg service "${EXPECTED_WORKER}"             --arg zone_id "${CLOUDFLARE_ZONE_ID}"             '{environment: $environment, hostname: $hostname, service: $service, zone_id: $zone_id}')"
+
+          attached='false'
+          for token_source in security pages; do
+            if [[ "${token_source}" == 'security' ]]; then
+              token="${CLOUDFLARE_SECURITY_TOKEN}"
+            else
+              token="${CLOUDFLARE_API_TOKEN}"
+            fi
+            output="${WORK_DIR}/attach-${token_source}.json"
+            http="$(curl --silent --show-error --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 45               --request PUT               --header "Authorization: Bearer ${token}"               --header 'Accept: application/json'               --header 'Content-Type: application/json'               --data "${body}"               --output "${output}"               --write-out '%{http_code}'               "${domains_url}")"
+            echo "Attach www Worker custom domain (${token_source} token): HTTP ${http}"
+            if [[ "${http}" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "${output}" >/dev/null; then
+              jq -c '.result | {id, hostname, service, environment, zone_id, zone_name}' "${output}"
+              attached='true'
+              echo "ATTACH_ACTION=attached with ${token_source} token" >> "${GITHUB_ENV}"
+              break
+            fi
+            jq -c '{success, errors: [(.errors // [])[] | {code, message}], messages: [(.messages // [])[] | {code, message}]}' "${output}" || true
+          done
+
+          if [[ "${attached}" != 'true' ]]; then
+            echo 'BLOCKED: existing tokens cannot attach www to the verified commercial Worker. No existing routing object was changed.'
+            exit 1
+          fi
+
+      - name: Verify Worker binding and wait for public recovery
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api='https://api.cloudflare.com/client/v4'
+          domains_file="${WORK_DIR}/worker-domains-after.json"
+          domains_http="$(curl --silent --show-error --retry 2 --retry-all-errors             --connect-timeout 15 --max-time 45             --header "Authorization: Bearer ${CLOUDFLARE_SECURITY_TOKEN}"             --header 'Accept: application/json'             --output "${domains_file}"             --write-out '%{http_code}'             "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains")"
+          [[ "${domains_http}" == '200' ]] || { echo "Worker domains verification failed: HTTP ${domains_http}"; exit 1; }
+
+          www_count="$(jq --arg host "${WWW_HOSTNAME}" --arg service "${EXPECTED_WORKER}" '[.result[] | select(.hostname == $host and .service == $service)] | length' "${domains_file}")"
+          [[ "${www_count}" == '1' ]] || { echo 'Expected exactly one www custom domain on the commercial Worker.'; exit 1; }
+
+          final_code='000'
+          final_url=''
+          final_title=''
+          for attempt in $(seq 1 30); do
+            : > "${WORK_DIR}/www.body"
+            metadata="$(curl --silent --show-error --location --retry 1               --connect-timeout 15 --max-time 30               --output "${WORK_DIR}/www.body"               --write-out '%{http_code}|%{url_effective}|%{content_type}|%{size_download}|%{num_redirects}'               "https://${WWW_HOSTNAME}/" || true)"
+            IFS='|' read -r final_code final_url final_type final_size final_redirects <<< "${metadata}"
+            final_title="$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' "${WORK_DIR}/www.body" | head -n1)"
+            echo "www verification ${attempt}/30: code=${final_code} final=${final_url:-none} type=${final_type:-none} size=${final_size:-0} redirects=${final_redirects:-0} title=${final_title:-none}"
+            if [[ "${final_code}" == '200' && "${final_title}" == 'Listia — AI for Real Estate' ]]; then
+              break
+            fi
+            sleep 10
+          done
+
+          [[ "${final_code}" == '200' && "${final_title}" == 'Listia — AI for Real Estate' ]] || { echo 'www did not recover as the commercial LISTIA site.'; exit 1; }
+
+          apex_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "https://${APEX_HOSTNAME}/")"
+          app_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "https://${APP_HOSTNAME}/")"
+          [[ "${apex_code}" == '200' ]] || { echo "Apex regression: HTTP ${apex_code}"; exit 1; }
+          [[ "${app_code}" == '200' ]] || { echo "PWA regression: HTTP ${app_code}"; exit 1; }
+
+          {
+            echo '## LISTIA commercial routing repair'
+            echo
+            echo "- Apex: HTTP ${apex_code}"
+            echo "- www: HTTP ${final_code}, final URL ${final_url}"
+            echo "- app: HTTP ${app_code}"
+            echo "- www action: ${ATTACH_ACTION}"
+            echo '- Existing apex Worker changed: no'
+            echo '- app.listiaapp.com changed: no'
+            echo '- Mail and unrelated DNS records changed: none'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Clean up temporary files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${WORK_DIR:-}" && -d "${WORK_DIR}" ]]; then
+            rm -rf "${WORK_DIR}"
+          fi
