@@ -1,0 +1,170 @@
+name: LISTIA Cloudflare Security Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+
+    steps:
+      - name: Verify required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CF_TOKEN:-}" ]; then
+            echo "CLOUDFLARE_SECURITY_TOKEN is missing"
+            exit 1
+          fi
+
+          if [ -z "${CF_ZONE_ID:-}" ]; then
+            echo "CLOUDFLARE_ZONE_ID is missing"
+            exit 1
+          fi
+
+          echo "Required secrets are present."
+
+      - name: Verify Cloudflare API token
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESPONSE=$(curl -sS \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify")
+
+          echo "${RESPONSE}" | jq '{
+            success,
+            status: .result.status,
+            expires_on: .result.expires_on
+          }'
+
+          SUCCESS=$(echo "${RESPONSE}" | jq -r '.success')
+
+          if [ "${SUCCESS}" != "true" ]; then
+            echo "Cloudflare token verification failed."
+            exit 1
+          fi
+
+      - name: Audit Browser Integrity Check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -sS \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/browser_check" \
+          | jq '{
+              success,
+              setting: .result.id,
+              value: .result.value,
+              editable: .result.editable,
+              errors
+            }'
+
+      - name: Audit security level
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -sS \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/settings/security_level" \
+          | jq '{
+              success,
+              setting: .result.id,
+              value: .result.value,
+              editable: .result.editable,
+              errors
+            }'
+
+      - name: Audit Bot Management
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESPONSE=$(curl -sS \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/bot_management")
+
+          echo "${RESPONSE}" | jq '{
+            success,
+            ai_bots_protection: .result.ai_bots_protection,
+            content_bots_protection: .result.content_bots_protection,
+            crawler_protection: .result.crawler_protection,
+            is_robots_txt_managed: .result.is_robots_txt_managed,
+            fight_mode: .result.fight_mode,
+            sbfm_likely_automated: .result.sbfm_likely_automated,
+            sbfm_definitely_automated: .result.sbfm_definitely_automated,
+            sbfm_verified_bots: .result.sbfm_verified_bots,
+            errors
+          }'
+
+      - name: Audit WAF custom rules
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          HTTP_CODE=$(curl -sS \
+            -o /tmp/waf.json \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint")
+
+          echo "WAF HTTP status: ${HTTP_CODE}"
+
+          jq '{
+            success,
+            ruleset_id: .result.id,
+            phase: .result.phase,
+            rules: [
+              (.result.rules[]? | {
+                id,
+                description,
+                action,
+                enabled
+              })
+            ],
+            errors
+          }' /tmp/waf.json
+
+      - name: Audit rate limiting
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          HTTP_CODE=$(curl -sS \
+            -o /tmp/ratelimit.json \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint")
+
+          echo "Rate Limit HTTP status: ${HTTP_CODE}"
+
+          jq '{
+            success,
+            ruleset_id: .result.id,
+            phase: .result.phase,
+            rules: [
+              (.result.rules[]? | {
+                id,
+                description,
+                action,
+                enabled
+              })
+            ],
+            errors
+          }' /tmp/ratelimit.json
+
+      - name: Security audit completed
+        run: |
+          echo "LISTIA Cloudflare security audit completed."
+          echo "No Cloudflare configuration was modified."
