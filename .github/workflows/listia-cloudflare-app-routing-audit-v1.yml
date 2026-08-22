@@ -1,0 +1,188 @@
+name: LISTIA Cloudflare App Routing Audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-app-routing-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-routing:
+    name: Audit app.listiaapp.com routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      PAGES_PROJECT: listia-pwa
+      APP_HOSTNAME: app.listiaapp.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required secrets without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          test -n "${CLOUDFLARE_SECURITY_TOKEN}" || { echo 'CLOUDFLARE_SECURITY_TOKEN is missing'; exit 1; }
+
+      - name: Audit Pages, DNS, Worker routes and Worker custom domains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          api='https://api.cloudflare.com/client/v4'
+          audit_dir="$(mktemp -d)"
+          trap 'rm -rf "${audit_dir}"' EXIT
+
+          cf_get() {
+            local token="$1"
+            local url="$2"
+            local output="$3"
+            curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --header "Authorization: Bearer ${token}" \
+              --header 'Accept: application/json' \
+              --output "${output}" \
+              --write-out '%{http_code}' \
+              "${url}"
+          }
+
+          safe_error() {
+            local input="$1"
+            if jq -e . "${input}" >/dev/null 2>&1; then
+              jq -c '{success, errors: [(.errors // [])[] | {code, message}], messages: [(.messages // [])[] | {code, message}]}' "${input}"
+            else
+              echo '{"success":false,"errors":[{"message":"Non-JSON API response"}]}'
+            fi
+          }
+
+          project_file="${audit_dir}/pages-project.json"
+          project_status="$(cf_get "${CLOUDFLARE_API_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}" "${project_file}")"
+          echo "Pages project API: HTTP ${project_status}"
+          if [[ "${project_status}" != '200' ]]; then
+            safe_error "${project_file}"
+            exit 1
+          fi
+          jq -c '.result | {
+            name,
+            subdomain,
+            domains,
+            production_branch,
+            canonical_deployment: {
+              id: .canonical_deployment.id,
+              short_id: .canonical_deployment.short_id,
+              environment: .canonical_deployment.environment,
+              url: .canonical_deployment.url,
+              aliases: .canonical_deployment.aliases,
+              stage_status: .canonical_deployment.latest_stage.status,
+              trigger_type: .canonical_deployment.deployment_trigger.type,
+              trigger_branch: .canonical_deployment.deployment_trigger.metadata.branch,
+              trigger_commit: .canonical_deployment.deployment_trigger.metadata.commit_hash
+            }
+          }' "${project_file}"
+
+          domains_file="${audit_dir}/pages-domains.json"
+          domains_status="$(cf_get "${CLOUDFLARE_API_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}/domains" "${domains_file}")"
+          echo "Pages domains API: HTTP ${domains_status}"
+          if [[ "${domains_status}" != '200' ]]; then
+            safe_error "${domains_file}"
+            exit 1
+          fi
+          jq -c '[.result[] | {
+            id,
+            name,
+            status,
+            validation_status: (.validation_data.status // null),
+            verification_status: (.verification_data.status // null),
+            zone_tag
+          }]' "${domains_file}"
+
+          pages_match_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)] | length' "${domains_file}")"
+          pages_match_status="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].status // "absent"' "${domains_file}")"
+          echo "Pages custom-domain match: count=${pages_match_count} status=${pages_match_status}"
+
+          dns_file="${audit_dir}/dns.json"
+          dns_status="$(cf_get "${CLOUDFLARE_SECURITY_TOKEN}" "${api}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${APP_HOSTNAME}" "${dns_file}")"
+          echo "DNS records API: HTTP ${dns_status}"
+          if [[ "${dns_status}" == '200' ]]; then
+            jq -c '[.result[] | {id, type, name, content, proxied, ttl}]' "${dns_file}"
+          else
+            safe_error "${dns_file}"
+          fi
+
+          routes_file="${audit_dir}/worker-routes.json"
+          routes_status="$(cf_get "${CLOUDFLARE_SECURITY_TOKEN}" "${api}/zones/${CLOUDFLARE_ZONE_ID}/workers/routes" "${routes_file}")"
+          echo "Worker routes API: HTTP ${routes_status}"
+          if [[ "${routes_status}" == '200' ]]; then
+            jq -c --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.pattern | startswith($hostname)) | {id, pattern, script}]' "${routes_file}"
+          else
+            safe_error "${routes_file}"
+          fi
+
+          worker_domains_file="${audit_dir}/worker-domains.json"
+          worker_domains_status="$(cf_get "${CLOUDFLARE_SECURITY_TOKEN}" "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains?hostname=${APP_HOSTNAME}" "${worker_domains_file}")"
+          echo "Worker custom domains API: HTTP ${worker_domains_status}"
+          if [[ "${worker_domains_status}" == '200' ]]; then
+            jq -c '[.result[] | {id, hostname, service, zone_id, zone_name, environment}]' "${worker_domains_file}"
+          else
+            safe_error "${worker_domains_file}"
+          fi
+
+          {
+            echo '## LISTIA app routing audit'
+            echo
+            echo "- Pages project API: HTTP ${project_status}"
+            echo "- Pages domains API: HTTP ${domains_status}"
+            echo "- app.listiaapp.com in Pages: count=${pages_match_count}, status=${pages_match_status}"
+            echo "- DNS API: HTTP ${dns_status}"
+            echo "- Worker routes API: HTTP ${routes_status}"
+            echo "- Worker custom domains API: HTTP ${worker_domains_status}"
+            echo '- Configuration changed: none'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Read-only HTTP fingerprints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          probe_dir="$(mktemp -d)"
+          trap 'rm -rf "${probe_dir}"' EXIT
+
+          probe() {
+            local label="$1"
+            local url="$2"
+            local body="${probe_dir}/${label}.body"
+            local metadata
+            local marker='other'
+            metadata="$(curl --silent --show-error --location --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --output "${body}" \
+              --write-out '%{http_code}|%{content_type}|%{size_download}' \
+              "${url}")"
+            if grep -Fxq 'Hello World!' "${body}"; then
+              marker='hello-world-worker'
+            elif grep -Eiq '<!doctype html|<html' "${body}"; then
+              marker='html'
+            elif [[ "${url}" == *.js ]]; then
+              marker='javascript-or-other'
+            fi
+            echo "${label}: ${metadata}|sha256=$(sha256sum "${body}" | awk '{print $1}')|marker=${marker}"
+          }
+
+          probe app_root 'https://app.listiaapp.com/'
+          probe app_javascript 'https://app.listiaapp.com/app.js'
+          probe app_manifest 'https://app.listiaapp.com/manifest.webmanifest'
+          probe app_service_worker 'https://app.listiaapp.com/sw.js'
+          probe pages_production 'https://listia-pwa.pages.dev/'
+
+          echo 'Configuration changed: none'
