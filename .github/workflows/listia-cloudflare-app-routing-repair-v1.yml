@@ -15,7 +15,7 @@ jobs:
   repair-routing:
     name: Attach app.listiaapp.com to LISTIA Pages
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -266,10 +266,64 @@ jobs:
             echo 'No exact Worker custom domain or exact Worker route was found with the accessible APIs.'
           fi
 
+          pages_domain_action='kept existing Pages domain'
+          if [[ "${before_count}" == '1' && "${before_status}" == 'pending' && \
+                "${worker_domains_http}" == '200' && "${worker_domain_count}" == '0' ]]; then
+            # Reinitialize stale pending Pages domain only after the Worker
+            # custom-domain API confirms this exact hostname is no longer owned.
+            stale_root_body="${work_dir}/stale-pages-root.body"
+            stale_asset_body="${work_dir}/stale-pages-app-js.body"
+            stale_root_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_root_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/")"
+            stale_asset_http="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 --output "${stale_asset_body}" --write-out '%{http_code}' "https://${APP_HOSTNAME}/app.js")"
+            if [[ "${stale_root_http}" == '200' && "${stale_asset_http}" == '200' ]] && \
+               grep -Fxq 'Hello World!' "${stale_root_body}" && \
+               grep -Fxq 'Hello World!' "${stale_asset_body}"; then
+              echo 'Refusing to recreate Pages domain because the placeholder Worker fingerprint is still active.'
+              exit 1
+            fi
+
+            echo 'Reinitialize stale pending Pages domain after confirming Worker custom-domain ownership is absent.'
+            pages_delete_file="${work_dir}/pages-domain-delete.json"
+            pages_delete_http="$(cf_delete_with_token "${CLOUDFLARE_API_TOKEN}" "${domains_url}/${APP_HOSTNAME}" "${pages_delete_file}")"
+            echo "Delete stale pending Pages domain: HTTP ${pages_delete_http}"
+            if [[ ! "${pages_delete_http}" =~ ^(200|204)$ ]]; then
+              safe_error "${pages_delete_file}"
+              exit 1
+            fi
+
+            sleep 2
+            pages_recreate_file="${work_dir}/pages-domain-recreate.json"
+            pages_recreate_body="$(jq -nc --arg name "${APP_HOSTNAME}" '{name: $name}')"
+            pages_recreate_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --request POST \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              --data "${pages_recreate_body}" \
+              --output "${pages_recreate_file}" \
+              --write-out '%{http_code}' \
+              "${domains_url}")"
+            echo "Recreate Pages custom domain: HTTP ${pages_recreate_http}"
+            if [[ ! "${pages_recreate_http}" =~ ^2[0-9][0-9]$ ]]; then
+              safe_error "${pages_recreate_file}"
+              exit 1
+            fi
+            jq -c '.result | {
+              id,
+              name,
+              status,
+              validation_status: (.validation_data.status // null),
+              verification_status: (.verification_data.status // null),
+              zone_tag
+            }' "${pages_recreate_file}"
+            pages_domain_action='recreated stale pending Pages custom domain'
+          fi
+
           final_status='unknown'
           final_validation='unknown'
           final_verification='unknown'
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             current_file="${work_dir}/domains-current.json"
             current_http="$(cf_get "${domains_url}" "${current_file}")"
             if [[ "${current_http}" != '200' ]]; then
@@ -281,7 +335,7 @@ jobs:
             final_status="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].status // "absent"' "${current_file}")"
             final_validation="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].validation_data.status // "unknown"' "${current_file}")"
             final_verification="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].verification_data.status // "unknown"' "${current_file}")"
-            echo "Pages domain verification ${attempt}/30: status=${final_status} validation=${final_validation} verification=${final_verification}"
+            echo "Pages domain verification ${attempt}/60: status=${final_status} validation=${final_validation} verification=${final_verification}"
 
             if [[ "${final_status}" == 'active' ]]; then
               break
@@ -312,6 +366,7 @@ jobs:
             echo "- After: status=${final_status}, validation=${final_validation}, verification=${final_verification}"
             echo '- Target Pages project: listia-pwa'
             echo "- Placeholder Worker routing change: ${routing_change}"
+            echo "- Pages domain action: ${pages_domain_action}"
             echo '- Other hostnames changed: none'
           } >> "${GITHUB_STEP_SUMMARY}"
 
