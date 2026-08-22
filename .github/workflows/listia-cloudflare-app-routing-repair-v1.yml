@@ -1,0 +1,227 @@
+name: LISTIA Cloudflare App Routing Repair
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/listia-cloudflare-app-routing-repair-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair-routing:
+    name: Attach app.listiaapp.com to LISTIA Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PAGES_PROJECT: listia-pwa
+      APP_HOSTNAME: app.listiaapp.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required secrets without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+
+      - name: Read current Pages routing and attach only if absent
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          api='https://api.cloudflare.com/client/v4'
+          work_dir="$(mktemp -d)"
+          trap 'rm -rf "${work_dir}"' EXIT
+
+          cf_get() {
+            local url="$1"
+            local output="$2"
+            curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              --output "${output}" \
+              --write-out '%{http_code}' \
+              "${url}"
+          }
+
+          safe_error() {
+            local input="$1"
+            if jq -e . "${input}" >/dev/null 2>&1; then
+              jq -c '{success, errors: [(.errors // [])[] | {code, message}], messages: [(.messages // [])[] | {code, message}]}' "${input}"
+            else
+              echo '{"success":false,"errors":[{"message":"Non-JSON API response"}]}'
+            fi
+          }
+
+          project_file="${work_dir}/project.json"
+          project_http="$(cf_get "${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}" "${project_file}")"
+          echo "Pages project before: HTTP ${project_http}"
+          if [[ "${project_http}" != '200' ]]; then
+            safe_error "${project_file}"
+            exit 1
+          fi
+
+          deployment_status="$(jq -r '.result.canonical_deployment.latest_stage.status // "missing"' "${project_file}")"
+          deployment_url="$(jq -r '.result.canonical_deployment.url // "missing"' "${project_file}")"
+          echo "Canonical deployment: status=${deployment_status} url=${deployment_url}"
+          if [[ "${deployment_status}" != 'success' ]]; then
+            echo 'Refusing to attach the production hostname to an unhealthy Pages deployment.'
+            exit 1
+          fi
+
+          domains_url="${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}/domains"
+          before_file="${work_dir}/domains-before.json"
+          before_http="$(cf_get "${domains_url}" "${before_file}")"
+          echo "Pages domains before: HTTP ${before_http}"
+          if [[ "${before_http}" != '200' ]]; then
+            safe_error "${before_file}"
+            exit 1
+          fi
+
+          before_count="$(jq --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)] | length' "${before_file}")"
+          before_status="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].status // "absent"' "${before_file}")"
+          echo "app domain before: count=${before_count} status=${before_status}"
+
+          if [[ "${before_count}" == '0' ]]; then
+            create_file="${work_dir}/domain-create.json"
+            create_body="$(jq -nc --arg name "${APP_HOSTNAME}" '{name: $name}')"
+            create_http="$(curl --silent --show-error --retry 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --request POST \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              --data "${create_body}" \
+              --output "${create_file}" \
+              --write-out '%{http_code}' \
+              "${domains_url}")"
+            echo "Attach Pages custom domain: HTTP ${create_http}"
+            if [[ ! "${create_http}" =~ ^2[0-9][0-9]$ ]]; then
+              safe_error "${create_file}"
+              exit 1
+            fi
+            jq -c '.result | {
+              id,
+              name,
+              status,
+              validation_status: (.validation_data.status // null),
+              verification_status: (.verification_data.status // null),
+              zone_tag
+            }' "${create_file}"
+          else
+            echo 'Pages custom domain already exists; no create request needed.'
+          fi
+
+          final_status='unknown'
+          final_validation='unknown'
+          final_verification='unknown'
+          for attempt in $(seq 1 30); do
+            current_file="${work_dir}/domains-current.json"
+            current_http="$(cf_get "${domains_url}" "${current_file}")"
+            if [[ "${current_http}" != '200' ]]; then
+              echo "Pages domains verification attempt ${attempt}: HTTP ${current_http}"
+              safe_error "${current_file}"
+              exit 1
+            fi
+
+            final_status="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].status // "absent"' "${current_file}")"
+            final_validation="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].validation_data.status // "unknown"' "${current_file}")"
+            final_verification="$(jq -r --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname)][0].verification_data.status // "unknown"' "${current_file}")"
+            echo "Pages domain verification ${attempt}/30: status=${final_status} validation=${final_validation} verification=${final_verification}"
+
+            if [[ "${final_status}" == 'active' ]]; then
+              break
+            fi
+            if [[ "${final_status}" =~ ^(error|blocked|deactivated)$ ]]; then
+              jq -c --arg hostname "${APP_HOSTNAME}" '[.result[] | select(.name == $hostname) | {
+                name,
+                status,
+                validation_status: (.validation_data.status // null),
+                validation_error: (.validation_data.error_message // null),
+                verification_status: (.verification_data.status // null),
+                verification_error: (.verification_data.error_message // null)
+              }]' "${current_file}"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          if [[ "${final_status}" != 'active' ]]; then
+            echo "Pages custom domain did not become active within the verification window: ${final_status}"
+            exit 1
+          fi
+
+          {
+            echo '## LISTIA app routing repair'
+            echo
+            echo "- Before: count=${before_count}, status=${before_status}"
+            echo "- After: status=${final_status}, validation=${final_validation}, verification=${final_verification}"
+            echo '- Target Pages project: listia-pwa'
+            echo '- Other hostnames changed: none'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Verify production routing and PWA assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          probe_dir="$(mktemp -d)"
+          trap 'rm -rf "${probe_dir}"' EXIT
+
+          probe() {
+            local label="$1"
+            local url="$2"
+            local expected_type="$3"
+            local body="${probe_dir}/${label}.body"
+            local metadata
+            local http_code
+            local content_type
+            local size
+            local marker='other'
+
+            metadata="$(curl --silent --show-error --location --retry 3 --retry-all-errors \
+              --connect-timeout 15 --max-time 45 \
+              --output "${body}" \
+              --write-out '%{http_code}|%{content_type}|%{size_download}' \
+              "${url}")"
+            IFS='|' read -r http_code content_type size <<< "${metadata}"
+
+            if grep -Fxq 'Hello World!' "${body}"; then
+              marker='hello-world-worker'
+            elif grep -Eiq '<!doctype html|<html' "${body}"; then
+              marker='html'
+            elif [[ "${content_type}" == *javascript* ]]; then
+              marker='javascript'
+            elif [[ "${content_type}" == *manifest* || "${content_type}" == *json* ]]; then
+              marker='manifest'
+            fi
+
+            echo "${label}: ${metadata}|sha256=$(sha256sum "${body}" | awk '{print $1}')|marker=${marker}"
+            [[ "${http_code}" == '200' ]] || { echo "${label} expected HTTP 200"; return 1; }
+            [[ "${marker}" != 'hello-world-worker' ]] || { echo "${label} is still intercepted by the placeholder Worker"; return 1; }
+            case "${expected_type}" in
+              html) [[ "${marker}" == 'html' ]] ;;
+              javascript) [[ "${content_type}" == *javascript* ]] ;;
+              manifest) [[ "${content_type}" == *manifest* || "${content_type}" == *json* ]] ;;
+            esac
+          }
+
+          probe app_root 'https://app.listiaapp.com/' html
+          probe app_javascript 'https://app.listiaapp.com/app.js' javascript
+          probe app_manifest 'https://app.listiaapp.com/manifest.webmanifest' manifest
+          probe app_service_worker 'https://app.listiaapp.com/sw.js' javascript
+          probe pages_production 'https://listia-pwa.pages.dev/' html
+          probe public_root 'https://listiaapp.com/' html
+
+          negative_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' 'https://app.listiaapp.com/.env')"
+          echo "negative_sensitive_file: HTTP ${negative_status}"
+          [[ "${negative_status}" == '403' ]] || { echo 'Expected Cloudflare WAF to block /.env'; exit 1; }
