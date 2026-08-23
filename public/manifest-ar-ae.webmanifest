@@ -12,9 +12,7 @@
   "theme_color": "#6D35F2",
   "orientation": "portrait-primary",
   "icons": [
-    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
-    {"src":"/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+    {"src":"/listia-isotipo-192-v2.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/listia-isotipo-512-v2.png","sizes":"512x512","type":"image/png","purpose":"any"}
   ]
 }
-
