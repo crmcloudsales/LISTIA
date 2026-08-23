@@ -12,6 +12,9 @@
 /app.js
   Cache-Control: no-cache
 
+/install.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
 /config.js
   Cache-Control: no-cache, no-store, must-revalidate
 

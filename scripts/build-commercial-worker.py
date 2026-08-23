@@ -14,8 +14,12 @@ LANGUAGES = ("es", "en", "fr", "it", "pt-BR", "de", "ar-AE")
 def validate_html(html: str) -> None:
     required = [
         "const LISTIA_COMMERCIAL_I18N_VERSION = '1.0.0';",
+        "const LISTIA_COMMERCIAL_INSTALL_VERSION = '1.0.0';",
         "document.documentElement.dir = config.dir;",
         "document.getElementById('accederBtn').href = 'https://app.listiaapp.com/';",
+        "document.getElementById('iosBtn').href = 'https://app.listiaapp.com/?install=ios';",
+        "document.getElementById('androidBtn').href = 'https://app.listiaapp.com/?install=android';",
+        "document.getElementById('desktopBtn').href = 'https://app.listiaapp.com/?install=desktop';",
         "canonical.href = 'https://listiaapp.com/?lang='",
     ]
     required.extend(f'<option value="{language}">' for language in LANGUAGES)

@@ -336,15 +336,16 @@
 
   // La web comercial y la PWA son despliegues separados del mismo producto.
   document.getElementById('accederBtn').href = 'https://app.listiaapp.com/';
-  document.getElementById('iosBtn').href = '#';
-  document.getElementById('androidBtn').href = '#';
-  document.getElementById('desktopBtn').href = '#';
+  document.getElementById('iosBtn').href = 'https://app.listiaapp.com/?install=ios';
+  document.getElementById('androidBtn').href = 'https://app.listiaapp.com/?install=android';
+  document.getElementById('desktopBtn').href = 'https://app.listiaapp.com/?install=desktop';
 </script>
 <script>
 (() => {
   'use strict';
 
   const LISTIA_COMMERCIAL_I18N_VERSION = '1.0.0';
+  const LISTIA_COMMERCIAL_INSTALL_VERSION = '1.0.0';
   const LANGUAGE_CONFIG = {
     es: { htmlLang: 'es-MX', dir: 'ltr', aliases: ['es', 'es-mx'] },
     en: { htmlLang: 'en-US', dir: 'ltr', aliases: ['en', 'en-us', 'en-gb'] },
