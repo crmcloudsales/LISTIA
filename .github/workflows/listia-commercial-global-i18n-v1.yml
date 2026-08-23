@@ -96,7 +96,7 @@ jobs:
               version_id="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
                 /tmp/listia-commercial-upload.log | tail -n 1)"
               preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' \
-                /tmp/listia-commercial-upload.log | tail -n 1 | sed 's/[),]$//' || true)"
+                /tmp/listia-commercial-upload.log | head -n 1 | sed 's/[),]$//' || true)"
               break
             fi
           done
