@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>LISTIA Voice Lab</title>
+  <link rel="stylesheet" href="/voice-lab.css?v=1">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="brand-row">
+        <img src="/listia-mark-transparent.webp" alt="LISTIA" class="brand-mark">
+        <div>
+          <p class="eyebrow">VOICE LAB</p>
+          <h1>Escucha las voces gratuitas de LISTIA</h1>
+          <p class="intro">Esta prueba usa únicamente las voces que ofrece tu propio dispositivo o navegador. LISTIA no envía el texto a una API de voz de pago.</p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label for="language">Idioma</label>
+        <select id="language">
+          <option value="es-MX" selected>Español · México</option>
+          <option value="en-US">English · United States</option>
+          <option value="fr-FR">Français · France</option>
+          <option value="it-IT">Italiano · Italia</option>
+          <option value="pt-BR">Português · Brasil</option>
+          <option value="de-DE">Deutsch · Deutschland</option>
+          <option value="ar-AE">العربية · الإمارات</option>
+        </select>
+
+        <label for="sample">Texto de prueba</label>
+        <textarea id="sample" rows="5">Hola, soy LISTIA. Estoy aquí para ayudarte de forma clara, cercana y profesional. Cuéntame qué necesitas y lo resolvemos juntos.</textarea>
+
+        <div class="actions">
+          <button id="stop" class="secondary" type="button">Detener</button>
+          <button id="refresh" class="secondary" type="button">Actualizar voces</button>
+        </div>
+      </div>
+
+      <div class="status" id="status" aria-live="polite"></div>
+      <div id="voices" class="voice-list"></div>
+    </section>
+  </main>
+  <script src="/voice-lab.js?v=1" defer></script>
+</body>
+</html>
