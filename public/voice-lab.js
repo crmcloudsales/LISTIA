@@ -118,6 +118,13 @@
     });
   }
 
+  const requestedLang = new URLSearchParams(window.location.search).get('lang');
+  if (requestedLang && samples[requestedLang] && language.querySelector(`option[value="${requestedLang}"]`)) {
+    language.value = requestedLang;
+    sample.value = samples[requestedLang];
+    document.documentElement.dir = requestedLang === 'ar-AE' ? 'rtl' : 'ltr';
+  }
+
   language.addEventListener('change', () => {
     sample.value = samples[language.value] || '';
     document.documentElement.dir = language.value === 'ar-AE' ? 'rtl' : 'ltr';
