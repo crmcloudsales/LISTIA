@@ -1,5 +1,5 @@
-const CACHE="listia-pwa-v0.9.2";
-const CORE=["/","/index.html","/styles.css","/i18n-extra.js","/i18n.js","/install.js","/app.js","/config.js","/manifest.webmanifest","/manifest-es.webmanifest","/manifest-en.webmanifest","/manifest-fr.webmanifest","/manifest-it.webmanifest","/manifest-pt-br.webmanifest","/manifest-de.webmanifest","/manifest-ar-ae.webmanifest","/listia-logo-transparent.webp","/listia-mark-transparent.webp","/listia-isotipo-192-v2.png","/listia-isotipo-512-v2.png","/listia-isotipo-180-v2.png","/listia-isotipo-32-v2.png"];
+const CACHE="listia-pwa-v0.9.3";
+const CORE=["/","/index.html","/styles.css?v=0.9.3","/i18n-extra.js","/i18n.js","/install.js?v=0.9.3","/app.js","/config.js","/manifest.webmanifest","/manifest-es.webmanifest","/manifest-en.webmanifest","/manifest-fr.webmanifest","/manifest-it.webmanifest","/manifest-pt-br.webmanifest","/manifest-de.webmanifest","/manifest-ar-ae.webmanifest","/listia-logo-transparent.webp","/listia-mark-transparent.webp","/listia-isotipo-192-v2.png","/listia-isotipo-512-v2.png","/listia-isotipo-180-v2.png","/listia-isotipo-32-v2.png"];
 self.addEventListener("install",e=>{
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)));
