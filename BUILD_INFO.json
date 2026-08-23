@@ -1,5 +1,5 @@
 {
-  "version": "0.9.4",
+  "version": "0.9.5",
   "status": "global_multilingual_office_dashboard_property_material_intake",
   "languages": {"supported":["es","en","fr","it","pt-BR","de","ar-AE"],"automatic_detection":true,"manual_override":true,"query_override":"lang","preference_key":"listia_language","cookie_key":"listia_lang","fallback":"en","rtl":["ar-AE"],"profile_sync":true},
   "supabase": {"auth_connected":true,"organizations_connected":true,"onboarding_state_connected":true,"integration_connections_connected":true,"google_oauth_start_active":true,"google_oauth_callback_active":true,"tokens_server_side_only":true},
@@ -15,5 +15,6 @@
   "pwa_icon_v091": {"source":"public/listia-mark-transparent.webp","derivatives":["listia-isotipo-32-v2.png","listia-isotipo-180-v2.png","listia-isotipo-192-v2.png","listia-isotipo-512-v2.png"],"background":"transparent","manifest_purpose":"any","reason":"show the complete official purple LISTIA mark without the embedded black square"},
   "pwa_install_v092": {"commercial_buttons":{"ios":"https://app.listiaapp.com/?install=ios","android":"https://app.listiaapp.com/?install=android","desktop":"https://app.listiaapp.com/?install=desktop"},"delivery":"one installable PWA from app.listiaapp.com","android_desktop":"native browser install prompt with browser-menu fallback","ios":"Safari Add to Home Screen flow","languages":["es","en","fr","it","pt-BR","de","ar-AE"],"store_packaging":"future; no false APK, IPA or desktop download links"},
   "pwa_install_v093": {"fix":"versioned install CSS and script to prevent stale mixed releases","experience":"opaque focused install surface; application login is not visible behind it","required_user_action":"one explicit install confirmation enforced by the browser"},
-  "pwa_icon_v094": {"source":"unchanged official transparent purple LISTIA mark with light house","manifest_purposes":["any","maskable"],"fix":"prevent Android from adding the non-maskable white wrapper","cache_busting":"manifest and icon URLs versioned","brand_redrawn":false}
+  "pwa_icon_v094": {"source":"unchanged official transparent purple LISTIA mark with light house","manifest_purposes":["any","maskable"],"fix":"prevent Android from adding the non-maskable white wrapper","cache_busting":"manifest and icon URLs versioned","brand_redrawn":false},
+  "pwa_icon_v095": {"source":"official LISTIA house shape extracted without redraw","android_maskable":"opaque edge-to-edge purple field with centered light house","other_platforms":"unchanged transparent official mark","fix":"eliminate launcher-generated white pixels around Android adaptive icon","cache_busting":"new maskable filenames plus manifest version 0.9.5"}
 }

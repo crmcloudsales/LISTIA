@@ -780,7 +780,7 @@
     }
 
     const manifest = document.getElementById('appManifest');
-    if (manifest) manifest.setAttribute('href', `/manifest-${locale.manifest}.webmanifest?v=0.9.4`);
+    if (manifest) manifest.setAttribute('href', `/manifest-${locale.manifest}.webmanifest?v=0.9.5`);
 
     window.dispatchEvent(new CustomEvent('listia:languagechange', {
       detail: { language: currentLanguage, htmlLanguage: locale.html, direction: locale.direction }
