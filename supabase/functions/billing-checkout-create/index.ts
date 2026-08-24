@@ -34,8 +34,10 @@ function json(req: Request, body: unknown, status = 200) {
 }
 
 function activeStripeSecret() {
-  if (BILLING_ENV === 'live') return Deno.env.get('STRIPE_SECRET_KEY_LIVE') || ''
-  return Deno.env.get('STRIPE_SECRET_KEY_TEST') || ''
+  if (BILLING_ENV === 'live') {
+    return Deno.env.get('STRIPE_RESTRICTED_KEY_LIVE') || Deno.env.get('STRIPE_SECRET_KEY_LIVE') || ''
+  }
+  return Deno.env.get('STRIPE_RESTRICTED_KEY_TEST') || Deno.env.get('STRIPE_SECRET_KEY_TEST') || ''
 }
 
 function randomLetters(length = 8) {
