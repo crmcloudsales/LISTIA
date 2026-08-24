@@ -32,6 +32,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 26. `20260824041732` — `index_gestiones_user_id`
 27. `20260824044024` — `add_property_processing_pipeline`
 28. `20260824044325` — `expand_property_locales`
+29. `20260824044454` — `lock_property_processing_trigger_functions`
 
 The current LISTIA billing and property-processing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
