@@ -52,7 +52,12 @@ async function consumeSecurityRateLimit(
   })
 }
 
-const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com'])
+const allowedOrigins = new Set([
+  'https://listia-pwa.pages.dev',
+  'https://app.listiaapp.com',
+  'https://listiaapp.com',
+  'https://www.listiaapp.com',
+])
 
 function cors(req: Request) {
   const origin = req.headers.get('origin') || ''
@@ -73,6 +78,27 @@ function clean(value: unknown, max = 2000) {
   if (typeof value !== 'string') return null
   const v = value.trim()
   return v ? v.slice(0, max) : null
+}
+
+function normalizeLocale(value: unknown) {
+  const raw = String(value || '').trim().toLowerCase()
+  const aliases: Record<string,string> = {
+    es: 'es', 'es-mx': 'es', en: 'en', 'en-us': 'en', 'en-gb': 'en',
+    fr: 'fr', 'fr-fr': 'fr', 'fr-ca': 'fr', it: 'it', 'it-it': 'it',
+    pt: 'pt-BR', 'pt-br': 'pt-BR', 'pt-pt': 'pt-BR', de: 'de', 'de-de': 'de',
+    ar: 'ar-AE', 'ar-ae': 'ar-AE',
+  }
+  return aliases[raw] || 'es'
+}
+
+function fallbackTitle(locale: string) {
+  if (locale === 'en') return 'Property in preparation'
+  if (locale === 'fr') return 'Bien en préparation'
+  if (locale === 'it') return 'Proprietà in preparazione'
+  if (locale === 'pt-BR') return 'Imóvel em preparação'
+  if (locale === 'de') return 'Immobilie in Vorbereitung'
+  if (locale === 'ar-AE') return 'عقار قيد التجهيز'
+  return 'Propiedad en preparación'
 }
 
 Deno.serve(async (req: Request) => {
@@ -153,7 +179,7 @@ Deno.serve(async (req: Request) => {
     const postal = clean(body.postal_code, 30)
     const commission = clean(body.commission_text, 120)
     const currency = clean(body.currency, 8)?.toUpperCase() || null
-    const locale = ['es','en','fr'].includes(String(body.locale || '').toLowerCase()) ? String(body.locale).toLowerCase() : 'es'
+    const locale = normalizeLocale(body.locale)
     const rawPrice = body.price === '' || body.price === null || body.price === undefined ? null : Number(body.price)
     const price = rawPrice !== null && Number.isFinite(rawPrice) && rawPrice >= 0 ? rawPrice : null
 
@@ -161,8 +187,8 @@ Deno.serve(async (req: Request) => {
       return json(req, { error: 'material_required' }, 400)
     }
 
-    const fallbackTitle = locale === 'en' ? 'Property in preparation' : locale === 'fr' ? 'Bien en préparation' : 'Propiedad en preparación'
-    const title = location ? `${fallbackTitle} · ${location}`.slice(0, 220) : fallbackTitle
+    const baseTitle = fallbackTitle(locale)
+    const title = location ? `${baseTitle} · ${location}`.slice(0, 220) : baseTitle
 
     const [property] = await sql`
       insert into public.properties
