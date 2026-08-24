@@ -2,7 +2,7 @@
 
 Live project: `zvzafiarwerbuoaccnoz`
 
-This registry was reconciled against the live Supabase migration table on 2026-08-22. The database currently reports these applied migrations, in order:
+This registry was reconciled against the live Supabase migration table on 2026-08-24 UTC. The database currently reports these applied migrations, in order:
 
 1. `20260820053941` — `secure_rls_auto_enable_function`
 2. `20260820060655` — `create_identity_organizations_memberships`
@@ -25,7 +25,11 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 19. `20260822063004` — `max_lockdown_phase3_remove_oauth_compat`
 20. `20260822063027` — `max_lockdown_phase4_service_role_allowlist`
 21. `20260822121958` — `add_edge_function_security_rate_limits`
+22. `20260824015747` — `cloudco_investment_leads_v1`
+23. `20260824040356` — `add_portable_billing_and_gestiones`
+24. `20260824040444` — `normalize_unpaid_organizations_to_free`
+25. `20260824040517` — `move_billing_provider_tables_private`
 
-The newest product migrations are stored as SQL files in this repository. Historical migrations 1–12 remain recorded here while their exact SQL snapshots are progressively reconciled from the live migration history; do not re-run them against production simply because a local SQL file is added later.
+The LISTIA billing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
-No migration in this repository contains passwords, OAuth client secrets, provider tokens, service-role keys, or Vault secret values.
+No migration in this repository contains passwords, OAuth client secrets, provider tokens, Stripe secret keys, service-role keys, or Vault secret values.
