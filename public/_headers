@@ -3,7 +3,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://*.stripe.com https://*.link.com; style-src 'self'; script-src 'self' https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com; connect-src 'self' https://*.supabase.co https://api.stripe.com https://checkout.stripe.com https://link.com https://*.link.com; frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://checkout.stripe.com https://link.com https://*.link.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';
   X-Robots-Tag: noindex, nofollow
 
 /index.html
@@ -11,6 +11,12 @@
 
 /app.js
   Cache-Control: no-cache
+
+/billing.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/billing.css
+  Cache-Control: no-cache, no-store, must-revalidate
 
 /install.js
   Cache-Control: no-cache, no-store, must-revalidate
