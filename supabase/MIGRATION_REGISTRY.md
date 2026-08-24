@@ -37,6 +37,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 31. `20260824044903` — `add_provider_neutral_property_ai_queue`
 32. `20260824054254` — `add_property_ai_draft_contract`
 33. `20260824060354` — `add_multimodel_ai_provider_registry`
+34. `20260824060633` — `index_ai_runs_provider_key`
 
 The current LISTIA billing, property-processing, and AI-engine migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
