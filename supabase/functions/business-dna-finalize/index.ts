@@ -52,8 +52,12 @@ async function consumeSecurityRateLimit(
   })
 }
 
-
-const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com'])
+const allowedOrigins = new Set([
+  'https://listia-pwa.pages.dev',
+  'https://app.listiaapp.com',
+  'https://listiaapp.com',
+  'https://www.listiaapp.com',
+])
 
 function cors(req: Request) {
   const origin = req.headers.get('origin') || ''
@@ -71,6 +75,8 @@ function json(req: Request, body: unknown, status = 200) {
     headers: { ...cors(req), 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   })
 }
+
+const supportedLocales = new Set(['es','en','fr','it','pt-BR','de','ar-AE'])
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) })
@@ -117,6 +123,13 @@ Deno.serve(async (req: Request) => {
     `
     if (!onboarding) return json(req, { error: 'onboarding_not_found' }, 404)
 
+    const [billing] = await sql`
+      select plan_key,billing_status,access_state,included_seats,extra_seats,usage_markup_percent
+      from public.organization_billing
+      where organization_id=${body.organization_id}::uuid
+      limit 1
+    `
+
     const [discovery] = await sql`
       select count(*)::int as total,
              count(*) filter (where selected)::int as selected,
@@ -130,12 +143,15 @@ Deno.serve(async (req: Request) => {
       order by provider
     `
 
-    const locale = ['es','en','fr'].includes(String(body.locale || '').toLowerCase()) ? String(body.locale).toLowerCase() : 'es'
+    const requestedLocale = String(body.locale || '')
+    const locale = supportedLocales.has(requestedLocale) ? requestedLocale : 'es'
     const now = new Date().toISOString()
+    const effectivePlan = String(billing?.plan_key || 'free')
+
     const baseline = {
-      version: 1,
+      version: 2,
       status: 'baseline',
-      generated_from: ['business_identity','plan','connected_ecosystems','discovery'],
+      generated_from: ['business_identity','effective_billing','connected_ecosystems','discovery'],
       business: {
         name: org.name,
         type: org.business_type,
@@ -145,6 +161,14 @@ Deno.serve(async (req: Request) => {
       },
       language: locale,
       plan_intent: onboarding.selected_plan || 'free',
+      effective_plan: effectivePlan,
+      billing: {
+        status: billing?.billing_status || 'free',
+        access_state: billing?.access_state || 'active',
+        included_seats: Number(billing?.included_seats || 0),
+        extra_seats: Number(billing?.extra_seats || 0),
+        usage_markup_percent: Number(billing?.usage_markup_percent ?? 30),
+      },
       connected_ecosystems: connections.map((c: any) => c.provider),
       discovery: {
         total_items: discovery?.total || 0,
