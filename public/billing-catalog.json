@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "catalog": "listia_v1",
+  "schema_version": 2,
+  "catalog": "listia_v2",
   "currency": "usd",
   "billing_provider": "stripe",
   "provider_portable": true,
@@ -9,8 +9,9 @@
     "free": {
       "monthly_usd": 0,
       "included_users": null,
+      "property_limit": 3,
       "functional_limits_apply": true,
-      "usage_markup_percent": 30,
+      "usage_markup_percent": 50,
       "stripe_lookup_key": "listia_free_monthly_v1",
       "portable_key": "listia_free"
     },
@@ -18,14 +19,16 @@
       "monthly_usd": 97,
       "included_users": 1,
       "max_users": 1,
-      "usage_markup_percent": 20,
+      "property_limit": null,
+      "usage_markup_percent": 25,
       "stripe_lookup_key": "listia_pro_monthly_v1",
       "portable_key": "listia_pro"
     },
     "premium": {
       "monthly_usd": 147,
       "included_users": 2,
-      "usage_markup_percent": 10,
+      "property_limit": null,
+      "usage_markup_percent": 12.5,
       "stripe_lookup_key": "listia_premium_monthly_v1",
       "portable_key": "listia_premium",
       "extra_seat": {
@@ -42,8 +45,18 @@
   "usage": {
     "user_facing_name": "Gestion",
     "plural": "Gestiones",
-    "formula": "actual_provider_cost * (1 + plan_markup_percent / 100)",
+    "default_formula": "actual_provider_cost * (1 + plan_markup_percent / 100)",
+    "target_markup_percent": {
+      "free": 50,
+      "pro": 25,
+      "premium": 12.5
+    },
+    "ordinary_markup_bounds_percent": {
+      "minimum": 5,
+      "maximum": 50
+    },
     "hardcode_per_action_prices": false,
+    "preapproval_required": true,
     "record_fields": [
       "provider",
       "service",
@@ -59,14 +72,29 @@
       "occurred_at"
     ],
     "examples_usd": [
-      {"provider_cost": 0.50, "free": 0.65, "pro": 0.60, "premium": 0.55},
-      {"provider_cost": 1.00, "free": 1.30, "pro": 1.20, "premium": 1.10},
-      {"provider_cost": 10.00, "free": 13.00, "pro": 12.00, "premium": 11.00}
+      {"provider_cost": 0.50, "free": 0.75, "pro": 0.625, "premium": 0.5625},
+      {"provider_cost": 1.00, "free": 1.50, "pro": 1.25, "premium": 1.125},
+      {"provider_cost": 10.00, "free": 15.00, "pro": 12.50, "premium": 11.25}
     ]
+  },
+  "domains": {
+    "markup_policy": "same_for_all_plans_dynamic_by_wholesale_cost",
+    "minimum_markup_percent": 50,
+    "maximum_markup_percent": 100,
+    "registration_and_renewal_use_same_policy": true,
+    "bands": [
+      {"provider_cost_max_usd": 10, "markup_percent": 100},
+      {"provider_cost_max_usd": 20, "markup_percent": 80},
+      {"provider_cost_max_usd": 50, "markup_percent": 60},
+      {"provider_cost_above_usd": 50, "markup_percent": 50}
+    ],
+    "suggestion_pool": [".com", ".com.mx", ".mx", ".net", ".us", ".realestate", ".uk", ".it", ".web"],
+    "max_options_shown": 4,
+    "excluded_from_default_suggestions": [".app", ".ai"]
   },
   "stripe_metadata": {
     "product_family": "listia",
-    "catalog": "listia_v1"
+    "catalog": "listia_v2"
   },
   "legal": {
     "terms": "/terms.html",
