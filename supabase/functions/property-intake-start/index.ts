@@ -52,7 +52,6 @@ async function consumeSecurityRateLimit(
   })
 }
 
-
 const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com'])
 
 function cors(req: Request) {
@@ -127,11 +126,18 @@ Deno.serve(async (req: Request) => {
     if (!org) return json(req, { error: 'organization_not_found' }, 404)
     if (!org.onboarding_completed) return json(req, { error: 'onboarding_not_completed' }, 409)
 
-    const [onboarding] = await sql`
-      select selected_plan from public.organization_onboarding
-      where organization_id=${body.organization_id}::uuid limit 1
+    const [billing] = await sql`
+      select plan_key, access_state
+      from public.organization_billing
+      where organization_id=${body.organization_id}::uuid
+      limit 1
     `
-    const plan = String(onboarding?.selected_plan || 'free').toLowerCase()
+    const plan = String(billing?.plan_key || 'free').toLowerCase()
+    const accessState = String(billing?.access_state || 'active').toLowerCase()
+    if (accessState === 'payment_blocked') {
+      return json(req, { error: 'billing_payment_blocked', plan }, 402)
+    }
+
     const [counts] = await sql`
       select count(*)::int as total
       from public.properties
@@ -166,7 +172,7 @@ Deno.serve(async (req: Request) => {
       returning id,title,status,operation_type,description,price,currency,commission_text,location_text,postal_code,locale,created_at
     `
 
-    return json(req, { ok: true, property, plan })
+    return json(req, { ok: true, property, plan, access_state: accessState })
   } catch (error) {
     console.error('property-intake-start', error)
     return json(req, { error: 'internal_error' }, 500)
