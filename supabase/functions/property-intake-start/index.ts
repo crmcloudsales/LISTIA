@@ -93,6 +93,7 @@ function normalizeLocale(value: unknown) {
     ru: 'ru', 'ru-ru': 'ru',
     he: 'he', 'he-il': 'he', iw: 'he', 'iw-il': 'he',
     zh: 'zh-CN', 'zh-cn': 'zh-CN', 'zh-hans': 'zh-CN', 'zh-sg': 'zh-CN',
+    ja: 'ja', 'ja-jp': 'ja',
   }
   return aliases[raw] || aliases[raw.split('-')[0]] || 'es'
 }
@@ -107,6 +108,7 @@ function fallbackTitle(locale: string) {
   if (locale === 'ru') return 'Объект в подготовке'
   if (locale === 'he') return 'נכס בהכנה'
   if (locale === 'zh-CN') return '房源准备中'
+  if (locale === 'ja') return '準備中の物件'
   return 'Propiedad en preparación'
 }
 
