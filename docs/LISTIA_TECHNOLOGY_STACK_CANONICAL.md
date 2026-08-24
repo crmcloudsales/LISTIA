@@ -87,8 +87,9 @@ Runway Aleph 2.0 is especially valuable for localized repair/editing of existing
 
 ## Compute strategy
 - Mobile user sees none of this.
+- Google Cloud Run CPU is the first deployment candidate for the LiteLLM/LangGraph orchestration service because it can scale to zero and has a recurring free tier; keep minimum instances at zero while latency is acceptable.
+- GPU execution remains benchmark-driven: compare Google Cloud Run GPU vs Modal vs RunPod by **cost per accepted output + cold-start latency**, not headline GPU price.
 - Serverless/scale-to-zero GPU first for open media models while volume is low.
-- Benchmark RunPod vs Modal by **cost per accepted output + cold-start latency**.
 - Move to persistent vLLM/GPU infrastructure only after utilization proves lower total cost.
 
 ## Research / enrichment
