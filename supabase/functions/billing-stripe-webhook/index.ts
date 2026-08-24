@@ -5,6 +5,12 @@ const SUPABASE_DB_URL = Deno.env.get('SUPABASE_DB_URL')!
 const BILLING_ENV = String(Deno.env.get('LISTIA_BILLING_ENV') || 'test').toLowerCase()
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
 
+const portableByLookupKey = new Map([
+  ['listia_pro_monthly_usd', 'listia_pro'],
+  ['listia_premium_monthly_usd', 'listia_premium'],
+  ['listia_premium_extra_seat_monthly_usd', 'listia_premium_extra_seat'],
+])
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -26,14 +32,22 @@ function unixToIso(value: unknown): string | null {
 }
 
 async function getWebhookSecret() {
-  const secretName = BILLING_ENV === 'live' ? 'stripe_webhook_secret_live' : 'stripe_webhook_secret_test'
-  const [row] = await sql`
-    select decrypted_secret
-    from vault.decrypted_secrets
-    where name=${secretName}
-    limit 1
-  `
-  return String(row?.decrypted_secret || '')
+  const envName = BILLING_ENV === 'live' ? 'STRIPE_WEBHOOK_SECRET_LIVE' : 'STRIPE_WEBHOOK_SECRET_TEST'
+  const direct = String(Deno.env.get(envName) || '')
+  if (direct) return direct
+
+  const vaultName = BILLING_ENV === 'live' ? 'stripe_webhook_secret_live' : 'stripe_webhook_secret_test'
+  try {
+    const [row] = await sql`
+      select decrypted_secret
+      from vault.decrypted_secrets
+      where name=${vaultName}
+      limit 1
+    `
+    return String(row?.decrypted_secret || '')
+  } catch {
+    return ''
+  }
 }
 
 function constantTimeHexEqual(a: string, b: string) {
@@ -110,6 +124,26 @@ async function syncCheckoutSession(session: any, eventId: string) {
   return { applied: true, organizationId, reason: 'checkout_recorded' }
 }
 
+async function loadBindingMap() {
+  const bindings = await sql`
+    select portable_key, provider_price_id
+    from private.billing_price_bindings
+    where provider='stripe' and environment=${BILLING_ENV} and active=true
+  `
+  return new Map(bindings.map((binding: any) => [String(binding.provider_price_id), String(binding.portable_key)]))
+}
+
+function portableKeyForPrice(price: any, priceId: string, bindingByPrice: Map<string, string>) {
+  const metadataPortable = String(price?.metadata?.portable_key || '')
+  if (['listia_pro','listia_premium','listia_premium_extra_seat'].includes(metadataPortable)) return metadataPortable
+
+  const lookupKey = String(price?.lookup_key || '')
+  const lookupPortable = portableByLookupKey.get(lookupKey)
+  if (lookupPortable) return lookupPortable
+
+  return bindingByPrice.get(priceId) || null
+}
+
 async function syncSubscription(subscription: any, eventId: string) {
   const subscriptionId = String(subscription?.id || '')
   const customerId = idOf(subscription?.customer)
@@ -117,12 +151,7 @@ async function syncSubscription(subscription: any, eventId: string) {
   const organizationId = metadataOrg || await organizationForProvider(subscriptionId || null, customerId)
   if (!organizationId) return { applied: false, reason: 'organization_not_found' }
 
-  const bindings = await sql`
-    select portable_key, provider_price_id
-    from private.billing_price_bindings
-    where provider='stripe' and environment=${BILLING_ENV} and active=true
-  `
-  const bindingByPrice = new Map(bindings.map((binding: any) => [String(binding.provider_price_id), binding]))
+  const bindingByPrice = await loadBindingMap()
 
   let planKey: 'free' | 'pro' | 'premium' = 'free'
   let basePortableKey: string | null = null
@@ -135,16 +164,16 @@ async function syncSubscription(subscription: any, eventId: string) {
   for (const item of subscription?.items?.data || []) {
     const priceId = idOf(item?.price)
     if (!priceId) continue
-    const binding: any = bindingByPrice.get(priceId)
-    if (!binding) continue
+    const portableKey = portableKeyForPrice(item?.price, priceId, bindingByPrice)
+    if (!portableKey) continue
 
-    if (binding.portable_key === 'listia_pro' || binding.portable_key === 'listia_premium') {
-      planKey = binding.portable_key === 'listia_pro' ? 'pro' : 'premium'
-      basePortableKey = String(binding.portable_key)
+    if (portableKey === 'listia_pro' || portableKey === 'listia_premium') {
+      planKey = portableKey === 'listia_pro' ? 'pro' : 'premium'
+      basePortableKey = portableKey
       basePriceId = priceId
       periodStart = unixToIso(item?.current_period_start) || periodStart
       periodEnd = unixToIso(item?.current_period_end) || periodEnd
-    } else if (binding.portable_key === 'listia_premium_extra_seat') {
+    } else if (portableKey === 'listia_premium_extra_seat') {
       seatPriceId = priceId
       extraSeats = Math.max(0, Number(item?.quantity || 0))
     }
