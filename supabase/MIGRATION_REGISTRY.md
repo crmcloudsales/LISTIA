@@ -45,8 +45,11 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 39. `20260824084805` — `add_low_cost_technology_registry_and_route_objective`
 40. `20260824085004` — `expand_canonical_ai_media_technology_registry`
 41. `20260824085357` — `prioritize_open_media_avatar_and_lipsync`
-42. `20260824090050` — `add_google_cloud_run_cost_routes`
+42. `20260824085646` — `add_google_cloud_run_cost_routes`
+43. `20260824091002` — `add_usage_rate_catalog_and_communication_policies`
+44. `20260824091424` — `add_omnichannel_lead_contacts_and_templates`
+45. `20260824091807` — `expand_content_rate_cards`
 
-The current LISTIA billing, property-processing, and AI-engine migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
+The current LISTIA billing, property-processing, AI-engine, communications and cost-routing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
-No migration in this repository contains passwords, OAuth client secrets, provider tokens, Stripe secret keys, service-role keys, or Vault secret values.
+No migration in this repository contains passwords, OAuth client secrets, provider tokens, Stripe secret keys, service-role keys, communication credentials or Vault secret values.
