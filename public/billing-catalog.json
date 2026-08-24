@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "catalog": "listia_v1",
+  "currency": "usd",
+  "billing_provider": "stripe",
+  "provider_portable": true,
+  "stripe_account_binding": "server_side_only",
+  "plans": {
+    "free": {
+      "monthly_usd": 0,
+      "included_users": null,
+      "functional_limits_apply": true,
+      "usage_markup_percent": 30,
+      "stripe_lookup_key": "listia_free_monthly_v1",
+      "portable_key": "listia_free"
+    },
+    "pro": {
+      "monthly_usd": 97,
+      "included_users": 1,
+      "max_users": 1,
+      "usage_markup_percent": 20,
+      "stripe_lookup_key": "listia_pro_monthly_v1",
+      "portable_key": "listia_pro"
+    },
+    "premium": {
+      "monthly_usd": 147,
+      "included_users": 2,
+      "usage_markup_percent": 10,
+      "stripe_lookup_key": "listia_premium_monthly_v1",
+      "portable_key": "listia_premium",
+      "extra_seat": {
+        "monthly_usd": 47,
+        "stripe_lookup_key": "listia_premium_extra_seat_monthly_v1",
+        "portable_key": "listia_premium_extra_seat",
+        "proration": "attempt_immediate_remaining_cycle",
+        "billing_cycle_anchor": "preserve_original",
+        "failed_proration": "payment_warning_keep_access",
+        "failed_renewal": "payment_blocked"
+      }
+    }
+  },
+  "usage": {
+    "user_facing_name": "Gestion",
+    "plural": "Gestiones",
+    "formula": "actual_provider_cost * (1 + plan_markup_percent / 100)",
+    "hardcode_per_action_prices": false,
+    "record_fields": [
+      "provider",
+      "service",
+      "provider_cost",
+      "provider_currency",
+      "plan",
+      "markup_percent",
+      "platform_revenue",
+      "final_user_cost",
+      "user_id",
+      "organization_id",
+      "external_reference",
+      "occurred_at"
+    ],
+    "examples_usd": [
+      {"provider_cost": 0.50, "free": 0.65, "pro": 0.60, "premium": 0.55},
+      {"provider_cost": 1.00, "free": 1.30, "pro": 1.20, "premium": 1.10},
+      {"provider_cost": 10.00, "free": 13.00, "pro": 12.00, "premium": 11.00}
+    ]
+  },
+  "stripe_metadata": {
+    "product_family": "listia",
+    "catalog": "listia_v1"
+  },
+  "legal": {
+    "terms": "/terms.html",
+    "privacy": "/privacy.html"
+  }
+}
