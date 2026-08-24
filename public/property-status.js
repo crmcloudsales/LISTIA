@@ -239,7 +239,7 @@
   function boot() {
     ensureStyles();
     const list = document.getElementById('propertyList');
-    if (list) new MutationObserver(schedule).observe(list, { childList: true, subtree: true });
+    if (list) new MutationObserver(schedule).observe(list, { childList: true, subtree: false });
     ['screen-properties','screen-ready'].forEach(id => {
       const screen = document.getElementById(id);
       if (screen) new MutationObserver(schedule).observe(screen, { attributes: true, attributeFilter: ['class'] });
