@@ -1,130 +1,105 @@
 # LISTIA Global Gestión Pricing & Channel Economics
 
-Status: CANONICAL CUSTOMER PRICING MODEL
-Last verified: 2026-08-24
+Status: CANONICAL CUSTOMER PRICING MODEL — v2
+Last reconciled: 2026-08-24
 Currency: USD unless explicitly quoted otherwise.
 Scope: LISTIA only.
 
 ## 1. Customer pricing principle
 The LISTIA customer buys a **Gestión**, not a provider call.
 
-The customer does not need to see the internal AI model, telecommunications carrier, infrastructure vendor, token count or raw provider price. LISTIA shows a simple final price for the requested action and obtains authorization **before** a billable action runs.
+Normal flow:
+`user intent -> Gestión -> internal live/reference cost -> final quote/authorized maximum -> user approval -> execution -> actual usage reconciliation`
 
-Canonical flow:
+Provider/model/carrier names and raw supplier prices remain internal by default. LISTIA optimizes for lowest `cost_per_accepted_output` that passes quality, legal and reliability gates.
 
-`user intent -> standardized Gestión -> live internal cost check -> final user quote -> user approval -> execution -> actual usage reconciliation`
+## 2. Subscription plans
+- FREE: US$0/month; up to 3 non-archived properties.
+- PRO: US$97/month; 1 user.
+- PREMIUM: US$147/month; 2 users included.
+- Premium extra seat: US$47/month.
 
-FREE / PRO / PREMIUM retain 30% / 20% / 10% as **internal target economics**, not rigid contractual markups for every individual Gestión. Effective markup may be higher or lower so LISTIA can keep a simple standardized price while routing among lower-cost providers. LISTIA must not intentionally execute a billable action at a loss.
+Adding a fourth non-archived property on FREE requires changing to a paid plan.
 
-## 2. Economic safeguards
-- Billable fixed-price Gestiones use a minimum gross-margin floor of 5% unless intentionally marked included/free.
-- Provider route and provider raw cost remain internal unless disclosure is legally required.
-- Before execution, LISTIA checks current provider/route cost when the service is variable by geography, carrier, model, resolution or other external factor.
-- If the cheapest compliant route cannot fit inside the already displayed price and margin floor, LISTIA does not execute. It may try another provider, block the action, or present a new quote requiring new approval.
-- LISTIA never increases an already approved quote after execution.
-- Prices may be updated prospectively in a new price-book version; an unexpired approved quote keeps its quoted ceiling.
-- High-frequency automation may later use an explicit standing budget/cap approved by the organization, rather than prompting for every individual message.
-- The economic optimization metric remains **cost per accepted output**, not headline provider price.
+## 3. Ordinary Gestión markup targets
+- FREE: **50%**
+- PRO: **25%**
+- PREMIUM: **12.5%**
 
-## 3. Progressive-use rule
-LISTIA should help customers grow gradually. It must not activate large amounts of paid automation merely because a feature exists.
+For ordinary variable-cost Gestiones, effective markup may flex when standardized pricing/routing requires it, with a general 5%-50% safety band. LISTIA must not intentionally execute at a loss and must never exceed an already approved user quote.
 
-Default product behavior is progressive: one useful action, visible result, next useful action. Paid usage should grow organically with actual business activity and demonstrated value. Bulk campaigns, high-volume content creation or autonomous communications require an explicit user action, approved budget/cap or another clearly authorized rule.
+## 4. Domain exception — same in every plan
+Domains do **not** use the 50/25/12.5 plan discount structure.
 
-## 4. Standardized Price Book v1
-These are the customer-facing prices currently stored in `private.gestion_price_book`.
+Registration and renewal use the same dynamic markup in FREE, PRO and PREMIUM:
+- wholesale <= US$10 -> +100%
+- >US$10 and <=US$20 -> +80%
+- >US$20 and <=US$50 -> +60%
+- >US$50 -> +50%
 
-### Content
-| Gestión | FREE | PRO | PREMIUM | Unit |
-|---|---:|---:|---:|---|
-| Property content package / language | $0.05 | $0.04 | $0.03 | package |
-| Create or edit 1 image | $0.10 | $0.09 | $0.08 | image |
-| Finished flyer/story/social creative | $0.15 | $0.14 | $0.12 | creative |
-| Brochure up to 10 pages | $0.75 | $0.65 | $0.55 | brochure |
+The objective is strong but reasonable domain margin without teaser first-year pricing. Renewal uses the same markup rule as registration. Registry/registrar wholesale changes may change the all-in future quote, but LISTIA does not intentionally raise the renewal markup simply because it is a renewal.
 
-### Video
-| Gestión | FREE | PRO | PREMIUM | Unit / release rule |
-|---|---:|---:|---:|---|
-| Exact-source video clip | $0.30 | $0.25 | $0.20 | up to 10 sec; benchmark guarded |
-| Lip-sync | $0.10 | $0.09 | $0.08 | up to 10 sec; benchmark guarded |
-| Advisor avatar from photo | $0.30 | $0.25 | $0.20 | up to 10 sec; benchmark guarded |
-| Standard cinematic clip | $0.75 | $0.65 | $0.60 | up to 10 sec |
-| Premium cinematic clip | $1.75 | $1.55 | $1.35 | up to 10 sec |
-| Localized high-fidelity repair | $3.90 | $3.50 | $3.20 | up to 10 sec |
+Premium/exceptional domains require a separate live quote.
 
-The benchmark-guarded rows are price ceilings, not permission to charge immediately. They remain blocked for automated paid use until HyperFrames/FFmpeg/MuseTalk/EchoMimic real accepted-output costs prove the route can meet quality and margin requirements.
+Preferred suggestion pool: `.com`, `.com.mx`, `.mx`, `.net`, `.us`, `.realestate`, `.uk`, `.it`, `.web` when available. Show requested domain + at most 3 useful alternatives. `.app` and `.ai` are not default suggestions.
 
-### Communications
-| Gestión | FREE | PRO | PREMIUM | Unit |
-|---|---:|---:|---:|---|
-| WhatsApp Marketing template | $0.22 | $0.20 | $0.18 | delivered message |
-| WhatsApp Utility/Authentication template | $0.09 | $0.08 | $0.07 | delivered message |
-| WhatsApp service-window message | $0 | $0 | $0 | message while current direct-provider economics remain zero |
-| SMS global standard | $0.55 | $0.52 | $0.50 | message part/segment |
-| Telegram normal reachable-chat message | $0 | $0 | $0 | message under ordinary Bot/Business limits |
-| Email delivery | $0.20 | $0.18 | $0.15 | 1,000 recipients |
-| AI-assisted inbound call | $0.30 | $0.27 | $0.25 | minute |
-| AI-assisted outbound call | $1.25 | $1.15 | $1.10 | minute |
-| Local business number | $10.00 | $9.00 | $8.00 | number / month |
+## 5. Media benchmark-guarded reference economics
+These are engineering estimates, not measured LISTIA production results.
 
-Calls may be internally metered by seconds and reconciled against the approved maximum; the customer-facing unit is a minute. SMS is priced per message segment because long or non-GSM messages can consume multiple carrier segments.
+| Gestión | Reference internal accepted-output cost <=10s | FREE | PRO | PREMIUM |
+|---|---:|---:|---:|---:|
+| Exact-source composition — HyperFrames/FFmpeg | $0.005 | $0.0075 | $0.00625 | $0.005625 |
+| Lip-sync — MuseTalk 1.5 | $0.025 | $0.0375 | $0.03125 | $0.028125 |
+| Advisor avatar from still photo — EchoMimicV2 | $0.16 | $0.24 | $0.20 | $0.18 |
 
-### Cloudflare-backed infrastructure
-| Gestión | FREE | PRO | PREMIUM | Rule |
-|---|---:|---:|---:|---|
-| Register domain for 1 year | live registrar quote + $1.00 | live quote + $0.75 | live quote + $0.50 | one all-in quote shown before purchase |
-| Renew domain for 1 year | live renewal + $0.50 | live renewal + $0.40 | live renewal + $0.30 | one all-in quote shown before renewal |
-| Static LISTIA website hosting | $0 | $0 | $0 | while the site remains within current Cloudflare Pages static/free economics |
-| Content storage | $0.030 | $0.025 | $0.020 | GB-month |
+All three remain `benchmark_guarded` until real LISTIA clips replace estimates with measured compute, retry, validation and accepted-output cost.
 
-## 5. Global communications scope
-A global flat price does not mean every possible telephone number class is eligible.
+Preferred order: original source + HyperFrames first; MuseTalk on canonical advisor video when speech is needed; EchoMimic only when no real advisor video exists; paid premium generators/editors are escalation paths.
 
-`ai_call_outbound_minute` applies to ordinary geographic fixed/mobile destinations where LISTIA has a compliant route. Premium-rate, satellite, personal-number and special-service destinations are excluded from the standard flat price and should be blocked or separately quoted. The same principle applies to unusually surcharged toll-free or special inbound services.
+## 6. Content Engine
+Connected Drive/uploads are raw material, not permission to spend automatically. LISTIA extracts data/assets, proposes a useful next action, quotes it, obtains authorization when billable, executes the cheapest route that passes the Quality Gate, and then proposes the next step.
 
-`sms_global_part` applies to ordinary compliant A2P destinations where a provider/sender route exists. Premium/satellite/special services, required registrations and provider-specific restrictions may make a destination unavailable; LISTIA must not silently absorb a route that would violate the margin floor.
+Original property/advisor content remains canonical where visual fidelity matters. Deterministic composition is preferred over unnecessary regeneration.
 
-This lets the visible price stay globally simple while Twilio, Telnyx or future carriers compete internally on the route.
+## 7. Communications
+Default operational preference remains:
+1. WhatsApp
+2. SMS/RCS
+3. Telegram
+4. Email nurture/remarketing
+5. Voice when appropriate
 
-## 6. Provider strategy
-### Twilio
-Twilio is an approved internal fallback/benchmark provider for Voice, SMS, WhatsApp, numbers, Verify and pricing discovery. LISTIA should use Twilio's account-specific Pricing APIs before cost-sensitive international routing. Twilio is not automatically preferred merely because it is available.
+The hierarchy is subject to consent, reachability, opt-out, country law and provider/platform policy.
 
-### Telnyx
-Telnyx remains a cost-first communications candidate. The router compares compliant routes using current destination/carrier economics and reliability.
+Classic SMS does not support a true interactive carousel. Rich property carousels belong to WhatsApp/RCS or another supported rich channel; LISTIA may fall back to MMS/SMS/plain links when needed.
 
-### Meta Cloud API
-Direct Meta remains preferred for WhatsApp when it reduces unnecessary BSP platform fees and operational requirements allow it.
+Telegram normal reachable-chat messaging can remain included when provider-message cost is zero, but a bot cannot cold-message a person from a telephone number alone.
 
-### Telegram
-Normal Bot API/authorized Business messaging can be zero provider-message cost within ordinary limits, but LISTIA still requires reachability and consent/lawful basis. A normal bot cannot cold-message a person using only a phone number.
+Email can be included/discounted in paid plans where real provider economics make that sustainable. Any included volume remains subject to consent, suppression, bounce/reputation and anti-abuse controls.
 
-### Amazon SES
-SES remains a cost-first bulk/transactional email candidate, subject to domain verification, consent/lawful basis, unsubscribe and suppression rules.
+Voice, WhatsApp, SMS/RCS and phone numbers require live route/destination cost resolution because wholesale economics vary by country/carrier. The user sees the LISTIA quote, not the carrier pricing table.
 
-### Cloudflare
-Cloudflare is both LISTIA infrastructure and a user-facing infrastructure provider behind LISTIA. Relevant roles include Registrar, Pages, Workers, R2, DNS, CDN, SSL/TLS, WAF, Turnstile and Images. The user should see the LISTIA action and final price rather than Cloudflare product complexity.
+## 8. Cloudflare-backed website/domain ecosystem
+Every LISTIA workspace is designed around a LISTIA-native website capability so LISTIA can coordinate property pages, SEO/schema, analytics, conversion signals, forms, AI content, security and updates with minimal user friction.
 
-## 7. Domain purchase UX — canonical rule
-The future domain UI must remain deliberately small and mobile-first:
+If the customer already owns a compatible domain, LISTIA should provide a low-friction connect/manage path rather than force an unnecessary second domain. Domain ownership should remain attributable/transferable to the customer while LISTIA acts as the managing/orchestrating layer.
 
-1. One text field: the domain the user wants.
-2. LISTIA checks live availability and current registration/renewal price.
-3. Show the requested domain plus **at most three** useful alternatives.
-4. Each option shows one all-in first-year price and renewal price.
-5. One clear approval/purchase action.
+Domain UX: one desired-domain field -> requested result + max 3 alternatives -> first-year/renewal information -> one approval action. Do not expose registrar/DNS complexity unless advanced settings are deliberately opened.
 
-No registrar dashboard, DNS jargon or long search-results catalog should be exposed unless the user deliberately opens advanced settings. Cloudflare Registrar Search/Check is the first candidate because it can return registrability plus current `registration_cost` and `renewal_cost` and Cloudflare itself sells/renews at registry/ICANN cost. Premium domains not programmatically supported remain unavailable or require a separately designed flow.
+## 9. Progressive-use rule
+LISTIA grows usage progressively with the customer. It does not automatically create large campaigns or large media batches simply because tools exist.
 
-## 8. Content Engine rule
-Connected Drive/uploads are raw material, not automatic permission to spend. LISTIA extracts facts/assets, proposes the next useful content action, quotes the Gestión, obtains approval when billable, executes the cheapest route that passes the Quality Gate and then offers the next step.
+Default: one useful action -> result -> next useful action. Bulk/autonomous spending requires an explicit user action or approved standing budget/cap.
 
-Original property/advisor assets remain canonical where fidelity matters. HyperFrames/FFmpeg and protected-source composition are attempted before unnecessary regeneration. Paid premium models are escalation paths, not default spending.
+## 10. Economic safeguards
+- Every billable Gestión is preapproved unless covered by an explicit standing authorization/budget.
+- If current compliant cost no longer fits the approved ceiling, reroute, block, or obtain a new approval.
+- Never increase a quote after execution.
+- Included/free actions may have zero markup because supplier cost is zero or covered by the subscription economics.
+- Provider route/cost remains internal unless law requires disclosure.
+- Price Book can be versioned prospectively; stored unexpired approved quotes keep their ceiling.
 
-## 9. Quote and execution data
-`private.gestion_quotes` is the server-side authorization record. It stores the organization/user, service, plan, quantity, unit price, provider quote cost when known, service fee, total authorized amount, currency, expiry, approval, consumption and block reason.
+## 11. Legal/customer promise
+The binding commercial promise is the final LISTIA quote/authorized maximum and the described Gestión scope, not disclosure of LISTIA's internal provider or exact supplier margin.
 
-`public.gestiones` records realized usage/cost after execution. The quote is the pre-execution commercial authorization; the Gestión is the post-execution accounting record.
-
-## 10. Legal/customer promise
-The customer-facing promise is the **final quoted Gestión price**, not a guaranteed disclosure of LISTIA's internal supplier markup. Supplier costs, routing and effective margin may vary. LISTIA may standardize prices across regions by earning more margin on cheaper routes and less margin on expensive routes, provided the route stays within the applicable margin/safety rules and the customer is not charged more than the amount they authorized.
+AI/media output remains subject to quality and factual limitations. Communications remain subject to consent and local law. Domains remain subject to registry/registrar availability, eligibility and live wholesale pricing. Taxes and mandatory governmental charges are handled as legally required.
