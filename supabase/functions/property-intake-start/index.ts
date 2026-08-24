@@ -169,8 +169,8 @@ Deno.serve(async (req: Request) => {
       from public.properties
       where organization_id=${body.organization_id}::uuid and status <> 'archived'
     `
-    if (plan === 'free' && Number(counts?.total || 0) >= 1) {
-      return json(req, { error: 'free_property_limit', limit: 1 }, 409)
+    if (plan === 'free' && Number(counts?.total || 0) >= 3) {
+      return json(req, { error: 'free_property_limit', limit: 3 }, 409)
     }
 
     const operation = ['sale','rent'].includes(String(body.operation_type || '')) ? String(body.operation_type) : null
