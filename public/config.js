@@ -8,11 +8,11 @@ window.LISTIA_CONFIG = {
   SUPABASE_URL: "https://zvzafiarwerbuoaccnoz.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "sb_publishable_aY9AjGa59GQ5rNGZlGAJpw_uhgVZfb1",
 
-  // Billing stays staged until the Stripe TEST publishable key and the
-  // server-side restricted key have both been configured.
+  // LIVE catalog is staged. Keep checkout disabled until the LIVE webhook
+  // signing secret has been configured server-side and verified end-to-end.
   BILLING_ENABLED: false,
-  BILLING_ENV: "test",
-  STRIPE_PUBLISHABLE_KEY: ""
+  BILLING_ENV: "live",
+  STRIPE_PUBLISHABLE_KEY: "pk_live_51U5BGR0falgc3pBvgIUoHEp5kwm2pRSRrTfubFkeQjGmopTbFd0ZmEIhjqeyOfzpGpziH2IzYn24d62og1eTyOVd00z8tLsz8A"
 };
 
 // Keep billing code isolated from the core PWA. When billing is disabled it
