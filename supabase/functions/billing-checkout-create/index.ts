@@ -206,7 +206,7 @@ Deno.serve(async (req: Request) => {
     const integrationIdentifier = `listia_sub_${randomLetters(8)}`
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      ui_mode: 'embedded',
+      ui_mode: 'embedded_page',
       customer: customerId,
       client_reference_id: organizationId,
       line_items: lineItems,
