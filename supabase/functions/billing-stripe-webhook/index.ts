@@ -1,20 +1,9 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import Stripe from 'npm:stripe@22.4.0'
 import postgres from 'https://deno.land/x/postgresjs@v3.4.7/mod.js'
 
 const SUPABASE_DB_URL = Deno.env.get('SUPABASE_DB_URL')!
 const BILLING_ENV = String(Deno.env.get('LISTIA_BILLING_ENV') || 'test').toLowerCase()
-const STRIPE_SECRET_KEY = BILLING_ENV === 'live'
-  ? Deno.env.get('STRIPE_SECRET_KEY_LIVE') || ''
-  : Deno.env.get('STRIPE_SECRET_KEY_TEST') || ''
-const STRIPE_WEBHOOK_SECRET = BILLING_ENV === 'live'
-  ? Deno.env.get('STRIPE_WEBHOOK_SECRET_LIVE') || ''
-  : Deno.env.get('STRIPE_WEBHOOK_SECRET_TEST') || ''
-
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
-const stripe = STRIPE_SECRET_KEY
-  ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2026-07-29.dahlia' })
-  : null
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -25,13 +14,53 @@ function json(body: unknown, status = 200) {
 
 function idOf(value: unknown): string | null {
   if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && 'id' in value) return String((value as { id?: unknown }).id || '') || null
+  if (value && typeof value === 'object' && 'id' in value) {
+    return String((value as { id?: unknown }).id || '') || null
+  }
   return null
 }
 
 function unixToIso(value: unknown): string | null {
   const seconds = Number(value)
   return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000).toISOString() : null
+}
+
+async function getWebhookSecret() {
+  const secretName = BILLING_ENV === 'live' ? 'stripe_webhook_secret_live' : 'stripe_webhook_secret_test'
+  const [row] = await sql`
+    select decrypted_secret
+    from vault.decrypted_secrets
+    where name=${secretName}
+    limit 1
+  `
+  return String(row?.decrypted_secret || '')
+}
+
+function constantTimeHexEqual(a: string, b: string) {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+async function verifyStripeSignature(payload: string, header: string, secret: string) {
+  const fields = header.split(',').map((part) => part.trim())
+  const timestamp = fields.find((part) => part.startsWith('t='))?.slice(2) || ''
+  const signatures = fields.filter((part) => part.startsWith('v1=')).map((part) => part.slice(3))
+  const ts = Number(timestamp)
+  if (!Number.isFinite(ts) || signatures.length === 0) return false
+  if (Math.abs(Math.floor(Date.now() / 1000) - ts) > 300) return false
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)))
+  const expected = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return signatures.some((signature) => constantTimeHexEqual(signature, expected))
 }
 
 async function organizationForProvider(subscriptionId: string | null, customerId: string | null) {
@@ -58,19 +87,42 @@ async function organizationForProvider(subscriptionId: string | null, customerId
   return null
 }
 
-async function syncSubscription(subscription: Stripe.Subscription, eventId: string) {
-  const subscriptionId = subscription.id
-  const customerId = idOf(subscription.customer)
-  const metadataOrg = String(subscription.metadata?.organization_id || '').trim() || null
-  const organizationId = metadataOrg || await organizationForProvider(subscriptionId, customerId)
+async function syncCheckoutSession(session: any, eventId: string) {
+  const organizationId = String(session?.metadata?.organization_id || session?.client_reference_id || '').trim()
+  if (!organizationId) return { applied: false, reason: 'organization_not_found' }
+  const customerId = idOf(session?.customer)
+  const subscriptionId = idOf(session?.subscription)
+
+  await sql`
+    insert into private.billing_provider_state (
+      organization_id, provider, environment, provider_customer_id,
+      provider_subscription_id, provider_status, last_provider_event_id, updated_at
+    ) values (
+      ${organizationId}::uuid, 'stripe', ${BILLING_ENV}, ${customerId},
+      ${subscriptionId}, 'checkout_complete', ${eventId}, now()
+    )
+    on conflict (organization_id, provider, environment) do update set
+      provider_customer_id=coalesce(excluded.provider_customer_id, private.billing_provider_state.provider_customer_id),
+      provider_subscription_id=coalesce(excluded.provider_subscription_id, private.billing_provider_state.provider_subscription_id),
+      last_provider_event_id=excluded.last_provider_event_id,
+      updated_at=now()
+  `
+  return { applied: true, organizationId, reason: 'checkout_recorded' }
+}
+
+async function syncSubscription(subscription: any, eventId: string) {
+  const subscriptionId = String(subscription?.id || '')
+  const customerId = idOf(subscription?.customer)
+  const metadataOrg = String(subscription?.metadata?.organization_id || '').trim() || null
+  const organizationId = metadataOrg || await organizationForProvider(subscriptionId || null, customerId)
   if (!organizationId) return { applied: false, reason: 'organization_not_found' }
 
   const bindings = await sql`
-    select portable_key, plan_key, provider_price_id
+    select portable_key, provider_price_id
     from private.billing_price_bindings
     where provider='stripe' and environment=${BILLING_ENV} and active=true
   `
-  const bindingByPrice = new Map(bindings.map((b: any) => [String(b.provider_price_id), b]))
+  const bindingByPrice = new Map(bindings.map((binding: any) => [String(binding.provider_price_id), binding]))
 
   let planKey: 'free' | 'pro' | 'premium' = 'free'
   let basePortableKey: string | null = null
@@ -80,28 +132,28 @@ async function syncSubscription(subscription: Stripe.Subscription, eventId: stri
   let periodStart: string | null = null
   let periodEnd: string | null = null
 
-  for (const item of subscription.items?.data || []) {
-    const priceId = idOf(item.price)
+  for (const item of subscription?.items?.data || []) {
+    const priceId = idOf(item?.price)
     if (!priceId) continue
-    const binding = bindingByPrice.get(priceId)
+    const binding: any = bindingByPrice.get(priceId)
     if (!binding) continue
 
     if (binding.portable_key === 'listia_pro' || binding.portable_key === 'listia_premium') {
       planKey = binding.portable_key === 'listia_pro' ? 'pro' : 'premium'
       basePortableKey = String(binding.portable_key)
       basePriceId = priceId
-      periodStart = unixToIso((item as any).current_period_start) || periodStart
-      periodEnd = unixToIso((item as any).current_period_end) || periodEnd
+      periodStart = unixToIso(item?.current_period_start) || periodStart
+      periodEnd = unixToIso(item?.current_period_end) || periodEnd
     } else if (binding.portable_key === 'listia_premium_extra_seat') {
       seatPriceId = priceId
-      extraSeats = Math.max(0, Number(item.quantity || 0))
+      extraSeats = Math.max(0, Number(item?.quantity || 0))
     }
   }
 
-  periodStart = periodStart || unixToIso((subscription as any).current_period_start)
-  periodEnd = periodEnd || unixToIso((subscription as any).current_period_end)
+  periodStart = periodStart || unixToIso(subscription?.current_period_start)
+  periodEnd = periodEnd || unixToIso(subscription?.current_period_end)
 
-  const status = String(subscription.status || '')
+  const status = String(subscription?.status || '')
   let accessState: 'active' | 'payment_warning' | 'payment_blocked' = 'active'
   let effectivePlan = planKey
 
@@ -128,7 +180,7 @@ async function syncSubscription(subscription: Stripe.Subscription, eventId: stri
         ${status}, ${eventId}, now()
       )
       on conflict (organization_id, provider, environment) do update set
-        provider_customer_id=excluded.provider_customer_id,
+        provider_customer_id=coalesce(excluded.provider_customer_id, private.billing_provider_state.provider_customer_id),
         provider_subscription_id=excluded.provider_subscription_id,
         base_portable_key=excluded.base_portable_key,
         base_provider_price_id=excluded.base_provider_price_id,
@@ -147,7 +199,7 @@ async function syncSubscription(subscription: Stripe.Subscription, eventId: stri
         ${organizationId}::uuid, ${effectivePlan}, ${status}, ${accessState},
         ${includedSeats}, ${extraSeats}, ${markup},
         ${periodStart}::timestamptz, ${periodEnd}::timestamptz,
-        ${Boolean(subscription.cancel_at_period_end)}, now()
+        ${Boolean(subscription?.cancel_at_period_end)}, now()
       )
       on conflict (organization_id) do update set
         plan_key=excluded.plan_key,
@@ -166,36 +218,34 @@ async function syncSubscription(subscription: Stripe.Subscription, eventId: stri
   return { applied: true, organizationId, planKey: effectivePlan, status }
 }
 
-function subscriptionIdFromInvoice(invoice: Stripe.Invoice) {
-  const modern = idOf((invoice as any).parent?.subscription_details?.subscription)
-  return modern || idOf((invoice as any).subscription)
+function subscriptionIdFromInvoice(invoice: any) {
+  return idOf(invoice?.parent?.subscription_details?.subscription) || idOf(invoice?.subscription)
 }
 
-async function handleInvoice(invoice: Stripe.Invoice, eventId: string, failed: boolean) {
-  if (!stripe) throw new Error('stripe_not_configured')
+async function handleInvoice(invoice: any, failed: boolean) {
   const subscriptionId = subscriptionIdFromInvoice(invoice)
-  if (!subscriptionId) return { applied: false, reason: 'non_subscription_invoice' }
+  const customerId = idOf(invoice?.customer)
+  const metadataOrg = String(invoice?.parent?.subscription_details?.metadata?.organization_id || '').trim() || null
+  const organizationId = metadataOrg || await organizationForProvider(subscriptionId, customerId)
+  if (!organizationId) return { applied: false, reason: 'organization_not_found' }
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-  const synced = await syncSubscription(subscription, eventId)
-  if (!synced.applied) return synced
-
-  const organizationId = synced.organizationId
   if (!failed) {
-    if (synced.planKey !== 'free') {
-      await sql`update public.organization_billing set access_state='active', updated_at=now() where organization_id=${organizationId}::uuid`
-    }
-    return { ...synced, invoiceState: 'paid' }
+    await sql`
+      update public.organization_billing
+      set access_state='active', billing_status=case when plan_key='free' then billing_status else 'active' end, updated_at=now()
+      where organization_id=${organizationId}::uuid
+    `
+    return { applied: true, organizationId, invoiceState: 'paid' }
   }
 
-  const billingReason = String(invoice.billing_reason || '')
+  const billingReason = String(invoice?.billing_reason || '')
   if (billingReason === 'subscription_cycle') {
     await sql`
       update public.organization_billing
       set access_state='payment_blocked', billing_status='past_due', updated_at=now()
       where organization_id=${organizationId}::uuid and plan_key <> 'free'
     `
-    return { ...synced, invoiceState: 'renewal_failed', accessState: 'payment_blocked' }
+    return { applied: true, organizationId, invoiceState: 'renewal_failed', accessState: 'payment_blocked' }
   }
 
   await sql`
@@ -203,28 +253,33 @@ async function handleInvoice(invoice: Stripe.Invoice, eventId: string, failed: b
     set access_state='payment_warning', updated_at=now()
     where organization_id=${organizationId}::uuid and plan_key <> 'free'
   `
-  return { ...synced, invoiceState: 'adjustment_failed', accessState: 'payment_warning' }
+  return { applied: true, organizationId, invoiceState: 'adjustment_failed', accessState: 'payment_warning' }
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) return json({ error: 'stripe_webhook_not_configured' }, 503)
 
   const signature = req.headers.get('stripe-signature') || ''
   if (!signature) return json({ error: 'stripe_signature_required' }, 400)
 
   const payload = await req.text()
-  let event: Stripe.Event
-  try {
-    event = await stripe.webhooks.constructEventAsync(payload, signature, STRIPE_WEBHOOK_SECRET)
-  } catch (error) {
-    console.error('billing-stripe-webhook signature', error)
+  const webhookSecret = await getWebhookSecret()
+  if (!webhookSecret) return json({ error: 'stripe_webhook_not_configured' }, 503)
+  if (!(await verifyStripeSignature(payload, signature, webhookSecret))) {
     return json({ error: 'invalid_signature' }, 400)
   }
 
-  const eventId = event.id
-  const eventType = event.type
-  const objectId = idOf(event.data?.object)
+  let event: any
+  try {
+    event = JSON.parse(payload)
+  } catch {
+    return json({ error: 'invalid_payload' }, 400)
+  }
+
+  const eventId = String(event?.id || '')
+  const eventType = String(event?.type || '')
+  const objectId = idOf(event?.data?.object)
+  if (!eventId || !eventType) return json({ error: 'invalid_event' }, 400)
 
   const [eventRow] = await sql`
     insert into private.billing_provider_events (
@@ -246,22 +301,17 @@ Deno.serve(async (req: Request) => {
     let result: any = { applied: false, reason: 'event_ignored' }
 
     if (eventType === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session
-      const subscriptionId = idOf(session.subscription)
-      if (subscriptionId) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-        result = await syncSubscription(subscription, eventId)
-      }
+      result = await syncCheckoutSession(event.data.object, eventId)
     } else if (
       eventType === 'customer.subscription.created' ||
       eventType === 'customer.subscription.updated' ||
       eventType === 'customer.subscription.deleted'
     ) {
-      result = await syncSubscription(event.data.object as Stripe.Subscription, eventId)
+      result = await syncSubscription(event.data.object, eventId)
     } else if (eventType === 'invoice.paid') {
-      result = await handleInvoice(event.data.object as Stripe.Invoice, eventId, false)
+      result = await handleInvoice(event.data.object, false)
     } else if (eventType === 'invoice.payment_failed') {
-      result = await handleInvoice(event.data.object as Stripe.Invoice, eventId, true)
+      result = await handleInvoice(event.data.object, true)
     }
 
     const processingStatus = result?.reason === 'event_ignored' ? 'ignored' : 'processed'
