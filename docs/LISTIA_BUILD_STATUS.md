@@ -33,7 +33,10 @@ This file is updated after substantive implementation blocks. It is a checkpoint
 ## VERIFIED
 - LISTIA Supabase project: `zvzafiarwerbuoaccnoz`.
 - Migration 48 (`20260824113420_pricing_v2_markups_domains_free_three_properties`) applied successfully.
-- Supabase and GitHub migration history are synchronized through migration 48.
+- Migration 49 (`20260824114346_lock_pricing_helper_search_paths`) hardened the two pricing helper functions after the security adviser flagged mutable search paths.
+- Supabase and GitHub migration history are synchronized through migration 49.
+- Security adviser no longer reports the two pricing-helper search-path warnings. Remaining private-table `RLS enabled no policy` INFO notices are intentional server-only lockdown. The pre-existing Supabase Auth leaked-password-protection warning remains pending hardening.
+- Performance adviser introduced no new pricing-v2 missing-index issue; its remaining unindexed-FK notices predate this block.
 - `property-intake-start` v8 is ACTIVE with JWT verification and the FREE `>=3` server-side limit.
 - Current organization billing row was normalized to the new plan markup target.
 - Price Book domain rows use `provider_quote_plus_markup`, 50%-100% bounds and live-cost checking.
@@ -42,6 +45,7 @@ This file is updated after substantive implementation blocks. It is a checkpoint
 - EchoMimicV2 reference cost target stored: US$0.16 / accepted <=10s avatar-from-photo.
 - Those three media figures are **engineering estimates**, not measured LISTIA production results, and remain `benchmark_required=true`.
 - No external media generation, domain purchase or telecom send was executed by this pricing change; no external usage cost was created.
+- The PWA readability/property-copy change is committed to `main`; the deployed Cloudflare Pages visual state has not yet been independently verified from this chat, so it must not be described as visually confirmed production behavior yet.
 
 ## MEDIA PRICE BOOK v2 — BENCHMARK-GUARDED
 | Gestión | Reference internal cost | FREE | PRO | PREMIUM |
@@ -67,6 +71,7 @@ Premium/exceptional domains remain separately live-quoted.
 ## PENDING — DO NOT RUSH
 - Run the first measured LISTIA media benchmark: minimum 5 real representative clips per HyperFrames/MuseTalk/EchoMimic route, with actual billed seconds, retries, Quality-Gate results and accepted-output cost.
 - After measured media benchmark, decide whether to round micro-Gestión display prices for customer simplicity while preserving the approved maximum and internal accounting precision.
+- Visually verify the new FREE plan text size/copy on the deployed mobile PWA after Cloudflare Pages deploys the `main` changes.
 - Build the server-side Gestión Cost Resolver/Quote endpoint only after the pricing/legal rules are fully accepted.
 - Build domain search/purchase UI only after the domain ownership/registrar account architecture is finalized.
 - Build Twilio/Telnyx/Meta/RCS live routing after communication pricing/legal country profiles are finalized.
