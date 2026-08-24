@@ -18,9 +18,15 @@ window.LISTIA_CONFIG = {
 // Keep billing code isolated from the core PWA. When billing is disabled it
 // only adds the Terms / Privacy links and does not intercept plan selection.
 (() => {
-  const script = document.createElement("script");
-  script.src = "/billing.js?v=1";
-  script.async = false;
-  script.dataset.listiaBillingLoader = "1";
-  document.head.append(script);
+  const billing = document.createElement("script");
+  billing.src = "/billing.js?v=1";
+  billing.async = false;
+  billing.dataset.listiaBillingLoader = "1";
+  document.head.append(billing);
+
+  const runtime = document.createElement("script");
+  runtime.src = "/runtime.js?v=1";
+  runtime.async = false;
+  runtime.dataset.listiaRuntimeLoader = "1";
+  document.head.append(runtime);
 })();
