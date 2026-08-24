@@ -16,6 +16,12 @@ const allowedOrigins = new Set([
   'https://www.listiaapp.com',
 ])
 
+const priceLookup = {
+  listia_pro: 'listia_pro_monthly_usd',
+  listia_premium: 'listia_premium_monthly_usd',
+  listia_premium_extra_seat: 'listia_premium_extra_seat_monthly_usd',
+} as const
+
 function cors(req: Request) {
   const origin = req.headers.get('origin') || ''
   return {
@@ -78,6 +84,34 @@ async function consumeRateLimit(principalId: string, organizationId: string) {
   })
 }
 
+async function resolvePriceId(
+  stripe: Stripe,
+  portableKey: keyof typeof priceLookup,
+): Promise<string | null> {
+  const [binding] = await sql`
+    select provider_price_id
+    from private.billing_price_bindings
+    where provider='stripe'
+      and environment=${BILLING_ENV}
+      and portable_key=${portableKey}
+      and active=true
+    limit 1
+  `
+  if (binding?.provider_price_id) return String(binding.provider_price_id)
+
+  const lookupKey = priceLookup[portableKey]
+  const prices = await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 10 })
+  const match = prices.data.find((price) => {
+    const metadata = price.metadata || {}
+    return price.lookup_key === lookupKey &&
+      price.currency === 'usd' &&
+      price.type === 'recurring' &&
+      price.recurring?.interval === 'month' &&
+      (metadata.product_family === 'listia' || metadata.portable_key === portableKey)
+  })
+  return match?.id || null
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) })
   if (req.method !== 'POST') return json(req, { error: 'method_not_allowed' }, 405)
@@ -89,6 +123,7 @@ Deno.serve(async (req: Request) => {
 
     const stripeSecret = activeStripeSecret()
     if (!stripeSecret) return json(req, { error: 'stripe_not_configured', environment: BILLING_ENV }, 503)
+    const stripe = new Stripe(stripeSecret, { apiVersion: '2026-07-29.dahlia' })
 
     const authHeader = req.headers.get('authorization') || ''
     const jwt = authHeader.replace(/^Bearer\s+/i, '')
@@ -149,33 +184,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const basePortableKey = plan === 'pro' ? 'listia_pro' : 'listia_premium'
-    const [baseBinding] = await sql`
-      select portable_key, provider_price_id
-      from private.billing_price_bindings
-      where provider='stripe'
-        and environment=${BILLING_ENV}
-        and portable_key=${basePortableKey}
-        and active=true
-      limit 1
-    `
-    if (!baseBinding?.provider_price_id) return json(req, { error: 'billing_price_not_bound', portable_key: basePortableKey }, 503)
+    const basePriceId = await resolvePriceId(stripe, basePortableKey)
+    if (!basePriceId) return json(req, { error: 'billing_price_not_found', portable_key: basePortableKey }, 503)
 
     let seatPriceId: string | null = null
     if (plan === 'premium' && extraSeats > 0) {
-      const [seatBinding] = await sql`
-        select provider_price_id
-        from private.billing_price_bindings
-        where provider='stripe'
-          and environment=${BILLING_ENV}
-          and portable_key='listia_premium_extra_seat'
-          and active=true
-        limit 1
-      `
-      seatPriceId = seatBinding?.provider_price_id || null
-      if (!seatPriceId) return json(req, { error: 'billing_price_not_bound', portable_key: 'listia_premium_extra_seat' }, 503)
+      seatPriceId = await resolvePriceId(stripe, 'listia_premium_extra_seat')
+      if (!seatPriceId) return json(req, { error: 'billing_price_not_found', portable_key: 'listia_premium_extra_seat' }, 503)
     }
 
-    const stripe = new Stripe(stripeSecret, { apiVersion: '2026-07-29.dahlia' })
     let customerId = providerState?.provider_customer_id || null
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -200,7 +217,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-      { price: String(baseBinding.provider_price_id), quantity: 1 },
+      { price: basePriceId, quantity: 1 },
     ]
     if (seatPriceId && extraSeats > 0) lineItems.push({ price: seatPriceId, quantity: extraSeats })
 
