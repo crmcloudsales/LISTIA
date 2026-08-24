@@ -85,7 +85,7 @@ jobs:
           echo "preview_url=${preview_url}" >> "${GITHUB_OUTPUT}"
           echo "Worker preview URL: ${preview_url}"
 
-      - name: Smoke-test isolated Worker before changing app domain
+      - name: Smoke-test isolated Worker before production route
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -99,34 +99,46 @@ jobs:
             echo "Isolated Worker smoke test waiting (${attempt}/12): root=${root} voice=${voice} terms=${terms}"
             sleep 5
           done
-          [[ "$ok" == true ]] || { echo 'Isolated Worker failed smoke tests; production domain was not changed.'; exit 1; }
+          [[ "$ok" == true ]] || { echo 'Isolated Worker failed smoke tests; production route was not changed.'; exit 1; }
 
-      - name: Attach app.listiaapp.com to validated LISTIA Worker
+      - name: Ensure app.listiaapp.com Worker Route
+        id: route
         shell: bash
         run: |
           set -Eeuo pipefail
-          if [[ '${{ steps.worker_deploy.outputs.token_source }}' == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
-          api='https://api.cloudflare.com/client/v4'
-          domains_url="${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains"
-          before="$(mktemp)"
-          http="$(curl -sS --max-time 30 --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --output "${before}" --write-out '%{http_code}' "${domains_url}")"
-          [[ "$http" == 200 ]] || { cat "${before}"; exit 1; }
-          count="$(jq --arg host "${APP_HOSTNAME}" '[.result[] | select(.hostname == $host)] | length' "${before}")"
-          current_service="$(jq -r --arg host "${APP_HOSTNAME}" '[.result[] | select(.hostname == $host)][0].service // "absent"' "${before}")"
-          echo "Worker custom domain before: count=${count} service=${current_service}"
-          [[ "$count" -le 1 ]] || { echo 'Refusing ambiguous app Worker ownership.'; exit 1; }
-          if [[ "$count" == 1 && "$current_service" != "${WORKER_NAME}" ]]; then
-            echo "Refusing to replace unexpected Worker owner ${current_service}."
-            exit 1
-          fi
-          if [[ "$count" == 0 ]]; then
-            body="$(jq -nc --arg environment production --arg hostname "${APP_HOSTNAME}" --arg service "${WORKER_NAME}" --arg zone_id "${CLOUDFLARE_ZONE_ID}" '{environment:$environment,hostname:$hostname,service:$service,zone_id:$zone_id}')"
-            out="$(mktemp)"
-            attach_http="$(curl -sS --max-time 45 --request PUT --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --header 'Content-Type: application/json' --data "${body}" --output "${out}" --write-out '%{http_code}' "${domains_url}")"
-            echo "Attach app Worker custom domain: HTTP ${attach_http}"
-            cat "${out}"
-            [[ "$attach_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "${out}" >/dev/null || { echo 'App custom-domain attach failed; isolated Worker remains available but production was not switched.'; exit 1; }
-          fi
+          api="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/workers/routes"
+          pattern="${APP_HOSTNAME}/*"
+          selected=''
+          for source in primary security; do
+            if [[ "$source" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/routes-${source}.json"
+            http="$(curl -sS --max-time 25 --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --output "$out" --write-out '%{http_code}' "$api" || true)"
+            echo "Workers Routes probe (${source}): HTTP ${http}"
+            [[ "$http" == 200 ]] || { jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "$out" 2>/dev/null || true; continue; }
+
+            exact_count="$(jq --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)] | length' "$out")"
+            exact_script="$(jq -r --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)][0].script // "absent"' "$out")"
+            [[ "$exact_count" -le 1 ]] || { echo 'Refusing ambiguous app route ownership.'; exit 1; }
+            if [[ "$exact_count" == 1 ]]; then
+              [[ "$exact_script" == "$WORKER_NAME" ]] || { echo "Refusing to overwrite app route owned by ${exact_script}."; exit 1; }
+              selected="$source"
+              echo 'Existing LISTIA app Worker Route preserved.'
+              break
+            fi
+
+            body="$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')"
+            create_out="/tmp/route-create-${source}.json"
+            create_http="$(curl -sS --max-time 30 --request POST --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --header 'Content-Type: application/json' --data "$body" --output "$create_out" --write-out '%{http_code}' "$api" || true)"
+            echo "Create LISTIA app route (${source}): HTTP ${create_http}"
+            if [[ "$create_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "$create_out" >/dev/null 2>&1; then
+              selected="$source"
+              break
+            fi
+            jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "$create_out" 2>/dev/null || true
+          done
+          [[ -n "$selected" ]] || { echo 'ROUTE_CUTOVER_BLOCKED: no configured token can manage the LISTIA app Worker Route.'; exit 1; }
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
 
       - name: Verify LISTIA production PWA live
         shell: bash
@@ -162,8 +174,11 @@ jobs:
             echo 'LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED'
             echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "source_commit=${GITHUB_SHA}"
-            echo 'hosting=Cloudflare Workers Static Assets'
-            echo "cloudflare_token_source=${{ steps.worker_deploy.outputs.token_source }}"
+            echo 'source_worker=listia-app'
+            echo 'hosting=Cloudflare Workers Static Assets via Worker Route'
+            echo 'route=app.listiaapp.com/*'
+            echo "worker_deploy_token_source=${{ steps.worker_deploy.outputs.token_source }}"
+            echo "route_token_source=${{ steps.route.outputs.token_source }}"
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'voice_native_tts_11_languages=true'
             echo 'russian_live=true'
