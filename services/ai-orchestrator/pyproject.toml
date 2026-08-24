@@ -1,0 +1,23 @@
+[project]
+name = "listia-ai-orchestrator"
+version = "0.1.0"
+description = "Provider-portable LISTIA AI execution service"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2,<3",
+  "httpx>=0.28,<1",
+  "litellm>=1,<2",
+  "langgraph>=0.6,<1",
+  "langfuse>=3,<4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "ruff>=0.8,<1"
+]
+
+[tool.ruff]
+line-length = 110
