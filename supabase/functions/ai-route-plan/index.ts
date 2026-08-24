@@ -36,6 +36,7 @@ const allowedTasks = new Set([
   'property_extract','flyer_copy','flyer_render','advisor_identity_preserve',
   'property_fidelity_preserve','video_generate','quality_review',
 ])
+const runtimeStatuses = new Set(['adapter_ready','benchmarked','active','fallback'])
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
@@ -137,26 +138,32 @@ Deno.serve(async (req: Request) => {
 
     function routeEntry(modelKey: string, role: 'primary'|'reviewer'|'fallback') {
       const model = byKey.get(modelKey)
-      if (!model) return { model_key: modelKey, role, eligible: false, reason: 'model_not_registered' }
+      if (!model) return { model_key: modelKey, role, candidate_eligible: false, runtime_ready: false, reason: 'model_not_registered' }
       const modelStatus = String(model.lifecycle_status || '')
       const providerStatus = String(model.provider_status || '')
       const blocked = ['deprecated','removed'].includes(modelStatus) || ['deprecated','removed'].includes(providerStatus)
+      const candidateEligible = !blocked
       const verifiedVia = String(model.capabilities?.verified_via || '') || null
       const executionSurface = model.direct_api_available ? String(model.provider_key) : verifiedVia
-      const eligible = !blocked && Boolean(executionSurface || model.direct_api_available)
+      const runtimeReady = candidateEligible && runtimeStatuses.has(modelStatus) && Boolean(executionSurface)
+      let reason = 'candidate_adapter_not_ready'
+      if (blocked) reason = 'deprecated_or_removed'
+      else if (!executionSurface) reason = 'execution_surface_not_ready'
+      else if (runtimeReady) reason = 'runtime_ready'
       return {
         model_key: modelKey,
         provider_key: model.provider_key,
         provider_model_id: model.provider_model_id,
         display_name: model.display_name,
         role,
-        eligible,
+        candidate_eligible: candidateEligible,
+        runtime_ready: runtimeReady,
         execution_surface: executionSurface,
         direct_api_available: Boolean(model.direct_api_available),
         lifecycle_status: modelStatus,
         deprecation_risk: model.deprecation_risk,
         benchmark: scoreByModel.get(modelKey) || null,
-        reason: blocked ? 'deprecated_or_removed' : eligible ? 'policy_candidate' : 'execution_surface_not_ready',
+        reason,
       }
     }
 
@@ -168,8 +175,8 @@ Deno.serve(async (req: Request) => {
 
     const strategy = String(policy.strategy)
     const deterministicOnly = strategy === 'deterministic_only'
-    const eligiblePrimary = plan.primary.filter((entry: any) => entry.eligible)
-    const routable = deterministicOnly || eligiblePrimary.length > 0
+    const readyPrimary = plan.primary.filter((entry: any) => entry.runtime_ready)
+    const routable = deterministicOnly || readyPrimary.length > 0
 
     return json(req, {
       ok: true,
