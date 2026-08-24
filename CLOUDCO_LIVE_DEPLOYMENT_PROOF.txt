@@ -1,6 +1,6 @@
 CLOUDCO LIVE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-24T02:49:25Z
-source_commit=5914d28f4dcd029830a69b1af91fb61a51ebdd35
+verified_at_utc=2026-08-24T02:49:55Z
+source_commit=af62c319b9f30736a5dc6fc577bf70544582b04a
 root=https://listiaapp.com/ HTTP 200
 cloudco=https://listiaapp.com/cloudco HTTP 200
 footer=https://listiaapp.com/footer-legal.js HTTP 200
