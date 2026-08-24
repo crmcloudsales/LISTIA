@@ -14,17 +14,19 @@ window.LISTIA_CONFIG = {
   STRIPE_PUBLISHABLE_KEY: "pk_live_51U5BGR0falgc3pBvgIUoHEp5kwm2pRSRrTfubFkeQjGmopTbFd0ZmEIhjqeyOfzpGpziH2IzYn24d62og1eTyOVd00z8tLsz8A"
 };
 
-// Keep billing code isolated from the core PWA.
+// Keep optional runtime modules isolated from the core PWA.
 (() => {
-  const billing = document.createElement("script");
-  billing.src = "/billing.js?v=1";
-  billing.async = false;
-  billing.dataset.listiaBillingLoader = "1";
-  document.head.append(billing);
+  const modules = [
+    ["/billing.js?v=1", "listiaBillingLoader"],
+    ["/runtime.js?v=1", "listiaRuntimeLoader"],
+    ["/property-status.js?v=1", "listiaPropertyStatusLoader"]
+  ];
 
-  const runtime = document.createElement("script");
-  runtime.src = "/runtime.js?v=1";
-  runtime.async = false;
-  runtime.dataset.listiaRuntimeLoader = "1";
-  document.head.append(runtime);
+  for (const [src, datasetKey] of modules) {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = false;
+    script.dataset[datasetKey] = "1";
+    document.head.append(script);
+  }
 })();
