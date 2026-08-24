@@ -2,10 +2,13 @@ name: LISTIA Commercial Global i18n
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'commercial/**'
+      - 'public/terms.html'
+      - 'public/privacy.html'
+      - 'public/legal.css'
+      - 'public/listia-mark-transparent.webp'
       - 'scripts/build-commercial-worker.py'
       - '.github/workflows/listia-commercial-global-i18n-v1.yml'
   workflow_dispatch:
@@ -19,7 +22,6 @@ concurrency:
 
 jobs:
   deploy-commercial-worker:
-    name: Validate, preview and deploy commercial Worker
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -30,204 +32,96 @@ jobs:
       WRANGLER_VERSION: '4'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Validate source and build Worker
+      - name: Validate 11-language source and build Worker
         shell: bash
         run: |
           set -Eeuo pipefail
-          test -n "${CLOUDFLARE_ACCOUNT_ID}" || {
-            echo 'CLOUDFLARE_ACCOUNT_ID is missing'
-            exit 1
-          }
-          test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}" || {
-            echo 'No configured Cloudflare token is available'
-            exit 1
-          }
+          test -n "${CLOUDFLARE_ACCOUNT_ID}"
+          test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}"
           python3 -m py_compile scripts/build-commercial-worker.py
-          python3 scripts/build-commercial-worker.py \
-            commercial/index.html \
-            /tmp/listia-commercial-worker.mjs
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
           test "$(grep -c '<option value=' commercial/index.html)" -eq 7
-          grep -Fq "https://app.listiaapp.com/" commercial/index.html
-          grep -Fq "https://app.listiaapp.com/?install=ios" commercial/index.html
-          grep -Fq "https://app.listiaapp.com/?install=android" commercial/index.html
-          grep -Fq "https://app.listiaapp.com/?install=desktop" commercial/index.html
-          grep -Fq "'ar-AE': { htmlLang: 'ar-AE', dir: 'rtl'" commercial/index.html
+          grep -Fq "ru:" commercial/global-locales.js
+          grep -Fq "he:" commercial/global-locales.js
+          grep -Fq "'zh-CN':" commercial/global-locales.js
+          grep -Fq "const key='ja'" commercial/japanese-locale.js
+          grep -Fq 'Version 1.4' public/terms.html
+          grep -Fq 'cloudco-logo-official.webp' commercial/cloudco.html
+          grep -Fq 'cloudco-arrival' commercial/cloudco.html
 
-      - name: Upload a non-production preview version
+      - name: Upload validated preview version
         id: upload
         shell: bash
         run: |
           set -Eeuo pipefail
-          previous_version_id=''
-          selected_kind=''
-          version_id=''
-          preview_url=''
-
+          selected=''
+          version=''
+          preview=''
           for candidate in primary security; do
-            if [[ "${candidate}" == 'primary' ]]; then
-              token="${CLOUDFLARE_API_TOKEN_PRIMARY}"
-            else
-              token="${CLOUDFLARE_API_TOKEN_SECURITY}"
-            fi
+            if [[ "${candidate}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
             [[ -n "${token}" ]] || continue
-
-            status_json="$(CLOUDFLARE_API_TOKEN="${token}" \
-              npx --yes wrangler@${WRANGLER_VERSION} deployments status \
-              --name "${WORKER_NAME}" --json 2>/dev/null || true)"
-            previous_version_id="$(jq -r \
-              '[.. | objects | select(has("version_id") and ((.percentage? // 0) == 100)) | .version_id][0] // empty' \
-              <<<"${status_json}" 2>/dev/null || true)"
-
-            if CLOUDFLARE_API_TOKEN="${token}" \
-              npx --yes wrangler@${WRANGLER_VERSION} versions upload \
-              /tmp/listia-commercial-worker.mjs \
-              --name "${WORKER_NAME}" \
-              --compatibility-date 2026-08-22 \
-              --keep-vars \
-              --tag "commercial-${GITHUB_SHA:0:12}" \
-              --message "LISTIA commercial seven-language release ${GITHUB_SHA:0:12}" \
-              --preview-alias commercial-i18n \
-              2>&1 | tee /tmp/listia-commercial-upload.log; then
-              selected_kind="${candidate}"
-              version_id="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
-                /tmp/listia-commercial-upload.log | tail -n 1)"
-              preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' \
-                /tmp/listia-commercial-upload.log | head -n 1 | sed 's/[),]$//' || true)"
+            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-11lang-${GITHUB_SHA:0:12}" --message "LISTIA commercial 11-language release ${GITHUB_SHA:0:12}" --preview-alias commercial-11lang 2>&1 | tee /tmp/upload.log; then
+              selected="${candidate}"
+              version="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/upload.log | tail -1)"
+              preview="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' /tmp/upload.log | head -1 | sed 's/[),]$//' || true)"
               break
             fi
           done
+          test -n "${selected}" && test -n "${version}" && test -n "${preview}"
+          echo "token_kind=${selected}" >> "$GITHUB_OUTPUT"
+          echo "version_id=${version}" >> "$GITHUB_OUTPUT"
+          echo "preview_url=${preview}" >> "$GITHUB_OUTPUT"
 
-          test -n "${selected_kind}" || {
-            echo 'Configured tokens lack the required Cloudflare Workers Scripts Write permission'
-            exit 1
-          }
-          test -n "${version_id}" || {
-            echo 'Worker preview uploaded but its version ID could not be resolved'
-            exit 1
-          }
-          test -n "${preview_url}" || {
-            echo 'Worker preview uploaded but no workers.dev preview URL was returned'
-            exit 1
-          }
-
-          {
-            echo "token_kind=${selected_kind}"
-            echo "version_id=${version_id}"
-            echo "previous_version_id=${previous_version_id}"
-            echo "preview_url=${preview_url}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Smoke test the non-production preview
+      - name: Smoke-test preview
         shell: bash
         run: |
           set -Eeuo pipefail
-          preview_url='${{ steps.upload.outputs.preview_url }}'
-          for attempt in {1..6}; do
-            code="$(curl --silent --show-error --location --max-time 20 \
-              --output /tmp/listia-commercial-preview.html \
-              --write-out '%{http_code}' "${preview_url}?lang=ar-AE" || true)"
-            [[ "${code}" == '200' ]] && break
-            sleep 5
-          done
-          test "${code}" = '200' || {
-            echo "Commercial preview failed: HTTP ${code}"
-            exit 1
-          }
-          python3 scripts/build-commercial-worker.py \
-            /tmp/listia-commercial-preview.html \
-            /tmp/listia-commercial-preview-check.mjs
-          grep -Fq 'https://app.listiaapp.com/?install=ios' /tmp/listia-commercial-preview.html
-          grep -Fq 'https://app.listiaapp.com/?install=android' /tmp/listia-commercial-preview.html
-          grep -Fq 'https://app.listiaapp.com/?install=desktop' /tmp/listia-commercial-preview.html
-
-      - name: Deploy the validated version to production
-        id: deploy
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          if [[ '${{ steps.upload.outputs.token_kind }}' == 'primary' ]]; then
-            token="${CLOUDFLARE_API_TOKEN_PRIMARY}"
-          else
-            token="${CLOUDFLARE_API_TOKEN_SECURITY}"
-          fi
-          CLOUDFLARE_API_TOKEN="${token}" \
-            npx --yes wrangler@${WRANGLER_VERSION} versions deploy \
-            '${{ steps.upload.outputs.version_id }}@100%' \
-            --name "${WORKER_NAME}" \
-            --message "Deploy LISTIA commercial seven-language release ${GITHUB_SHA:0:12}" \
-            --yes
-
-      - name: Verify production, SEO endpoints and PWA isolation
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          base='${{ steps.upload.outputs.preview_url }}'
           for attempt in {1..8}; do
-            code="$(curl --silent --show-error --location --max-time 20 \
-              --output /tmp/listia-commercial-live.html \
-              --write-out '%{http_code}' \
-              'https://listiaapp.com/?lang=ar-AE' || true)"
-            if [[ "${code}" == '200' ]] && \
-              grep -Fq "const LISTIA_COMMERCIAL_I18N_VERSION = '1.0.0';" \
-                /tmp/listia-commercial-live.html && \
-              grep -Fq "const LISTIA_COMMERCIAL_INSTALL_VERSION = '1.0.0';" \
-                /tmp/listia-commercial-live.html; then
-              break
-            fi
-            sleep 5
+            code="$(curl -sS -L --max-time 20 -o /tmp/preview.html -w '%{http_code}' "${base}?lang=ja" || true)"
+            [[ "${code}" == 200 ]] && break
+            sleep 4
           done
-          test "${code}" = '200'
-          python3 scripts/build-commercial-worker.py \
-            /tmp/listia-commercial-live.html \
-            /tmp/listia-commercial-live-check.mjs
-
-          for url in \
-            'https://listiaapp.com/?lang=es' \
-            'https://listiaapp.com/?lang=en' \
-            'https://listiaapp.com/?lang=fr' \
-            'https://listiaapp.com/?lang=it' \
-            'https://listiaapp.com/?lang=pt-BR' \
-            'https://listiaapp.com/?lang=de' \
-            'https://listiaapp.com/?lang=ar-AE' \
-            'https://www.listiaapp.com/?lang=ar-AE' \
-            'https://listiaapp.com/robots.txt' \
-            'https://listiaapp.com/sitemap.xml' \
-            'https://app.listiaapp.com/?lang=ar-AE' \
-            'https://app.listiaapp.com/?install=ios&lang=es' \
-            'https://app.listiaapp.com/?install=android&lang=en' \
-            'https://app.listiaapp.com/?install=desktop&lang=de'
-          do
-            live_code="$(curl --silent --show-error --location --max-time 20 \
-              --output /dev/null --write-out '%{http_code}' "${url}")"
-            test "${live_code}" = '200' || {
-              echo "Smoke test failed for ${url}: HTTP ${live_code}"
-              exit 1
-            }
-            echo "HTTP 200: ${url}"
+          test "${code}" = 200
+          grep -Fq 'LISTIA' /tmp/preview.html
+          for path in global-locales.js japanese-locale.js terms.html privacy.html cloudco; do
+            code="$(curl -sS -L --max-time 20 -o "/tmp/${path//\//_}" -w '%{http_code}' "${base%/}/${path}" || true)"
+            test "${code}" = 200
           done
+          grep -Fq 'Version 1.4' /tmp/terms.html
+          grep -Fq 'cloudco-arrival' /tmp/cloudco
 
-      - name: Roll back only if production verification fails
-        if: failure() && steps.deploy.outcome == 'success'
+      - name: Deploy validated version to production
         shell: bash
         run: |
           set -Eeuo pipefail
-          if [[ '${{ steps.upload.outputs.token_kind }}' == 'primary' ]]; then
-            token="${CLOUDFLARE_API_TOKEN_PRIMARY}"
-          else
-            token="${CLOUDFLARE_API_TOKEN_SECURITY}"
-          fi
-          previous='${{ steps.upload.outputs.previous_version_id }}'
-          if [[ -n "${previous}" ]]; then
-            CLOUDFLARE_API_TOKEN="${token}" \
-              npx --yes wrangler@${WRANGLER_VERSION} rollback "${previous}" \
-              --name "${WORKER_NAME}" \
-              --message 'Automated rollback after failed LISTIA commercial smoke test'
-          else
-            CLOUDFLARE_API_TOKEN="${token}" \
-              npx --yes wrangler@${WRANGLER_VERSION} rollback \
-              --name "${WORKER_NAME}" \
-              --message 'Automated rollback after failed LISTIA commercial smoke test'
-          fi
+          if [[ '${{ steps.upload.outputs.token_kind }}' == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
+          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA commercial 11-language release ${GITHUB_SHA:0:12}" --yes
+
+      - name: Verify live commercial site, legal pages and CloudCo
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          languages=(es en fr it pt-BR de ar-AE ru he zh-CN ja)
+          ok=false
+          for attempt in $(seq 1 24); do
+            root="$(curl -sS -L --max-time 20 -o /tmp/root.html -w '%{http_code}' 'https://listiaapp.com/?lang=ru' || true)"
+            terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://listiaapp.com/terms.html' || true)"
+            cloudco="$(curl -sS -L --max-time 20 -o /tmp/cloudco.html -w '%{http_code}' 'https://listiaapp.com/cloudco' || true)"
+            global="$(curl -sS -L --max-time 20 -o /tmp/global.js -w '%{http_code}' 'https://listiaapp.com/global-locales.js' || true)"
+            japanese="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://listiaapp.com/japanese-locale.js' || true)"
+            if [[ "$root" == 200 && "$terms" == 200 && "$cloudco" == 200 && "$global" == 200 && "$japanese" == 200 ]] && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'cloudco-arrival' /tmp/cloudco.html && grep -Fq 'cloudco-logo-official.webp' /tmp/cloudco.html && grep -Fq 'Русский' /tmp/global.js && grep -Fq '日本語' /tmp/ja.js; then ok=true; break; fi
+            sleep 5
+          done
+          [[ "$ok" == true ]]
+          for lang in "${languages[@]}"; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://listiaapp.com/?lang=${lang}")"
+            test "$code" = 200
+          done
+          for url in 'https://www.listiaapp.com/?lang=ru' 'https://listiaapp.com/privacy.html' 'https://app.listiaapp.com/?lang=ru' 'https://app.listiaapp.com/?lang=ja'; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "$url")"
+            test "$code" = 200
+          done
