@@ -29,6 +29,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 23. `20260824040356` — `add_portable_billing_and_gestiones`
 24. `20260824040444` — `normalize_unpaid_organizations_to_free`
 25. `20260824040517` — `move_billing_provider_tables_private`
+26. `20260824041732` — `index_gestiones_user_id`
 
 The LISTIA billing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
