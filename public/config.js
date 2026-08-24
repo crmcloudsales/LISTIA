@@ -20,7 +20,8 @@ window.LISTIA_CONFIG = {
     ["/billing.js?v=1", "listiaBillingLoader"],
     ["/runtime.js?v=1", "listiaRuntimeLoader"],
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
-    ["/draft-actions.js?v=1", "listiaDraftActionsLoader"]
+    ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
+    ["/office-modules.js?v=1", "listiaOfficeModulesLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
