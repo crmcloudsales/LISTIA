@@ -34,7 +34,8 @@ function json(req: Request, body: unknown, status = 200) {
 const allowedTiers = new Set(['q0','q1','q2','q3','q4'])
 const allowedTasks = new Set([
   'property_extract','flyer_copy','flyer_render','advisor_identity_preserve',
-  'property_fidelity_preserve','video_generate','video_edit','quality_review',
+  'property_fidelity_preserve','video_generate','video_edit','avatar_video',
+  'video_translate','lip_sync','tts','quality_review',
 ])
 
 function unique(values: string[]) {
