@@ -1,7 +1,7 @@
 # LISTIA billing architecture
 
 ## Status
-Billing is implemented in TEST mode and intentionally feature-gated in the public PWA until the remaining Stripe Checkout credentials are configured. Current production verification must not claim LIVE billing until LIVE price bindings, credentials and webhook are present and tested.
+Billing implementation exists, but production billing must not be declared fully verified merely from frontend flags. LIVE operation requires matching LIVE price bindings, credentials, webhook and successful end-to-end verification.
 
 ## Canonical LISTIA subscription catalog
 LISTIA business logic uses portable keys and Stripe lookup keys, never hard-coded Stripe IDs as product identity.
@@ -13,14 +13,23 @@ LISTIA business logic uses portable keys and Stripe lookup keys, never hard-code
 | `listia_premium` | US$147 | `listia_premium_monthly_v1` | monthly |
 | `listia_premium_extra_seat` | US$47 | `listia_premium_extra_seat_monthly_v1` | monthly, per extra seat |
 
-Premium includes 2 users. Pro supports 1 user. Extra seats apply only to Premium.
+FREE supports up to **3 non-archived properties**. A fourth property requires upgrading to a paid plan. Premium includes 2 users. Pro supports 1 user. Extra seats apply only to Premium.
 
 ## Gestiones — standardized customer price, flexible internal margin
 A customer buys a **Gestión**, not a raw provider call.
 
-The old 30% FREE / 20% PRO / 10% PREMIUM percentages remain **target internal economics**, not a rigid formula that must be exposed or applied identically to every provider cost. The effective markup/margin can vary by route, geography and provider so LISTIA can offer a simple standardized price while remaining profitable.
+Current ordinary plan markup targets on real provider/accepted-output cost are:
+- FREE: **50%**
+- PRO: **25%**
+- PREMIUM: **12.5%**
+
+These are active target economics. For variable routes, effective markup can flex inside the applicable safety bounds so LISTIA can preserve simple pricing, quality and profitability. The ordinary safety band remains 5%-50% unless a specific Gestión has a different canonical rule.
+
+**Domains are the deliberate exception:** domain registration and renewal use a **50%-100% markup in every plan**, dynamically decreasing as wholesale domain cost increases. Registration and renewal use the same policy; there is no intentional teaser first-year markup followed by a higher renewal markup.
 
 Customer-facing source of truth: `private.gestion_price_book`.
+
+Plan entitlement source: `private.plan_entitlements` plus `public.organization_billing` for the organization's effective paid plan.
 
 Pre-execution authorization: `private.gestion_quotes`.
 
@@ -34,22 +43,46 @@ Rules:
 - Show the user a final Gestión price or authorized maximum before a billable action runs.
 - Hide provider/model complexity by default.
 - A fixed-price route must pass the internal live-cost/margin gate before execution.
-- Current default minimum gross-margin floor is 5% for billable fixed-price routes; intentionally free/included routes are exempt.
 - If no compliant provider route fits the approved customer price, do not execute. Try another provider, block, or request new approval.
 - Never surprise-charge above the amount the user approved.
 - New price-book versions may change future prices; an unexpired stored quote preserves its authorized ceiling.
 - High-volume automation may later use explicit standing budgets/caps; low friction must not become hidden spending.
-- Provider actual cost is still recorded internally for economics, routing, accounting and audit.
+- Provider actual cost is recorded internally for economics, routing, accounting and audit.
+- Optimize for **cost per accepted output**, including rejected generations/retries and required quality validation.
+
+## Domain pricing v2
+Domain price = current compliant wholesale quote × (1 + dynamic domain markup).
+
+Current markup bands, identical across FREE/PRO/PREMIUM:
+- wholesale <= US$10 -> 100%
+- >US$10 and <=US$20 -> 80%
+- >US$20 and <=US$50 -> 60%
+- >US$50 -> 50%
+
+The database function `private.domain_markup_percent()` is the current canonical calculator. Premium or exceptional domains require a separate live quote.
+
+LISTIA's preferred suggestion pool is `.com`, `.com.mx`, `.mx`, `.net`, `.us`, `.realestate`, `.uk`, `.it`, and `.web` when commercially available. The UI shows the requested domain plus at most 3 useful alternatives. `.app` and `.ai` are not default suggestions.
+
+## Benchmark-guarded media economics
+The following v2 figures are **engineering estimates based on published model/render throughput and current compute pricing, not yet measured LISTIA production benchmarks**:
+
+| Gestión / route | Reference internal accepted-output cost <=10s | FREE +50% | PRO +25% | PREMIUM +12.5% |
+|---|---:|---:|---:|---:|
+| HyperFrames/FFmpeg exact-source composition | US$0.005 | US$0.0075 | US$0.00625 | US$0.005625 |
+| MuseTalk 1.5 lip-sync | US$0.025 | US$0.0375 | US$0.03125 | US$0.028125 |
+| EchoMimicV2 avatar-from-photo | US$0.16 | US$0.24 | US$0.20 | US$0.18 |
+
+These rows remain `benchmark_guarded`. Automated paid release is blocked until LISTIA runs real test clips, records compute/cold-start/retry/Quality-Gate cost, and confirms accepted-output quality and margin. HyperFrames is preferred when source fidelity must remain deterministic; MuseTalk is the economical lip-sync route; EchoMimicV2 is a fallback when a canonical advisor video is unavailable.
 
 ## Global standardized pricing
-LISTIA can use one visible price for a Gestión across countries while internal effective margins vary. This is valid only where the route is within the defined service scope.
+LISTIA can use a visible standardized price or pricing rule for a Gestión while internal effective margins vary. This is valid only where the route is within the defined service scope.
 
-For voice/SMS, standard global pricing covers ordinary compliant geographic fixed/mobile/A2P destinations. Premium-rate, satellite, personal-number and special-service destinations are excluded, blocked or separately quoted rather than silently creating a loss.
+For voice/SMS/RCS/WhatsApp, current supplier cost varies materially by country/carrier. LISTIA therefore standardizes the user experience and markup policy while resolving the current all-in route before approval. Premium-rate, satellite, personal-number and special-service destinations are excluded, blocked or separately quoted rather than silently creating a loss.
 
-For domains, TLD registry prices genuinely differ, so the standardized experience is a **live all-in quote**, not one universal domain price. Cloudflare Registrar is the primary candidate for current registration/renewal price discovery and purchase.
+For domains, TLD registry prices genuinely differ, so the standardized experience is a **live all-in quote** using the same 50%-100% markup logic in every plan.
 
 ## Source of truth
-Application entitlement is stored in `public.organization_billing`.
+Application entitlement is stored in `public.organization_billing`. Canonical plan limits are stored server-side in `private.plan_entitlements`.
 
 `organization_onboarding.selected_plan` is only plan intent. It MUST NOT be used to grant paid features.
 
@@ -60,9 +93,6 @@ Stripe-specific references are stored outside the public Data API:
 
 This separation allows a future Stripe account migration by rebinding provider IDs without rewriting LISTIA plan logic.
 
-## TEST Stripe catalog
-The TEST catalog exists in the connected Stripe account named `Listia`. Provider product/price IDs are stored dynamically in `private.billing_price_bindings`; application code should resolve them by LISTIA portable key / Stripe lookup key instead of copying IDs into the frontend.
-
 ## Checkout
 Server function: `billing-checkout-create`
 
@@ -71,24 +101,16 @@ Server function: `billing-checkout-create`
 - Rate limited.
 - Creates/reuses a Stripe Customer.
 - Resolves price IDs from private bindings.
-- Creates a subscription Checkout Session using Stripe 2026 `ui_mode: embedded_page`.
+- Creates a subscription Checkout Session using the configured embedded Stripe experience.
 - Returns only the Checkout Session client secret to the authenticated browser.
 - Never exposes Stripe secret/restricted keys to the PWA.
 
-The PWA module is `public/billing.js`. It uses Stripe.js directly from `https://js.stripe.com/dahlia/stripe.js` and `createEmbeddedCheckoutPage()` when billing is enabled.
+The PWA module is `public/billing.js`.
 
 ## Webhook
 Server function: `billing-stripe-webhook`
 
-Stripe TEST endpoint listens for:
-- `checkout.session.completed`
-- `customer.subscription.created`
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
-- `invoice.paid`
-- `invoice.payment_failed`
-
-The signing secret is stored encrypted in Supabase Vault as `stripe_webhook_secret_test`. The webhook validates Stripe's HMAC signature before parsing or processing an event and stores event IDs for idempotency.
+Webhook processing validates Stripe's HMAC signature before applying billing state and stores event IDs for idempotency. A database normalization trigger enforces the canonical 50% / 25% / 12.5% `usage_markup_percent` whenever `organization_billing` is inserted or its plan changes, so stale provider-integration code cannot silently restore the old markup values.
 
 Entitlement rules:
 - Active/trialing paid subscription -> paid plan active.
@@ -97,30 +119,15 @@ Entitlement rules:
 - Successful invoice -> clears payment restriction for a paid plan.
 - Canceled/incomplete/expired subscription -> effective plan returns to FREE.
 
-## Required secrets and public configuration
-Never commit these values to GitHub.
-
-For TEST Checkout, configure one server-side Stripe API credential in the Supabase Edge Functions environment. Prefer a Stripe restricted API key over a broad secret key:
-- `STRIPE_RESTRICTED_KEY_TEST` — preferred
-- `STRIPE_SECRET_KEY_TEST` — fallback only
-
-The TEST publishable key is safe for the browser and belongs in `public/config.js` as `STRIPE_PUBLISHABLE_KEY` only after the matching TEST server credential is configured.
-
-Then set:
-- `BILLING_ENABLED: true`
-- `BILLING_ENV: "test"`
-
-Do not enable LIVE by merely changing the feature flag. LIVE requires a separately created live catalog, live price bindings, live webhook destination/signing secret, and live restricted key.
-
 ## Taxes
-Stripe automatic tax is deliberately OFF. Do not add `automatic_tax: { enabled: true }` until LISTIA has confirmed the legal entity, tax registrations and jurisdictions in which it is registered to collect tax. Where taxes or mandatory government charges legally apply to a Gestión, the user-facing quote must handle them transparently as required by law.
+Stripe automatic tax is deliberately OFF. Do not enable automatic tax until LISTIA has confirmed the legal entity, tax registrations and jurisdictions in which it is registered to collect tax. Where taxes or mandatory government charges legally apply to a Gestión, the user-facing quote must handle them transparently as required by law.
 
 ## Legal
 Global baseline legal pages are:
 - `/terms.html`
 - `/privacy.html`
 
-Terms must define recurring plan pricing separately from standardized Gestiones, approval/quote behavior, provider variability, exceptional-route exclusions, seat proration, payment failure behavior, cancellations and payment processing. Privacy covers billing/subscription/payment metadata and processors.
+Terms define recurring plan pricing separately from standardized Gestiones, approval/quote behavior, provider variability, exceptional-route exclusions, seat proration, payment failure behavior, cancellations and payment processing. Internal supplier markup does not need to be exposed unless legally required; the binding customer commitment is the approved LISTIA quote/ceiling.
 
 ## Security invariants
 - Never put Stripe restricted/secret keys or webhook secrets in `public/`.
