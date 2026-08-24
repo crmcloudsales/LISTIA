@@ -42,6 +42,12 @@ function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
 }
 
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) })
   if (req.method !== 'POST') return json(req, { error: 'method_not_allowed' }, 405)
@@ -96,7 +102,8 @@ Deno.serve(async (req: Request) => {
     const [policy] = await sql`
       select task_type, quality_tier, strategy, primary_models, reviewer_models,
              fallback_models, required_validators, max_parallel, max_attempts,
-             escalate_on_failure, cost_ceiling_usd, notes
+             escalate_on_failure, cost_ceiling_usd, optimization_objective,
+             minimum_quality_score, notes
       from private.ai_route_policies
       where task_type=${taskType} and quality_tier=${qualityTier} and active=true
       limit 1
@@ -150,9 +157,9 @@ Deno.serve(async (req: Request) => {
     const byKey = new Map(modelRows.map((row: any) => [String(row.model_key), row]))
     const runtimeBySurface = new Map(runtimeRows.map((row: any) => [String(row.execution_surface), row]))
 
-    function routeEntry(modelKey: string, role: 'primary'|'reviewer'|'fallback') {
+    function routeEntry(modelKey: string, role: 'primary'|'reviewer'|'fallback', policyOrder: number) {
       const model = byKey.get(modelKey)
-      if (!model) return { model_key: modelKey, role, candidate_eligible: false, runtime_ready: false, reason: 'model_not_registered' }
+      if (!model) return { model_key: modelKey, role, policy_order: policyOrder, candidate_eligible: false, runtime_ready: false, reason: 'model_not_registered', benchmark: null }
       const modelStatus = String(model.lifecycle_status || '')
       const providerStatus = String(model.provider_status || '')
       const blocked = ['deprecated','removed'].includes(modelStatus) || ['deprecated','removed'].includes(providerStatus)
@@ -181,6 +188,7 @@ Deno.serve(async (req: Request) => {
         provider_model_id: model.provider_model_id,
         display_name: model.display_name,
         role,
+        policy_order: policyOrder,
         candidate_eligible: candidateEligible,
         runtime_ready: runtimeReady,
         execution_surface: executionSurface,
@@ -195,15 +203,71 @@ Deno.serve(async (req: Request) => {
     }
 
     const plan = {
-      primary: primary.map((key: string) => routeEntry(key, 'primary')),
-      reviewers: reviewers.map((key: string) => routeEntry(key, 'reviewer')),
-      fallbacks: fallbacks.map((key: string) => routeEntry(key, 'fallback')),
+      primary: primary.map((key: string, index: number) => routeEntry(key, 'primary', index)),
+      reviewers: reviewers.map((key: string, index: number) => routeEntry(key, 'reviewer', index)),
+      fallbacks: fallbacks.map((key: string, index: number) => routeEntry(key, 'fallback', index)),
     }
 
     const strategy = String(policy.strategy)
     const deterministicOnly = strategy === 'deterministic_only'
+    const optimizationObjective = String(policy.optimization_objective || 'lowest_cost_passing_quality')
+    const minimumQualityScore = finiteNumber(policy.minimum_quality_score)
+    const costCeilingUsd = finiteNumber(policy.cost_ceiling_usd)
+
     const readyPrimary = plan.primary.filter((entry: any) => entry.runtime_ready)
-    const routable = deterministicOnly || readyPrimary.length > 0
+    const benchmarkEligible = readyPrimary.filter((entry: any) => {
+      const benchmark = entry.benchmark
+      const samples = finiteNumber(benchmark?.sample_count) || 0
+      const quality = finiteNumber(benchmark?.quality_score)
+      const acceptedRate = finiteNumber(benchmark?.accepted_rate)
+      const cost = finiteNumber(benchmark?.cost_per_accepted_output)
+      if (samples <= 0 || cost === null) return false
+      if (minimumQualityScore !== null && (quality === null || quality < minimumQualityScore)) return false
+      if (costCeilingUsd !== null && cost > costCeilingUsd) return false
+      if (acceptedRate !== null && acceptedRate <= 0) return false
+      return true
+    })
+
+    let rankedPrimary = [...readyPrimary]
+    let selectionBasis = 'policy_order_no_benchmark'
+
+    if (optimizationObjective === 'lowest_cost_passing_quality' && benchmarkEligible.length) {
+      rankedPrimary = [...benchmarkEligible].sort((a: any, b: any) => {
+        const costA = finiteNumber(a.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        const costB = finiteNumber(b.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        if (costA !== costB) return costA - costB
+        const qualityA = finiteNumber(a.benchmark?.quality_score) ?? -1
+        const qualityB = finiteNumber(b.benchmark?.quality_score) ?? -1
+        if (qualityA !== qualityB) return qualityB - qualityA
+        return Number(a.policy_order || 0) - Number(b.policy_order || 0)
+      })
+      selectionBasis = 'benchmark_cost_per_accepted_output'
+    } else if (optimizationObjective === 'best_quality_within_ceiling' && benchmarkEligible.length) {
+      rankedPrimary = [...benchmarkEligible].sort((a: any, b: any) => {
+        const qualityA = finiteNumber(a.benchmark?.quality_score) ?? -1
+        const qualityB = finiteNumber(b.benchmark?.quality_score) ?? -1
+        if (qualityA !== qualityB) return qualityB - qualityA
+        const costA = finiteNumber(a.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        const costB = finiteNumber(b.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        return costA - costB
+      })
+      selectionBasis = 'benchmark_best_quality_within_ceiling'
+    } else if (optimizationObjective === 'lowest_latency_passing_quality' && benchmarkEligible.length) {
+      rankedPrimary = [...benchmarkEligible].sort((a: any, b: any) => {
+        const latencyA = finiteNumber(a.benchmark?.latency_p50_ms) ?? Number.POSITIVE_INFINITY
+        const latencyB = finiteNumber(b.benchmark?.latency_p50_ms) ?? Number.POSITIVE_INFINITY
+        if (latencyA !== latencyB) return latencyA - latencyB
+        const costA = finiteNumber(a.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        const costB = finiteNumber(b.benchmark?.cost_per_accepted_output) ?? Number.POSITIVE_INFINITY
+        return costA - costB
+      })
+      selectionBasis = 'benchmark_lowest_latency_passing_quality'
+    } else {
+      rankedPrimary.sort((a: any, b: any) => Number(a.policy_order || 0) - Number(b.policy_order || 0))
+    }
+
+    const recommendedPrimary = deterministicOnly ? null : (rankedPrimary[0] || null)
+    const routable = deterministicOnly || Boolean(recommendedPrimary)
 
     return json(req, {
       ok: true,
@@ -213,12 +277,20 @@ Deno.serve(async (req: Request) => {
       task_type: taskType,
       quality_tier: qualityTier,
       strategy,
+      optimization_objective: optimizationObjective,
+      minimum_quality_score: minimumQualityScore,
       required_validators: policy.required_validators || [],
       max_parallel: Number(policy.max_parallel || 1),
       max_attempts: Number(policy.max_attempts || 1),
       escalate_on_failure: Boolean(policy.escalate_on_failure),
-      cost_ceiling_usd: policy.cost_ceiling_usd,
+      cost_ceiling_usd: costCeilingUsd,
       plan,
+      selection: {
+        basis: selectionBasis,
+        benchmark_candidates: benchmarkEligible.length,
+        recommended_primary: recommendedPrimary,
+        ranked_primary: rankedPrimary,
+      },
       release_gate: deterministicOnly
         ? 'deterministic_validators_required'
         : 'provider_output_must_pass_required_validators',
