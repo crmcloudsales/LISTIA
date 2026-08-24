@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'public/**'
+      - 'wrangler-listia-app.jsonc'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
@@ -48,10 +49,12 @@ jobs:
           grep -Fq "ja-JP" public/listia-voice.js
           grep -Fq 'Version 1.4' public/terms.html
           grep -Fq 'Version 1.3' public/privacy.html
+          grep -Fq 'single-page-application' wrangler-listia-app.jsonc
           test -f public/manifest-ja.webmanifest
           test -f public/sw.js
           test -f public/_headers
-          test -f public/_redirects
+          test -f wrangler-listia-app.jsonc
+          test ! -f public/_redirects
 
       - name: Deploy isolated Workers Static Assets release
         id: worker_deploy
@@ -68,11 +71,8 @@ jobs:
             [[ -n "${token}" ]] || continue
             echo "Trying Workers Static Assets deployment with ${source} token"
             if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" \
-              npx --yes wrangler@${WRANGLER_VERSION} deploy \
-                --name "${WORKER_NAME}" \
-                --assets public \
-                --compatibility-date 2026-08-24 \
-                2>&1 | tee "/tmp/listia-app-${source}.log"; then
+              npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-app.jsonc \
+              2>&1 | tee "/tmp/listia-app-${source}.log"; then
               selected="${source}"
               preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' "/tmp/listia-app-${source}.log" | head -1 | sed 's/[),]$//' || true)"
               break
