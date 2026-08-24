@@ -1,4 +1,4 @@
-name: Deploy LISTIA to Cloudflare Pages
+name: Deploy LISTIA App to Cloudflare Workers
 
 on:
   push:
@@ -10,10 +10,9 @@ on:
 
 permissions:
   contents: write
-  deployments: write
 
 concurrency:
-  group: listia-pages-main
+  group: listia-app-production
   cancel-in-progress: true
 
 jobs:
@@ -24,7 +23,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_API_TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
-      PAGES_PROJECT: listia-pwa
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      APP_HOSTNAME: app.listiaapp.com
+      WORKER_NAME: listia-app
       WRANGLER_VERSION: '4.125.0'
     steps:
       - name: Checkout
@@ -48,59 +49,98 @@ jobs:
           grep -Fq 'Version 1.4' public/terms.html
           grep -Fq 'Version 1.3' public/privacy.html
           test -f public/manifest-ja.webmanifest
+          test -f public/sw.js
+          test -f public/_headers
+          test -f public/_redirects
 
-      - name: Deploy to Cloudflare Pages with available authorized token
-        id: pages_deploy
+      - name: Deploy isolated Workers Static Assets release
+        id: worker_deploy
         shell: bash
         run: |
           set -Eeuo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
           test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}" || { echo 'No Cloudflare token is configured'; exit 1; }
 
-          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
           selected=''
-          for source in primary security; do
-            if [[ "${source}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
+          preview_url=''
+          for source in security primary; do
+            if [[ "${source}" == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
             [[ -n "${token}" ]] || continue
-
-            probe="$(curl --silent --show-error --max-time 20 --output "/tmp/pages-${source}.json" --write-out '%{http_code}' --header "Authorization: Bearer ${token}" --header 'Accept: application/json' "${api}" || true)"
-            echo "Cloudflare Pages project probe (${source} token): HTTP ${probe}"
-            if [[ "${probe}" != 200 ]]; then
-              if jq -e . "/tmp/pages-${source}.json" >/dev/null 2>&1; then
-                jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "/tmp/pages-${source}.json"
-              fi
-              continue
-            fi
-
-            echo "Trying Pages deployment with ${source} token"
+            echo "Trying Workers Static Assets deployment with ${source} token"
             if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" \
-              npx --yes wrangler@${WRANGLER_VERSION} pages deploy public --project-name="${PAGES_PROJECT}" --branch=main; then
+              npx --yes wrangler@${WRANGLER_VERSION} deploy \
+                --name "${WORKER_NAME}" \
+                --assets public \
+                --compatibility-date 2026-08-24 \
+                2>&1 | tee "/tmp/listia-app-${source}.log"; then
               selected="${source}"
+              preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' "/tmp/listia-app-${source}.log" | head -1 | sed 's/[),]$//' || true)"
               break
             fi
-            echo "Pages deployment was rejected for ${source} token; trying next configured token."
           done
 
-          if [[ -z "${selected}" ]]; then
-            echo 'PAGES_DEPLOY_BLOCKED: neither configured Cloudflare token has effective Pages deployment permission for this account/project.'
+          [[ -n "${selected}" ]] || { echo 'WORKER_DEPLOY_BLOCKED: neither token can deploy Workers Static Assets.'; exit 1; }
+          [[ -n "${preview_url}" ]] || { echo 'Worker deployed but workers.dev URL could not be resolved from Wrangler output.'; exit 1; }
+          echo "token_source=${selected}" >> "${GITHUB_OUTPUT}"
+          echo "preview_url=${preview_url}" >> "${GITHUB_OUTPUT}"
+          echo "Worker preview URL: ${preview_url}"
+
+      - name: Smoke-test isolated Worker before changing app domain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base='${{ steps.worker_deploy.outputs.preview_url }}'
+          ok=false
+          for attempt in $(seq 1 12); do
+            root="$(curl -sS -L --max-time 20 -o /tmp/worker-root.html -w '%{http_code}' "${base}?lang=ja" || true)"
+            voice="$(curl -sS -L --max-time 20 -o /tmp/worker-voice.js -w '%{http_code}' "${base%/}/listia-voice.js" || true)"
+            terms="$(curl -sS -L --max-time 20 -o /tmp/worker-terms.html -w '%{http_code}' "${base%/}/terms.html" || true)"
+            if [[ "$root" == 200 && "$voice" == 200 && "$terms" == 200 ]] && grep -Fq 'LISTIA' /tmp/worker-root.html && grep -Fq 'ru-RU' /tmp/worker-voice.js && grep -Fq 'ja-JP' /tmp/worker-voice.js && grep -Fq 'Version 1.4' /tmp/worker-terms.html; then ok=true; break; fi
+            echo "Isolated Worker smoke test waiting (${attempt}/12): root=${root} voice=${voice} terms=${terms}"
+            sleep 5
+          done
+          [[ "$ok" == true ]] || { echo 'Isolated Worker failed smoke tests; production domain was not changed.'; exit 1; }
+
+      - name: Attach app.listiaapp.com to validated LISTIA Worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ '${{ steps.worker_deploy.outputs.token_source }}' == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
+          api='https://api.cloudflare.com/client/v4'
+          domains_url="${api}/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains"
+          before="$(mktemp)"
+          http="$(curl -sS --max-time 30 --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --output "${before}" --write-out '%{http_code}' "${domains_url}")"
+          [[ "$http" == 200 ]] || { cat "${before}"; exit 1; }
+          count="$(jq --arg host "${APP_HOSTNAME}" '[.result[] | select(.hostname == $host)] | length' "${before}")"
+          current_service="$(jq -r --arg host "${APP_HOSTNAME}" '[.result[] | select(.hostname == $host)][0].service // "absent"' "${before}")"
+          echo "Worker custom domain before: count=${count} service=${current_service}"
+          [[ "$count" -le 1 ]] || { echo 'Refusing ambiguous app Worker ownership.'; exit 1; }
+          if [[ "$count" == 1 && "$current_service" != "${WORKER_NAME}" ]]; then
+            echo "Refusing to replace unexpected Worker owner ${current_service}."
             exit 1
           fi
-          echo "token_source=${selected}" >> "${GITHUB_OUTPUT}"
-          echo "Cloudflare Pages deployment accepted with ${selected} token."
+          if [[ "$count" == 0 ]]; then
+            body="$(jq -nc --arg environment production --arg hostname "${APP_HOSTNAME}" --arg service "${WORKER_NAME}" --arg zone_id "${CLOUDFLARE_ZONE_ID}" '{environment:$environment,hostname:$hostname,service:$service,zone_id:$zone_id}')"
+            out="$(mktemp)"
+            attach_http="$(curl -sS --max-time 45 --request PUT --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --header 'Content-Type: application/json' --data "${body}" --output "${out}" --write-out '%{http_code}' "${domains_url}")"
+            echo "Attach app Worker custom domain: HTTP ${attach_http}"
+            cat "${out}"
+            [[ "$attach_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "${out}" >/dev/null || { echo 'App custom-domain attach failed; isolated Worker remains available but production was not switched.'; exit 1; }
+          fi
 
-      - name: Verify PWA live
+      - name: Verify LISTIA production PWA live
         shell: bash
         run: |
           set -Eeuo pipefail
           ok=false
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 30); do
             root_ru="$(curl -sS -L --max-time 20 -o /tmp/pwa.html -w '%{http_code}' 'https://app.listiaapp.com/?lang=ru' || true)"
             ja="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://app.listiaapp.com/japanese-locale.js' || true)"
             voice="$(curl -sS -L --max-time 20 -o /tmp/voice.js -w '%{http_code}' 'https://app.listiaapp.com/listia-voice.js' || true)"
             terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
             privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
             if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
-            echo "Live verification waiting (${attempt}/24): root=${root_ru} ja=${ja} voice=${voice} terms=${terms} privacy=${privacy}"
+            echo "Production verification waiting (${attempt}/30): root=${root_ru} ja=${ja} voice=${voice} terms=${terms} privacy=${privacy}"
             sleep 5
           done
           [[ "$ok" == true ]]
@@ -122,7 +162,8 @@ jobs:
             echo 'LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED'
             echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "source_commit=${GITHUB_SHA}"
-            echo "cloudflare_token_source=${{ steps.pages_deploy.outputs.token_source }}"
+            echo 'hosting=Cloudflare Workers Static Assets'
+            echo "cloudflare_token_source=${{ steps.worker_deploy.outputs.token_source }}"
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'voice_native_tts_11_languages=true'
             echo 'russian_live=true'
@@ -134,5 +175,5 @@ jobs:
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
           git add PWA_LIVE_DEPLOYMENT_PROOF.txt
-          git commit -m 'Record verified LISTIA PWA 11-language voice deployment' || exit 0
+          git commit -m 'Record verified LISTIA PWA Workers deployment' || exit 0
           git push origin main
