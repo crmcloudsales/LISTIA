@@ -39,6 +39,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 33. `20260824060354` — `add_multimodel_ai_provider_registry`
 34. `20260824060633` — `index_ai_runs_provider_key`
 35. `20260824060742` — `add_ai_route_policies`
+36. `20260824061155` — `add_ai_provider_runtime_configs`
 
 The current LISTIA billing, property-processing, and AI-engine migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
