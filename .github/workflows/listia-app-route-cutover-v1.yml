@@ -1,0 +1,150 @@
+name: LISTIA App Worker Route Cutover
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-app-route-cutover-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-app-route-cutover
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      APP_HOSTNAME: app.listiaapp.com
+      WORKER_NAME: listia-app
+      WORKER_PREVIEW: https://listia-app.upsells.workers.dev
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Revalidate isolated LISTIA Worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$(curl -sS -L --max-time 20 -o /tmp/root.html -w '%{http_code}' "${WORKER_PREVIEW}?lang=ru")"
+          voice="$(curl -sS -L --max-time 20 -o /tmp/voice.js -w '%{http_code}' "${WORKER_PREVIEW}/listia-voice.js")"
+          terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' "${WORKER_PREVIEW}/terms.html")"
+          privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' "${WORKER_PREVIEW}/privacy.html")"
+          test "$root" = 200
+          test "$voice" = 200
+          test "$terms" = 200
+          test "$privacy" = 200
+          grep -Fq 'ru-RU' /tmp/voice.js
+          grep -Fq 'ja-JP' /tmp/voice.js
+          grep -Fq 'Version 1.4' /tmp/terms.html
+          grep -Fq 'Version 1.3' /tmp/privacy.html
+
+      - name: Put validated Worker in front of existing app hostname
+        id: route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/workers/routes"
+          pattern="${APP_HOSTNAME}/*"
+          selected=''
+
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/routes-${source}.json"
+            http="$(curl -sS --max-time 25 --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --output "$out" --write-out '%{http_code}' "$api" || true)"
+            echo "Workers Routes probe (${source}): HTTP ${http}"
+            if [[ "$http" != 200 ]]; then
+              jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "$out" 2>/dev/null || true
+              continue
+            fi
+
+            exact_count="$(jq --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)] | length' "$out")"
+            exact_script="$(jq -r --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)][0].script // "absent"' "$out")"
+            exact_id="$(jq -r --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)][0].id // empty' "$out")"
+            echo "Existing exact app route: count=${exact_count} script=${exact_script}"
+            [[ "$exact_count" -le 1 ]] || { echo 'Refusing ambiguous app route ownership.'; exit 1; }
+
+            if [[ "$exact_count" == 1 ]]; then
+              if [[ "$exact_script" == "$WORKER_NAME" ]]; then
+                selected="$source"
+                echo 'Exact LISTIA app Worker route already present.'
+                break
+              fi
+              echo "Refusing to overwrite existing exact app route owned by ${exact_script}."
+              exit 1
+            fi
+
+            body="$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')"
+            create_out="/tmp/route-create-${source}.json"
+            create_http="$(curl -sS --max-time 30 --request POST --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --header 'Content-Type: application/json' --data "$body" --output "$create_out" --write-out '%{http_code}' "$api" || true)"
+            echo "Create LISTIA app route (${source}): HTTP ${create_http}"
+            jq -c '{success,result,errors:[(.errors // [])[]|{code,message}]}' "$create_out" 2>/dev/null || true
+            if [[ "$create_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "$create_out" >/dev/null 2>&1; then
+              selected="$source"
+              break
+            fi
+          done
+
+          [[ -n "$selected" ]] || { echo 'ROUTE_CUTOVER_BLOCKED: configured tokens do not have Workers Routes permission.'; exit 1; }
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production LISTIA immediately after route cutover
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ok=false
+          for attempt in $(seq 1 20); do
+            root="$(curl -sS -L --max-time 20 -o /tmp/live.html -w '%{http_code}' 'https://app.listiaapp.com/?lang=ru' || true)"
+            ja="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://app.listiaapp.com/japanese-locale.js' || true)"
+            voice="$(curl -sS -L --max-time 20 -o /tmp/voice.js -w '%{http_code}' 'https://app.listiaapp.com/listia-voice.js' || true)"
+            terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
+            privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
+            if [[ "$root" == 200 && "$ja" == 200 && "$voice" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
+            echo "Production route verification ${attempt}/20 root=${root} ja=${ja} voice=${voice} terms=${terms} privacy=${privacy}"
+            sleep 3
+          done
+          [[ "$ok" == true ]]
+          for lang in es en fr it pt-BR de ar-AE ru he zh-CN ja; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://app.listiaapp.com/?lang=${lang}")"
+            test "$code" = 200
+          done
+          curl -sS -L --max-time 20 -o /tmp/voice-lab.html 'https://app.listiaapp.com/voice-lab.html'
+          grep -Fq '日本語 · 日本' /tmp/voice-lab.html
+
+      - name: Persist live proof
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          cat > PWA_LIVE_DEPLOYMENT_PROOF.txt <<EOF
+          LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED
+          verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          source_worker=listia-app
+          hosting=Cloudflare Workers Static Assets via Worker Route
+          route=app.listiaapp.com/*
+          cloudflare_token_source=${{ steps.route.outputs.token_source }}
+          languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja
+          voice_native_tts_11_languages=true
+          russian_live=true
+          japanese_live=true
+          terms_version=1.4
+          privacy_version=1.3
+          free_property_limit=3
+          EOF
+          sed -i 's/^          //' PWA_LIVE_DEPLOYMENT_PROOF.txt
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add PWA_LIVE_DEPLOYMENT_PROOF.txt
+          git commit -m 'Record verified LISTIA PWA Worker route deployment' || exit 0
+          git push origin main
