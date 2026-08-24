@@ -20,6 +20,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      PAGES_PROJECT: listia-pwa
+      WRANGLER_VERSION: '4.125.0'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -43,13 +49,44 @@ jobs:
           grep -Fq 'Version 1.3' public/privacy.html
           test -f public/manifest-ja.webmanifest
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy public --project-name=listia-pwa --branch=main
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to Cloudflare Pages with available authorized token
+        id: pages_deploy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}" || { echo 'No Cloudflare token is configured'; exit 1; }
+
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}"
+          selected=''
+          for source in primary security; do
+            if [[ "${source}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
+            [[ -n "${token}" ]] || continue
+
+            probe="$(curl --silent --show-error --max-time 20 --output "/tmp/pages-${source}.json" --write-out '%{http_code}' --header "Authorization: Bearer ${token}" --header 'Accept: application/json' "${api}" || true)"
+            echo "Cloudflare Pages project probe (${source} token): HTTP ${probe}"
+            if [[ "${probe}" != 200 ]]; then
+              if jq -e . "/tmp/pages-${source}.json" >/dev/null 2>&1; then
+                jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "/tmp/pages-${source}.json"
+              fi
+              continue
+            fi
+
+            echo "Trying Pages deployment with ${source} token"
+            if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" \
+              npx --yes wrangler@${WRANGLER_VERSION} pages deploy public --project-name="${PAGES_PROJECT}" --branch=main; then
+              selected="${source}"
+              break
+            fi
+            echo "Pages deployment was rejected for ${source} token; trying next configured token."
+          done
+
+          if [[ -z "${selected}" ]]; then
+            echo 'PAGES_DEPLOY_BLOCKED: neither configured Cloudflare token has effective Pages deployment permission for this account/project.'
+            exit 1
+          fi
+          echo "token_source=${selected}" >> "${GITHUB_OUTPUT}"
+          echo "Cloudflare Pages deployment accepted with ${selected} token."
 
       - name: Verify PWA live
         shell: bash
@@ -63,6 +100,7 @@ jobs:
             terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
             privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
             if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
+            echo "Live verification waiting (${attempt}/24): root=${root_ru} ja=${ja} voice=${voice} terms=${terms} privacy=${privacy}"
             sleep 5
           done
           [[ "$ok" == true ]]
@@ -84,6 +122,7 @@ jobs:
             echo 'LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED'
             echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "source_commit=${GITHUB_SHA}"
+            echo "cloudflare_token_source=${{ steps.pages_deploy.outputs.token_source }}"
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'voice_native_tts_11_languages=true'
             echo 'russian_live=true'
