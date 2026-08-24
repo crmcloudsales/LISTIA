@@ -34,6 +34,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 28. `20260824044325` — `expand_property_locales`
 29. `20260824044454` — `lock_property_processing_trigger_functions`
 30. `20260824044559` — `auto_prepare_property_processing_manifest`
+31. `20260824044903` — `add_provider_neutral_property_ai_queue`
 
 The current LISTIA billing and property-processing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
