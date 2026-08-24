@@ -1,9 +1,11 @@
 LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-24T13:27:54Z
+verified_at_utc=2026-08-24T13:29:23Z
+source_commit=99aba3d1c18749fca986b2f6cd43a29600c61837
 source_worker=listia-app
 hosting=Cloudflare Workers Static Assets via Worker Route
 route=app.listiaapp.com/*
-cloudflare_token_source=primary
+worker_deploy_token_source=security
+route_token_source=primary
 languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja
 voice_native_tts_11_languages=true
 russian_live=true
