@@ -53,6 +53,10 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 47. `20260824095159` — `add_standardized_gestion_pricebook_twilio_cloudflare`
 48. `20260824113420` — `pricing_v2_markups_domains_free_three_properties`
 49. `20260824114346` — `lock_pricing_helper_search_paths`
+50. `20260824120611` — `protect_media_prices_without_benchmark_dependency`
+51. `20260824121135` — `expand_property_locales_to_ten`
+52. `20260824121438` — `bind_live_stripe_catalog_v3`
+53. `20260824125221` — `add_japanese_property_locale`
 
 The current LISTIA billing, standardized Gestión pricing, property-processing, AI-engine, communications and cost-routing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
