@@ -36,7 +36,6 @@ const allowedTasks = new Set([
   'property_extract','flyer_copy','flyer_render','advisor_identity_preserve',
   'property_fidelity_preserve','video_generate','quality_review',
 ])
-const runtimeStatuses = new Set(['adapter_ready','benchmarked','active','fallback'])
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
@@ -133,8 +132,22 @@ Deno.serve(async (req: Request) => {
       order by model_key, benchmark_version desc
     ` : []
 
+    const surfaces = unique(modelRows.map((model: any) => {
+      const verifiedVia = String(model.capabilities?.verified_via || '')
+      return model.direct_api_available ? String(model.provider_key) : verifiedVia
+    }))
+
+    const runtimeRows = surfaces.length ? await sql`
+      select runtime_key, provider_key, execution_surface, adapter_key, enabled,
+             credential_status, health_status, configuration, last_healthcheck_at,
+             last_error
+      from private.ai_provider_runtimes
+      where execution_surface = any(${surfaces}::text[])
+    ` : []
+
     const scoreByModel = new Map(scoreRows.map((row: any) => [String(row.model_key), row]))
     const byKey = new Map(modelRows.map((row: any) => [String(row.model_key), row]))
+    const runtimeBySurface = new Map(runtimeRows.map((row: any) => [String(row.execution_surface), row]))
 
     function routeEntry(modelKey: string, role: 'primary'|'reviewer'|'fallback') {
       const model = byKey.get(modelKey)
@@ -145,11 +158,22 @@ Deno.serve(async (req: Request) => {
       const candidateEligible = !blocked
       const verifiedVia = String(model.capabilities?.verified_via || '') || null
       const executionSurface = model.direct_api_available ? String(model.provider_key) : verifiedVia
-      const runtimeReady = candidateEligible && runtimeStatuses.has(modelStatus) && Boolean(executionSurface)
-      let reason = 'candidate_adapter_not_ready'
+      const runtime = executionSurface ? runtimeBySurface.get(executionSurface) : null
+      const credentialsReady = runtime && ['configured','not_required'].includes(String(runtime.credential_status || ''))
+      const healthReady = runtime && String(runtime.health_status || 'unknown') !== 'down'
+      const modelIdentifierReady = Boolean(model.provider_model_id)
+      const runtimeReady = Boolean(candidateEligible && executionSurface && runtime?.enabled && credentialsReady && healthReady && modelIdentifierReady)
+
+      let reason = 'runtime_not_configured'
       if (blocked) reason = 'deprecated_or_removed'
       else if (!executionSurface) reason = 'execution_surface_not_ready'
+      else if (!runtime) reason = 'runtime_not_registered'
+      else if (!runtime.enabled) reason = 'runtime_disabled'
+      else if (!credentialsReady) reason = 'credentials_not_configured'
+      else if (!modelIdentifierReady) reason = 'model_identifier_not_configured'
+      else if (!healthReady) reason = 'runtime_down'
       else if (runtimeReady) reason = 'runtime_ready'
+
       return {
         model_key: modelKey,
         provider_key: model.provider_key,
@@ -159,7 +183,9 @@ Deno.serve(async (req: Request) => {
         candidate_eligible: candidateEligible,
         runtime_ready: runtimeReady,
         execution_surface: executionSurface,
-        direct_api_available: Boolean(model.direct_api_available),
+        adapter_key: runtime?.adapter_key || null,
+        credential_status: runtime?.credential_status || 'not_configured',
+        health_status: runtime?.health_status || 'unknown',
         lifecycle_status: modelStatus,
         deprecation_risk: model.deprecation_risk,
         benchmark: scoreByModel.get(modelKey) || null,
