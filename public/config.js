@@ -17,13 +17,15 @@ window.LISTIA_CONFIG = {
 // Keep optional runtime modules isolated from the core PWA.
 (() => {
   const modules = [
-    ["/global-locales.js?v=1", "listiaGlobalLocalesLoader"],
+    ["/global-locales.js?v=2", "listiaGlobalLocalesLoader"],
+    ["/japanese-locale.js?v=1", "listiaJapaneseLocaleLoader"],
     ["/pricing-policy.js?v=2", "listiaPricingPolicyLoader"],
     ["/billing.js?v=1", "listiaBillingLoader"],
     ["/runtime.js?v=1", "listiaRuntimeLoader"],
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
-    ["/office-modules.js?v=1", "listiaOfficeModulesLoader"]
+    ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
+    ["/listia-voice.js?v=1", "listiaVoiceLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
