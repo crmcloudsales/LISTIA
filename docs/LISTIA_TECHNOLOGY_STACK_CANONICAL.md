@@ -5,9 +5,9 @@ Scope: LISTIA only
 Operating principle: **lowest cost that passes the required Quality Gate**.
 
 ## Product rule
-The user operates LISTIA from the phone/PWA. Infrastructure, APIs, models, GPU runtimes, queues, compositors and provider selection remain invisible. Mobile-first does not mean inference runs on the phone; it means the phone is the complete control surface while LISTIA executes server-side work with minimum user friction.
+The user operates LISTIA from the phone/PWA. Infrastructure, APIs, models, GPU runtimes, queues, compositors, telecom carriers and provider selection remain invisible. Mobile-first means the phone is the complete control surface while LISTIA executes server-side work with minimum friction.
 
-## Cost rule
+## Cost and spending rules
 1. Deterministic/no-model solution first when it can satisfy the task.
 2. Free/open-source/open-weight route next when its real operating cost and complexity are lower.
 3. Low-cost pay-per-use API next.
@@ -15,7 +15,10 @@ The user operates LISTIA from the phone/PWA. Infrastructure, APIs, models, GPU r
 5. Parallel expensive generation is reserved for Q3/Q4 or failed validation, never the default.
 6. Optimize by **cost per accepted output**, not headline token/second price.
 7. Avoid fixed subscriptions and always-on GPU infrastructure until measured volume proves them cheaper.
-8. Third-party costs flow through Gestiones and plan markup.
+8. The customer buys a standardized LISTIA Gestión; provider/model costs remain internal. FREE/PRO/PREMIUM 30%/20%/10% are target internal economics rather than rigid per-call contractual markups.
+9. Billable actions require a visible price/authorized ceiling before execution unless covered by an explicit standing budget.
+10. A route that cannot meet the approved price and internal safety margin is rerouted or blocked, never surprise-charged.
+11. Paid automation grows progressively with demonstrated customer usage/value; LISTIA must not create unnecessary spend merely because automation exists.
 
 ## Core production architecture
 ### LISTIA Router
@@ -85,6 +88,38 @@ Original property media + original/canonical advisor media -> HyperFrames/FFmpeg
 ### Repair
 Runway Aleph 2.0 is especially valuable for localized repair/editing of existing video; it should not be the automatic first generator when a cheaper deterministic route works.
 
+## Communications provider pool
+Provider names remain internal to the normal end-user experience.
+
+### Meta Cloud API
+Preferred WhatsApp route when direct Meta economics and account requirements make it the lowest-friction/lowest-cost compliant route.
+
+### Telnyx
+Core cost-first candidate for voice, voice AI, SMS, WhatsApp fallback, phone numbers and SIP. Destination-specific economics must be checked before routing.
+
+### Twilio
+Approved fallback/benchmark CPaaS for voice, SMS, WhatsApp, phone numbers, Verify and pricing discovery. LISTIA should use Twilio's real-time/account-specific Pricing APIs where relevant rather than depend on stale hard-coded international prices.
+
+### Telegram
+Zero-message-cost candidate under ordinary Bot API limits, subject to user-initiated/authorized reachability and legal consent rules.
+
+### Amazon SES
+Cost-first candidate for transactional/bulk email with sending-domain verification, consent/lawful basis, unsubscribe and suppression controls.
+
+## Cloudflare user infrastructure pool
+Cloudflare is both a core LISTIA infrastructure provider and a behind-the-scenes provider for customer-facing Gestiones.
+
+Relevant capabilities:
+- Registrar — live domain availability, registration and renewal pricing; first domain provider candidate.
+- Pages — static websites with zero static-request charge under current product rules.
+- Workers — functions/automation; Free quotas first, paid only when economics justify it.
+- R2 — object/media storage with low storage price and current zero Internet egress pricing.
+- DNS/CDN/SSL/TLS — standard website performance/security foundation.
+- WAF / Turnstile — protection/anti-bot layers where appropriate.
+- Images and other services — use only if they beat alternatives on accepted-output cost/quality.
+
+The domain purchase interface must stay mobile-first: one desired-domain field, requested result + at most three alternatives, all-in first-year and renewal price, one approval action. No registrar jargon unless advanced settings are deliberately opened.
+
 ## Compute strategy
 - Mobile user sees none of this.
 - Google Cloud Run CPU is the first deployment candidate for the LiteLLM/LangGraph orchestration service because it can scale to zero and has a recurring free tier; keep minimum instances at zero while latency is acceptable.
@@ -140,7 +175,7 @@ User shorthand mapped to canonical names:
 A generative model cannot be assumed to preserve a property or advisor 100%. When 100% preservation is required, original pixels/assets are canonical. LISTIA must generate or modify only authorized regions and reject unauthorized changes.
 
 ## Activation lifecycle
-A technology/model moves through:
+A technology/model/provider moves through:
 `discovered -> verified -> adapter_ready -> benchmarked -> active -> fallback/deprecated`.
 
-Mentioning or registering a technology never makes it runtime-ready. Credentials, adapter, health check and benchmark must all pass first.
+Mentioning or registering a technology never makes it runtime-ready. Credentials, adapter, health check, legal fit and benchmark must all pass first.
