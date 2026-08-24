@@ -49,6 +49,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 43. `20260824091002` — `add_usage_rate_catalog_and_communication_policies`
 44. `20260824091424` — `add_omnichannel_lead_contacts_and_templates`
 45. `20260824091807` — `expand_content_rate_cards`
+46. `20260824092015` — `index_communication_dispatch_foreign_keys`
 
 The current LISTIA billing, property-processing, AI-engine, communications and cost-routing migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
