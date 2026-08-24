@@ -17,7 +17,8 @@ window.LISTIA_CONFIG = {
 // Keep optional runtime modules isolated from the core PWA.
 (() => {
   const modules = [
-    ["/pricing-policy.js?v=1", "listiaPricingPolicyLoader"],
+    ["/global-locales.js?v=1", "listiaGlobalLocalesLoader"],
+    ["/pricing-policy.js?v=2", "listiaPricingPolicyLoader"],
     ["/billing.js?v=1", "listiaBillingLoader"],
     ["/runtime.js?v=1", "listiaRuntimeLoader"],
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
