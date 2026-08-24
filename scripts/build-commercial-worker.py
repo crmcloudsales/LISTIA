@@ -59,8 +59,8 @@ def validate_cloudco(html:str,footer_js:str)->None:
 def validate_legal(terms_html:str,privacy_html:str)->None:
     if 'Version 1.4' not in terms_html or 'LISTIA Voice' not in terms_html or 'up to three non-archived properties' not in terms_html:
         raise ValueError('Terms are not current v1.4')
-    if '<h1>Privacy Policy</h1>' not in privacy_html:
-        raise ValueError('Privacy Policy source missing')
+    if 'Version 1.3' not in privacy_html or '<h1>Privacy Policy</h1>' not in privacy_html:
+        raise ValueError('Privacy Policy is not current v1.3')
 
 
 def b64(path:Path)->str:
@@ -69,6 +69,7 @@ def b64(path:Path)->str:
 
 def build_worker(html:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str)->str:
     validate_html(html);validate_locale_assets(global_locales_js,japanese_js,footer_js);validate_cloudco(cloudco_html,footer_js);validate_legal(terms_html,privacy_html)
+    cloudco_html=cloudco_html.replace('/cloudco-assets/cloudco-logo-official.webp','/cloudco-assets/cloudco-logo-official.webp?v=2')
     robots="User-agent: *\nAllow: /\nDisallow: /cloudco\nDisallow: /cloudco/\nSitemap: https://listiaapp.com/sitemap.xml\n"
     sitemap_urls="".join(f"  <url><loc>https://listiaapp.com/?lang={x}</loc></url>\n" for x in LANGUAGES).replace("&","&amp;")
     sitemap='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+sitemap_urls+'</urlset>\n'
