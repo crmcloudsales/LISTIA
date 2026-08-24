@@ -1,0 +1,33 @@
+/* LISTIA readability floor — mobile-first.
+   Product rule: no user-facing text should require zooming. Legacy 8px/9px/10px labels are raised to 11px. */
+.app-shell small,
+.plan-price small,
+.status-pill,
+.source-copy small,
+.source-state,
+.discovery-item-copy small,
+.discovery-note span,
+.dna-summary span,
+.office-primary small,
+.office-stat span,
+.office-actions .secondary small,
+.office-connected small,
+.property-card-top small,
+.property-status,
+.property-card-meta span,
+.empty-state span,
+.file-drop small,
+.selected-files strong,
+.selected-files span,
+label span em,
+.plan-note {
+  font-size:11px !important;
+  line-height:1.4;
+}
+
+/* Keep dense status text readable without making cards visually heavy. */
+.property-status,
+.status-pill,
+.source-state {
+  letter-spacing:.02em;
+}
