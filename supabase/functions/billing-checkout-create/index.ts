@@ -167,7 +167,7 @@ Deno.serve(async (req: Request) => {
       insert into public.organization_billing
         (organization_id, plan_key, billing_status, access_state, included_seats, extra_seats, usage_markup_percent)
       values
-        (${organizationId}::uuid, 'free', 'free', 'active', 0, 0, 30)
+        (${organizationId}::uuid, 'free', 'free', 'active', 0, 0, private.plan_usage_markup_percent('free'))
       on conflict (organization_id) do nothing
     `
 
