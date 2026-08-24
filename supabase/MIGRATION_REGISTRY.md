@@ -45,6 +45,7 @@ This registry was reconciled against the live Supabase migration table on 2026-0
 39. `20260824084805` — `add_low_cost_technology_registry_and_route_objective`
 40. `20260824085004` — `expand_canonical_ai_media_technology_registry`
 41. `20260824085357` — `prioritize_open_media_avatar_and_lipsync`
+42. `20260824090050` — `add_google_cloud_run_cost_routes`
 
 The current LISTIA billing, property-processing, and AI-engine migrations created in this workflow are stored as SQL files in this repository. Historical migrations remain recorded here while exact SQL snapshots are progressively reconciled from the live migration history; do not re-run a historical migration against production simply because a local SQL file is added later.
 
