@@ -34,18 +34,37 @@
       freeDesc: 'يشمل حتى 3 عقارات. ابدأ مع LISTIA وادفع فقط مقابل الإجراءات التي توافق عليها.',
       freeNote: 'تشمل الخطة المجانية حتى 3 عقارات.',
       freeLimit: 'تشمل خطتك المجانية حتى 3 عقارات. لإضافة عقار آخر، انتقل إلى Pro أو Premium.'
+    },
+    ru: {
+      freeDesc: 'Включает до 3 объектов. Начните с LISTIA и оплачивайте только те Gestiones, которые вы одобрили.',
+      freeNote: 'Free включает до 3 объектов.',
+      freeLimit: 'Ваш план Free включает до 3 объектов. Чтобы добавить ещё один, перейдите на Pro или Premium.'
+    },
+    he: {
+      freeDesc: 'כולל עד 3 נכסים. התחילו עם LISTIA ושלמו רק עבור Gestiones שאישרתם.',
+      freeNote: 'Free כולל עד 3 נכסים.',
+      freeLimit: 'מסלול Free כולל עד 3 נכסים. כדי להוסיף נכס נוסף, עברו ל-Pro או Premium.'
+    },
+    'zh-CN': {
+      freeDesc: '最多包含 3 个房源。使用 LISTIA 开始工作，只为您批准的 Gestiones 付费。',
+      freeNote: 'Free 最多包含 3 个房源。',
+      freeLimit: 'Free 最多包含 3 个房源。要添加更多房源，请升级到 Pro 或 Premium。'
     }
   };
 
   function locale() {
     const api = window.LISTIA_I18N;
-    const value = String(api?.getLanguage?.() || document.documentElement.lang || 'en').toLowerCase();
+    const raw = String(api?.getLanguage?.() || document.documentElement.dataset.listiaLanguage || document.documentElement.lang || 'en');
+    const value = raw.toLowerCase();
     if (value.startsWith('es')) return 'es';
     if (value.startsWith('fr')) return 'fr';
     if (value.startsWith('it')) return 'it';
     if (value.startsWith('pt')) return 'pt-BR';
     if (value.startsWith('de')) return 'de';
     if (value.startsWith('ar')) return 'ar-AE';
+    if (value.startsWith('ru')) return 'ru';
+    if (value.startsWith('he') || value.startsWith('iw')) return 'he';
+    if (value.startsWith('zh')) return 'zh-CN';
     return 'en';
   }
 
