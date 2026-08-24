@@ -29,7 +29,32 @@ Best use: review, interpretation, reference-driven video transformations and Goo
 ### Runway Studio
 Role: deterministic/non-generative assembly surface for trim, stitch, reorder and export after generated/edited clips pass QA.
 
-## 2. Video generation specialists
+## 2. Advisor/avatar + localization layer
+### HeyGen — PRIMARY SPECIALIST CANDIDATE
+HeyGen is not the primary property-footage editor. Its LISTIA role is advisor/presenter video and localization.
+
+Current capabilities relevant to LISTIA:
+- Avatar V and Avatar IV;
+- Digital Twins and photo avatars;
+- Video Agent / prompt-or-document to finished presenter video;
+- Video Translation in 175+ languages/dialects;
+- Precision Lipsync;
+- Proofread/transcript review before translation;
+- Starfish text-to-speech;
+- reusable templates and brand assets;
+- batch API, webhooks, REST and MCP.
+
+LISTIA uses separate task contracts:
+- `avatar_video` — advisor/presenter avatar video;
+- `video_translate` — multilingual localization of approved footage;
+- `lip_sync` — dub/replace approved audio while preserving the visual track;
+- `tts` — candidate locale-native voice generation.
+
+Real-person advisor Digital Twins require explicit authorization/consent. A generated avatar is never treated as proof of exact identity; LISTIA validates identity and blocks release when required checks fail.
+
+Runtime secret target: `HEYGEN_API_KEY`.
+
+## 3. Video generation specialists
 - Seedance 2.5 — default reference-heavy generator candidate.
 - Google Veo 3.1 — premium cinematic generation candidate.
 - Runway Gen-4.5 — cinematic generation and Runway-native fallback.
@@ -39,8 +64,9 @@ Role: deterministic/non-generative assembly surface for trim, stitch, reorder an
 - Pika 2.5 — short social/ad clips and look-development specialist.
 - Higgsfield Cinema Studio — cinematic specialist through Higgsfield surface.
 - Grok Imagine Video — xAI video candidate.
+- HeyGen Video Agent — presenter/knowledge-grounded finished-video specialist, not the default cinematic property generator.
 
-## 3. Media gateways / aggregators
+## 4. Media gateways / aggregators
 ### Higgsfield
 Role: connected multi-provider creative execution surface.
 Current value: exposes multiple image/video/audio providers and reference-element workflows from one integration surface.
@@ -56,7 +82,7 @@ Runtime secret target: `PIKA_API_KEY`.
 Role: both direct Runway provider and media model gateway. Current video-to-video surface supports Aleph 2.0 plus Seedance/Gemini Omni variants.
 Policy: use direct Runway Aleph for video editing if benchmarks confirm preservation/cost advantage.
 
-## 4. Image / flyer visual layer
+## 5. Image / flyer visual layer
 - GPT Image 2 — strong typography/editing candidate, but authoritative LISTIA text remains deterministic.
 - Nano Banana current family — fast Google image/editing candidate.
 - Seedream 5.x — precise instruction/editing candidate.
@@ -67,16 +93,17 @@ Policy: use direct Runway Aleph for video editing if benchmarks confirm preserva
 
 Critical rule: names, prices, phone numbers, addresses, CTAs and legal copy are never trusted to a generative image model as the final source. LISTIA renders them deterministically and validates exact text.
 
-## 5. Voice/audio layer
+## 6. Voice/audio layer
 - Native/device locale voices when quality is sufficient and marginal cost is near zero.
 - BytePlus Seed Speech.
 - OpenAI audio/realtime/transcription.
 - xAI Voice.
+- HeyGen Starfish Voice.
 - ElevenLabs as premium/specialist where its voice quality justifies cost.
 - Higgsfield audio gateway.
 - Pika API audio/music gateway candidates.
 
-## 6. Social publishing / messaging / distribution
+## 7. Social publishing / messaging / distribution
 ### Zernio — PRIORITY DISTRIBUTION ADAPTER
 Zernio is NOT a video editor. It belongs after content creation/QA.
 Role:
@@ -95,23 +122,27 @@ LISTIA use:
 
 Zernio remains a priority integration candidate because it can replace many separate social platform integrations and reduce OAuth/maintenance friction. It must remain isolated behind a `DistributionAdapter`, not mixed into the generative AI Router.
 
-## 7. Prior tools that remain on the map
-The earlier LISTIA research explicitly included:
+## 8. Prior tools that remain on the map
+The LISTIA research and current canonical architecture include:
+- HeyGen
 - Gemini Omni
 - Veo
-- Runway
+- Runway / Aleph 2.0
 - Pika
 - Seedance
+- Higgsfield
 - ElevenLabs
+- Zernio
 
 None are deleted because a newer model is added. Each stays in the provider/tool registry until benchmarked, deprecated, replaced, or explicitly removed.
 
-## 8. Architectural separation
+## 9. Architectural separation
 LISTIA must keep these layers separate:
 1. AI Engine — reasoning/generation/review.
 2. Media Editor — precise edits and deterministic assembly.
-3. Quality Engine — preservation, spelling, numbers, identity/property fidelity.
-4. Distribution Engine — Zernio/social/email/messaging/ads.
-5. Analytics/Learning — performance feedback changes future routing and creative decisions.
+3. Avatar/Localization — HeyGen and other advisor/translation/lipsync specialists.
+4. Quality Engine — preservation, spelling, numbers, identity/property fidelity.
+5. Distribution Engine — Zernio/social/email/messaging/ads.
+6. Analytics/Learning — performance feedback changes future routing and creative decisions.
 
 This separation lets LISTIA use many tools without turning the product into a tangle of vendor-specific code.
