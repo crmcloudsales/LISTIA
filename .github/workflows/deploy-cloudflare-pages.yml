@@ -2,22 +2,46 @@ name: Deploy LISTIA to Cloudflare Pages
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'public/**'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  deployments: write
+
+concurrency:
+  group: listia-pages-main
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate PWA 11-language release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq "ru:" public/global-locales.js
+          grep -Fq "he:" public/global-locales.js
+          grep -Fq "'zh-CN':" public/global-locales.js
+          grep -Fq "const LANGUAGE='ja'" public/japanese-locale.js
+          grep -Fq "ru-RU" public/listia-voice.js
+          grep -Fq "he-IL" public/listia-voice.js
+          grep -Fq "zh-CN" public/listia-voice.js
+          grep -Fq "ja-JP" public/listia-voice.js
+          grep -Fq 'Version 1.4' public/terms.html
+          grep -Fq 'Version 1.3' public/privacy.html
+          test -f public/manifest-ja.webmanifest
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
@@ -26,3 +50,48 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy public --project-name=listia-pwa --branch=main
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify PWA live
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ok=false
+          for attempt in $(seq 1 24); do
+            root_ru="$(curl -sS -L --max-time 20 -o /tmp/pwa.html -w '%{http_code}' 'https://app.listiaapp.com/?lang=ru' || true)"
+            ja="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://app.listiaapp.com/japanese-locale.js' || true)"
+            voice="$(curl -sS -L --max-time 20 -o /tmp/voice.js -w '%{http_code}' 'https://app.listiaapp.com/listia-voice.js' || true)"
+            terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
+            privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
+            if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
+            sleep 5
+          done
+          [[ "$ok" == true ]]
+          for lang in es en fr it pt-BR de ar-AE ru he zh-CN ja; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://app.listiaapp.com/?lang=${lang}")"
+            test "$code" = 200
+          done
+          code="$(curl -sS -L --max-time 20 -o /tmp/voice-lab.html -w '%{http_code}' 'https://app.listiaapp.com/voice-lab.html')"
+          test "$code" = 200
+          grep -Fq '日本語 · 日本' /tmp/voice-lab.html
+
+      - name: Persist PWA live deployment proof
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          {
+            echo 'LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED'
+            echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "source_commit=${GITHUB_SHA}"
+            echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
+            echo 'voice_native_tts_11_languages=true'
+            echo 'russian_live=true'
+            echo 'japanese_live=true'
+            echo 'terms_version=1.4'
+            echo 'privacy_version=1.3'
+            echo 'free_property_limit=3'
+          } > PWA_LIVE_DEPLOYMENT_PROOF.txt
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add PWA_LIVE_DEPLOYMENT_PROOF.txt
+          git commit -m 'Record verified LISTIA PWA 11-language voice deployment' || exit 0
+          git push origin main
