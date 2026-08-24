@@ -1,3 +1,4 @@
+// CloudCo commercial footer deployment marker v1.0.1
 (() => {
   const copy = {
     es:{rights:'© 2026 LISTIA. Todos los derechos reservados.',privacy:'Aviso de privacidad',terms:'Términos y condiciones'},
