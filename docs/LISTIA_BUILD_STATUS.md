@@ -8,97 +8,75 @@ This file is updated after substantive implementation blocks. It is a checkpoint
 ## DONE
 - PWA onboarding through Google connection, Discovery, Business DNA and Office.
 - Seven UI/property locales: ES, EN, FR, IT, PT-BR, DE, AR-AE.
-- Canonical LISTIA commercial subscriptions: FREE US$0, PRO US$97/mo, PREMIUM US$147/mo, Premium extra seat US$47/mo.
-- Portable subscription billing architecture and Stripe TEST bindings.
-- Gestiones commercial model upgraded from rigid provider-cost markup to **standardized customer-visible Gestión pricing with flexible internal margin**.
-- `private.gestion_price_book` stores versioned per-plan customer prices, scope, exclusions, margin floor, preapproval rule and benchmark guard.
-- `private.gestion_quotes` stores pre-execution commercial authorization/ceiling before a paid action occurs.
-- FREE/PRO/PREMIUM 30%/20%/10% are now internal target economics rather than rigid contractual markup per provider call.
-- Billable fixed-price Gestiones use a 5% default internal minimum-margin safety floor; intentionally free/included routes are exempt.
-- Provider/model names are hidden from the normal customer price experience.
-- If no compliant supplier route fits an approved quote/margin floor, LISTIA must reroute, block or request new approval rather than execute at a loss or surprise-charge.
-- Canonical progressive-spend rule: LISTIA grows paid usage gradually with demonstrated customer activity/value; high-volume automation requires explicit action or an approved standing budget/cap.
-- Price Book v1 currently contains 23 standardized Gestión types across content, video, communications and infrastructure.
-- Twilio is formally registered as an internal fallback/benchmark provider for Voice, SMS, WhatsApp, phone numbers, Verify and live pricing discovery.
-- Telnyx is formally registered as a core cost-first communications provider candidate.
-- Cloudflare is formally registered as both LISTIA core infrastructure and a behind-the-scenes user infrastructure provider: Registrar, Pages, Workers, R2, DNS, CDN, SSL/TLS, WAF, Turnstile and Images.
-- Amazon SES is formally registered as a cost-first email candidate.
-- Cloudflare/Twilio reference rate cards were added to the private versioned rate catalog.
-- Canonical domain UX rule is defined: one desired-domain input, requested result plus at most three alternatives, one all-in first-year price + renewal price, one approval action. UI is not built yet.
-- Domain pricing uses live Cloudflare Registrar registration/renewal quote plus a small LISTIA service fee rather than pretending every TLD has the same wholesale price.
-- Static website hosting is currently priced as included/$0 while the site stays within Cloudflare Pages static/free economics; measurable paid infrastructure remains separate.
-- Global flat voice/SMS prices apply only to ordinary compliant geographic/A2P destinations. Premium-rate, satellite, personal-number and special-service classes are excluded/blocked or separately quoted.
-- Canonical global usage/channel pricing map updated in `docs/LISTIA_USAGE_PRICING_CHANNELS_CANONICAL.md`.
-- Canonical technology map updated with Twilio/Cloudflare/Telnyx/SES roles and customer invisibility.
-- Canonical legal engineering rules updated for standardized pricing, quote-before-execution, flexible internal margin, global flat-rate scope and domain economics.
-- Public Terms of Service updated to Version 1.2 effective 2026-08-24 for standardized Gestiones and preapproval.
-- Public Privacy Policy updated to Version 1.2 effective 2026-08-24 for quote, spending-authorization and provider-routing data.
-- Existing omnichannel architecture remains: WhatsApp priority 1, SMS 2, Telegram 3, email 4, voice 5, subject to consent/reachability/law.
-- `public.lead_contact_channels`, private communication templates and dispatch audit tables remain in place.
-- Property intake, private material storage, processing-state pipeline and provider-neutral AI job queue remain in place.
-- Canonical multimodel LISTIA AI Engine and cost-first technology architecture remain in place.
-- All active AI routes use `lowest_cost_passing_quality`; benchmark-aware metric is `cost_per_accepted_output`.
-- MuseTalk 1.5 remains default low-cost lip-sync candidate; EchoMimicV2 default photo-only avatar candidate; HeyGen premium fallback.
-- `services/ai-orchestrator` scaffold exists with FastAPI + LiteLLM + LangGraph + Langfuse-compatible dependencies and Cloud Run-ready Dockerfile.
+- Canonical LISTIA subscriptions remain FREE US$0, PRO US$97/mo, PREMIUM US$147/mo, Premium extra seat US$47/mo.
+- FREE entitlement is now **up to 3 non-archived properties**. The fourth requires a paid plan.
+- FREE property limit is enforced server-side in `property-intake-start` v8, not merely through UI copy.
+- Small plan/property-limit copy in the PWA is now intentionally more readable on phones via `public/pricing-policy.js`: plan descriptions 12px, `/month` 11px, FREE property-limit note 12px with higher contrast.
+- FREE copy now says up to 3 properties in all seven LISTIA locales.
+- Ordinary Gestión target markups changed to **FREE 50% / PRO 25% / PREMIUM 12.5%**.
+- `organization_billing` is normalized server-side by database trigger so stale integration code cannot silently restore old 30/20/10 values.
+- New organizations automatically receive a canonical FREE billing row.
+- `private.plan_entitlements` is the server-side plan-limit registry: FREE property limit 3; PRO/PREMIUM property limit currently unlimited/null.
+- Domain pricing is now a special rule independent of plan: **50%-100% markup in every plan**, decreasing as wholesale cost rises.
+- Domain registration and renewal use the same markup policy; no deliberate teaser first-year markup.
+- Canonical dynamic domain bands: <=$10 wholesale -> 100%; >$10-$20 -> 80%; >$20-$50 -> 60%; >$50 -> 50%.
+- `private.domain_markup_percent()` implements the domain markup bands.
+- Domain suggestion pool remains `.com`, `.com.mx`, `.mx`, `.net`, `.us`, `.realestate`, `.uk`, `.it`, `.web` when available; requested domain + max 3 alternatives; `.app`/`.ai` are not default suggestions.
+- Price Book v2 now stores generic min/max markup controls and reference cost/status fields.
+- HyperFrames, MuseTalk and EchoMimic customer rows were repriced from conservative engineering accepted-output cost estimates and remain benchmark guarded.
+- Media engineering benchmark v0 documented in `docs/LISTIA_MEDIA_COST_BENCHMARK_V0.md`.
+- Existing standardized Gestión quote-before-execution architecture remains: `private.gestion_price_book` -> `private.gestion_quotes` -> user approval -> execution -> `public.gestiones`.
+- Twilio, Telnyx, Cloudflare and Amazon SES remain registered as internal providers/candidates; provider names stay hidden from normal customer pricing UX.
+- Omnichannel architecture remains WhatsApp first, SMS/RCS second, Telegram third, email nurture and voice where appropriate, subject to consent/reachability/law.
+- Content/AI routing remains `lowest_cost_passing_quality`; optimization metric is `cost_per_accepted_output`.
 
 ## VERIFIED
-- LISTIA Supabase project: `zvzafiarwerbuoaccnoz` is the live backend used by this workstream.
-- Migration 47 (`20260824095159_add_standardized_gestion_pricebook_twilio_cloudflare`) applied successfully.
-- Supabase and GitHub migration SQL are synchronized through migration 47.
-- The new Price Book/quote tables are private/server-only; browser users cannot alter the price book, provider costs or quotes directly.
-- No domain purchase, communication dispatch or external provider execution was performed by this pricing/legal block; it created no new external usage charge.
-- Exact-source/lip-sync/photo-avatar customer price rows are `benchmark_guarded`: automated paid use remains blocked until real accepted-output cost validates the advertised ceiling and quality.
-- Current Stripe provider-binding verification remains TEST-only; do not describe production subscription billing as LIVE until LIVE bindings/credentials/webhook are verified.
-- Security adviser continues to show expected INFO notices for intentionally policy-less private tables. The pre-existing Supabase Auth leaked-password-protection warning remains pending hardening.
+- LISTIA Supabase project: `zvzafiarwerbuoaccnoz`.
+- Migration 48 (`20260824113420_pricing_v2_markups_domains_free_three_properties`) applied successfully.
+- Supabase and GitHub migration history are synchronized through migration 48.
+- `property-intake-start` v8 is ACTIVE with JWT verification and the FREE `>=3` server-side limit.
+- Current organization billing row was normalized to the new plan markup target.
+- Price Book domain rows use `provider_quote_plus_markup`, 50%-100% bounds and live-cost checking.
+- HyperFrames reference cost target stored: US$0.005 / accepted <=10s exact-source composition.
+- MuseTalk reference cost target stored: US$0.025 / accepted <=10s lip-sync.
+- EchoMimicV2 reference cost target stored: US$0.16 / accepted <=10s avatar-from-photo.
+- Those three media figures are **engineering estimates**, not measured LISTIA production results, and remain `benchmark_required=true`.
+- No external media generation, domain purchase or telecom send was executed by this pricing change; no external usage cost was created.
 
-## CURRENT PRICE BOOK v1 — CUSTOMER PRICES
-### Content
-- Property content package/language: FREE $0.05 / PRO $0.04 / PREMIUM $0.03.
-- Image create/edit: $0.10 / $0.09 / $0.08.
-- Finished flyer/story/social creative: $0.15 / $0.14 / $0.12.
-- Brochure up to 10 pages: $0.75 / $0.65 / $0.55.
+## MEDIA PRICE BOOK v2 — BENCHMARK-GUARDED
+| Gestión | Reference internal cost | FREE | PRO | PREMIUM |
+|---|---:|---:|---:|---:|
+| Exact-source HyperFrames/FFmpeg <=10s | $0.005 | $0.0075 | $0.00625 | $0.005625 |
+| MuseTalk lip-sync <=10s | $0.025 | $0.0375 | $0.03125 | $0.028125 |
+| EchoMimicV2 avatar from photo <=10s | $0.16 | $0.24 | $0.20 | $0.18 |
 
-### Video
-- Exact-source 10 sec: $0.30 / $0.25 / $0.20 — benchmark guarded.
-- Lip-sync 10 sec: $0.10 / $0.09 / $0.08 — benchmark guarded.
-- Avatar from photo 10 sec: $0.30 / $0.25 / $0.20 — benchmark guarded.
-- Standard cinematic 10 sec: $0.75 / $0.65 / $0.60.
-- Premium cinematic 10 sec: $1.75 / $1.55 / $1.35.
-- Localized high-fidelity repair 10 sec: $3.90 / $3.50 / $3.20.
+These are stored reference prices and remain blocked from automated paid release until measured LISTIA clips prove quality and accepted-output cost.
 
-### Communications
-- WhatsApp Marketing delivered: $0.22 / $0.20 / $0.18.
-- WhatsApp Utility/Auth delivered: $0.09 / $0.08 / $0.07.
-- WhatsApp service-window message: currently $0 where direct-provider economics remain zero.
-- Global standard SMS part: $0.55 / $0.52 / $0.50.
-- Telegram ordinary reachable-chat message: $0.
-- 1,000 email recipients: $0.20 / $0.18 / $0.15.
-- AI inbound call minute: $0.30 / $0.27 / $0.25.
-- AI outbound global-standard call minute: $1.25 / $1.15 / $1.10.
-- Local business number/month: $10 / $9 / $8 where inventory fits the standard scope.
+## DOMAIN ECONOMICS v2
+Domain price is a live wholesale quote plus the same dynamic markup logic regardless of FREE/PRO/PREMIUM. Registration and renewal use the same rule.
 
-### Cloudflare-backed infrastructure
-- Domain registration: live Cloudflare first-year quote + LISTIA fee $1.00 / $0.75 / $0.50.
-- Domain renewal: live Cloudflare renewal quote + LISTIA fee $0.50 / $0.40 / $0.30.
-- Static website hosting: currently included/$0 within Pages static/free economics.
-- R2-style content storage: $0.030 / $0.025 / $0.020 per GB-month.
+Examples using the current bands only (illustrative wholesale inputs, not live registrar quotes):
+- $6.50 wholesale -> 100% markup -> $13.00 customer price.
+- $10.46 wholesale -> 80% markup -> $18.83.
+- $16.75 wholesale -> 80% markup -> $30.15.
+- $30.70 wholesale -> 60% markup -> $49.12.
+- $72.95 wholesale -> 50% markup -> $109.43.
 
-## PENDING — ECONOMICS/LEGAL FIRST
-- User review/approval of Price Book v1 values before building public quoting UI or automatic cost resolver.
-- Professional jurisdiction-specific legal review before large automated outbound campaigns scale globally.
-- Define country policy profiles for consent, telemarketing, call recording, quiet hours, sender registration and local privacy requirements.
-- Define tax/legal-entity handling before automatic tax is activated.
-- Build the quote/resolver Edge Function only after Price Book v1 is accepted.
-- Build Cloudflare domain search/purchase UI only after pricing/legal model is accepted.
-- Build Twilio/Telnyx live pricing adapters after price book acceptance; provider credentials are not implied by provider registration.
-- Benchmark HyperFrames/MuseTalk/EchoMimic actual accepted-output cost before enabling benchmark-guarded video rows.
-- Backfill existing leads into omnichannel contact records only after normalization/consent rules are finalized; never infer marketing consent from possession of contact data.
-- Meta WhatsApp template approval, Telegram reachability flow, SES domain verification and voice/SMS adapters remain later implementation steps.
+Premium/exceptional domains remain separately live-quoted.
+
+## PENDING — DO NOT RUSH
+- Run the first measured LISTIA media benchmark: minimum 5 real representative clips per HyperFrames/MuseTalk/EchoMimic route, with actual billed seconds, retries, Quality-Gate results and accepted-output cost.
+- After measured media benchmark, decide whether to round micro-Gestión display prices for customer simplicity while preserving the approved maximum and internal accounting precision.
+- Build the server-side Gestión Cost Resolver/Quote endpoint only after the pricing/legal rules are fully accepted.
+- Build domain search/purchase UI only after the domain ownership/registrar account architecture is finalized.
+- Build Twilio/Telnyx/Meta/RCS live routing after communication pricing/legal country profiles are finalized.
+- Professional jurisdiction-specific legal review before high-volume automated outbound campaigns.
+- Define tax/legal-entity handling before automatic tax activation.
 - Supabase Auth leaked-password protection hardening remains pending.
-- Stripe LIVE bindings/credentials/webhook verification remains pending.
+- Stripe production billing still requires explicit end-to-end verification; frontend LIVE flags alone are not proof of a complete LIVE billing path.
 
-## NEXT — DO NOT RUSH
-The next step is **review the Price Book v1 together and adjust any customer-facing Gestión price or scope that does not look commercially right**. Do not build the automatic resolver, domain UI or high-volume communications until the economics/legal model is accepted.
+## NEXT
+Do not jump to dozens of integrations yet. The next economic/quality step is the **measured media benchmark** so LISTIA can replace the three engineering estimates with real `cost_per_accepted_output`. In parallel, the new FREE 3-property rule and PWA readability patch should be visually verified on the deployed mobile PWA.
 
 ## Standing release rule
 No AI/provider output, paid Gestión or outbound marketing communication is released merely because generation/routing succeeded. Required quality, consent, legal/platform, factual, cost and authorization gates must pass. When exact advisor/property preservation is required, protected original source content remains canonical.
