@@ -92,7 +92,7 @@
             <a id="listiaPrivacyLink" href="https://app.listiaapp.com/privacy.html">Privacy Notice</a>
             <a id="listiaTermsLink" href="https://app.listiaapp.com/terms.html">Terms &amp; Conditions</a>
           </nav>
-          <span class="listia-powered">Powered by <a href="https://cloudsales.app" target="_blank" rel="noopener noreferrer">CloudSales</a></span>
+          <span class="listia-powered">Powered by <a href="/cloudco">CloudCo</a></span>
         </div>
       `;
 
