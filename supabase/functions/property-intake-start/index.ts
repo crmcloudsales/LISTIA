@@ -81,14 +81,20 @@ function clean(value: unknown, max = 2000) {
 }
 
 function normalizeLocale(value: unknown) {
-  const raw = String(value || '').trim().toLowerCase()
+  const raw = String(value || '').trim().toLowerCase().replaceAll('_', '-')
   const aliases: Record<string,string> = {
-    es: 'es', 'es-mx': 'es', en: 'en', 'en-us': 'en', 'en-gb': 'en',
-    fr: 'fr', 'fr-fr': 'fr', 'fr-ca': 'fr', it: 'it', 'it-it': 'it',
-    pt: 'pt-BR', 'pt-br': 'pt-BR', 'pt-pt': 'pt-BR', de: 'de', 'de-de': 'de',
+    es: 'es', 'es-mx': 'es',
+    en: 'en', 'en-us': 'en', 'en-gb': 'en',
+    fr: 'fr', 'fr-fr': 'fr', 'fr-ca': 'fr',
+    it: 'it', 'it-it': 'it',
+    pt: 'pt-BR', 'pt-br': 'pt-BR', 'pt-pt': 'pt-BR',
+    de: 'de', 'de-de': 'de', 'de-at': 'de', 'de-ch': 'de',
     ar: 'ar-AE', 'ar-ae': 'ar-AE',
+    ru: 'ru', 'ru-ru': 'ru',
+    he: 'he', 'he-il': 'he', iw: 'he', 'iw-il': 'he',
+    zh: 'zh-CN', 'zh-cn': 'zh-CN', 'zh-hans': 'zh-CN', 'zh-sg': 'zh-CN',
   }
-  return aliases[raw] || 'es'
+  return aliases[raw] || aliases[raw.split('-')[0]] || 'es'
 }
 
 function fallbackTitle(locale: string) {
@@ -98,6 +104,9 @@ function fallbackTitle(locale: string) {
   if (locale === 'pt-BR') return 'Imóvel em preparação'
   if (locale === 'de') return 'Immobilie in Vorbereitung'
   if (locale === 'ar-AE') return 'عقار قيد التجهيز'
+  if (locale === 'ru') return 'Объект в подготовке'
+  if (locale === 'he') return 'נכס בהכנה'
+  if (locale === 'zh-CN') return '房源准备中'
   return 'Propiedad en preparación'
 }
 
