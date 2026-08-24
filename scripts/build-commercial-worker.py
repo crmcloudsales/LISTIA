@@ -45,8 +45,8 @@ def validate_cloudco(html:str,footer_js:str)->None:
         'upload.wikimedia.org',
         'id="investmentForm"',
         "'/cloudco/investment-plan'",
-        'Plan de Inversión',
-        'Aceleramos y Aumentamos tu productividad',
+        'Conversemos',
+        'Aceleramos y aumentamos tu productividad',
         '1975', '1976', '1994', '1998', '2015', '2026',
         'cloudco-arrival',
     ]
