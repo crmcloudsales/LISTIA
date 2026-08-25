@@ -7,18 +7,16 @@
 window.LISTIA_CONFIG = {
   SUPABASE_URL: "https://zvzafiarwerbuoaccnoz.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "sb_publishable_aY9AjGa59GQ5rNGZlGAJpw_uhgVZfb1",
-
-  // LISTIA LIVE billing. Secret credentials stay server-side in Supabase.
   BILLING_ENABLED: true,
   BILLING_ENV: "live",
   STRIPE_PUBLISHABLE_KEY: "pk_live_51U5BGR0falgc3pBvgIUoHEp5kwm2pRSRrTfubFkeQjGmopTbFd0ZmEIhjqeyOfzpGpziH2IzYn24d62og1eTyOVd00z8tLsz8A"
 };
 
-// Global UI guardrails load before optional runtime modules.
 (() => {
   const styles = [
     ["listiaReadabilityStyles", "/readability.css?v=3"],
-    ["listiaPwaComponentStyles", "/pwa-components.css?v=1"]
+    ["listiaPwaComponentStyles", "/pwa-components.css?v=1"],
+    ["listiaAccountMarketplaceStyles", "/account-marketplace.css?v=1"]
   ];
   for (const [id, href] of styles) {
     if (document.getElementById(id)) continue;
@@ -30,7 +28,6 @@ window.LISTIA_CONFIG = {
   }
 })();
 
-// Keep optional runtime modules isolated from the core PWA.
 (() => {
   const modules = [
     ["/global-locales.js?v=2", "listiaGlobalLocalesLoader"],
@@ -42,7 +39,9 @@ window.LISTIA_CONFIG = {
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
     ["/listia-voice.js?v=2", "listiaVoiceLoader"],
+    ["/marketplace-assistant.js?v=1", "listiaMarketplaceAssistantLoader"],
     ["/marketplace.js?v=1", "listiaMarketplaceLoader"],
+    ["/account-mode.js?v=1", "listiaAccountModeLoader"],
     ["/pwa-fixes.js?v=1", "listiaPwaFixesLoader"]
   ];
 
