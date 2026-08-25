@@ -48,6 +48,10 @@
 .marketplace-count strong{font-size:13px}
 .marketplace-interest-grid label:has(textarea),.marketplace-interest-grid .marketplace-note,.marketplace-interest-grid .marketplace-success,.marketplace-interest-grid .marketplace-error,.marketplace-interest-grid button{grid-column:1/-1}
 .marketplace-detail-media img.marketplace-detail-placeholder{object-fit:contain}
+.marketplace-interest-toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));z-index:130;transform:translate(-50%,24px);width:min(560px,calc(100vw - 28px));padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(18,18,25,.98);color:#fff;box-shadow:0 18px 55px rgba(0,0,0,.42);font-size:13px;line-height:1.45;font-weight:750;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;backdrop-filter:blur(16px)}
+.marketplace-interest-toast.show{opacity:1;transform:translate(-50%,0)}
+.marketplace-interest-toast.success{border-color:rgba(113,240,157,.34);background:linear-gradient(145deg,rgba(18,42,28,.98),rgba(14,15,20,.98))}
+.marketplace-interest-toast.info{border-color:rgba(159,131,255,.30);background:linear-gradient(145deg,rgba(39,26,75,.98),rgba(14,15,20,.98))}
 
 /* Global fixes for compact dynamic UI. */
 .office-actions,.office-connected,.office-connected>div,.property-card,.property-card-top,.property-card-meta{min-width:0}
@@ -58,5 +62,6 @@
   .office-pipeline-summary{grid-template-columns:1fr;gap:8px}.office-pipeline-summary>div{grid-template-columns:30px 1fr;padding:10px 12px}
   .listia-module-actions{grid-template-columns:1fr 1fr}.listia-module-button{padding:12px;min-height:76px}
   .marketplace-filters{gap:12px!important}
+  .marketplace-interest-toast{bottom:calc(14px + env(safe-area-inset-bottom));font-size:13px}
 }
 @media(max-width:380px){.listia-module-actions{grid-template-columns:1fr}.office-pipeline-summary{grid-template-columns:1fr}}
