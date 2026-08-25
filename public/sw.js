@@ -1,6 +1,6 @@
-const CACHE="listia-pwa-v0.19.0";
+const CACHE="listia-pwa-v0.19.1";
 const CORE=[
-  "/","/index.html","/styles.css?v=0.9.3","/readability.css?v=3","/pwa-components.css?v=2","/account-marketplace.css?v=1","/marketplace.css?v=1","/marketplace-feed.css?v=1","/contact-engine.css?v=1","/app-shell-v2.css?v=1","/pwa-polish.css?v=1","/billing.css?v=1","/billing.js?v=1","/runtime.js?v=1",
+  "/","/index.html","/styles.css?v=0.9.3","/readability.css?v=3","/pwa-components.css?v=2","/account-marketplace.css?v=1","/marketplace.css?v=1","/marketplace-feed.css?v=1","/contact-engine.css?v=1","/app-shell-v2.css?v=1","/pwa-polish.css?v=1","/pwa-polish-hotfix.css?v=1","/billing.css?v=1","/billing.js?v=1","/runtime.js?v=1",
   "/i18n-extra.js","/i18n.js?v=0.9.5","/global-locales.js?v=2","/japanese-locale.js?v=1","/listia-voice.js?v=3","/marketplace-assistant.js?v=1","/marketplace-feed-enhancements.js?v=2","/marketplace.js?v=1","/contact-engine.js?v=1","/account-mode.js?v=1","/pwa-fixes.js?v=2","/app-shell-v2.js?v=1","/assistant-intelligence.js?v=1",
   "/install.js?v=0.9.3","/app.js","/config.js",
   "/manifest.webmanifest?v=0.9.5","/manifest-es.webmanifest?v=0.9.5","/manifest-en.webmanifest?v=0.9.5",
