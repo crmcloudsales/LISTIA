@@ -1,0 +1,87 @@
+/* LISTIA PWA polish — compact, readable, zero-friction mobile shell. */
+:root{--listia-nav-h:68px;--listia-top-h:68px}
+
+/* Keep the authenticated PWA feeling like an app, not a long web page. */
+body.listia-shell-v2{overflow:hidden!important}
+body.listia-shell-v2 .app-shell{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+body.listia-shell-v2 .brandbar{height:var(--listia-top-h)!important;min-height:var(--listia-top-h)!important;padding:8px 16px!important;gap:10px!important}
+body.listia-shell-v2 .brand-logo{max-height:43px!important;max-width:185px!important}
+body.listia-shell-v2 .language-select{min-height:42px!important;font-size:12px!important;padding:8px 34px 8px 12px!important}
+body.listia-shell-v2 .main{height:calc(100dvh - var(--listia-top-h) - var(--listia-nav-h) - env(safe-area-inset-bottom))!important;padding:6px 12px 8px!important;overflow:hidden!important}
+body.listia-shell-v2 .screen.active{height:100%!important;min-height:0!important;overflow:hidden!important}
+body.listia-shell-v2 .screen.active>.panel{height:100%!important;min-height:0!important;overflow:auto!important;padding:12px 14px 14px!important;scrollbar-width:none!important}
+body.listia-shell-v2 .screen.active>.panel::-webkit-scrollbar{display:none!important}
+
+/* Global readability floor for user-facing compact UI. */
+body.listia-shell-v2 :where(small,.eyebrow,.status-pill,.source-state,.listia-nav-btn,.listia-v2-badge,.listia-v2-kpi span,.listia-v2-kpi small,.listia-v2-card p,.listia-quick-action,.listia-quick-action small,.listia-control-row,.listia-account-card span,.listia-account-card button,.listia-ambient-status,.listia-decision-sheet,.listia-decision-sheet button){font-size:12px!important;line-height:1.35!important}
+body.listia-shell-v2 :where(button,input,select,textarea){font-size:max(12px,1em)}
+
+/* Bottom navigation: always visible, one tap per primary work surface. */
+.listia-bottom-nav{height:calc(var(--listia-nav-h) + env(safe-area-inset-bottom))!important;padding:6px 7px env(safe-area-inset-bottom)!important;background:rgba(6,7,11,.985)!important}
+.listia-nav-btn{gap:3px!important;padding:4px 1px!important;border-radius:14px!important;white-space:nowrap!important}
+.listia-nav-btn svg{width:21px!important;height:21px!important}
+.listia-nav-btn.active{background:linear-gradient(180deg,rgba(124,60,255,.28),rgba(124,60,255,.08))!important}
+
+/* OFFICE must fit the viewport on a normal phone without page scrolling. */
+#listiaOfficeDashboardV2{height:100%!important;min-height:0!important;grid-template-rows:auto auto minmax(0,1fr)!important;gap:8px!important;padding:2px 0 0!important;overflow:hidden!important}
+.listia-v2-head{min-height:48px!important;padding:0 2px!important}
+.listia-v2-head h1{font-size:25px!important;line-height:1.02!important}
+.listia-v2-head p{font-size:12px!important;margin-top:3px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.listia-v2-badge{padding:6px 9px!important;white-space:nowrap!important}
+.listia-v2-kpis{gap:6px!important}
+.listia-v2-kpi{padding:8px 7px!important;border-radius:15px!important;min-height:78px!important}
+.listia-v2-kpi span{min-height:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#aaacb6!important}
+.listia-v2-kpi strong{font-size:25px!important;margin-top:5px!important}
+.listia-v2-kpi small{display:block!important;margin-top:3px!important;color:#858894!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.listia-v2-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important;gap:8px!important;min-height:0!important}
+.listia-v2-card{border-radius:18px!important;padding:11px!important;min-height:0!important}
+.listia-ai-card{display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;text-align:center!important;gap:8px!important}
+.listia-ai-orb{width:64px!important;height:64px!important;flex:0 0 64px!important}
+.listia-ai-copy{min-width:0!important;width:100%!important}
+.listia-ai-copy strong{justify-content:center!important;font-size:14px!important;line-height:1.1!important;white-space:nowrap!important}
+.listia-ai-copy strong:after{font-size:12px!important;padding:3px 6px!important}
+.listia-ai-copy p{font-size:12px!important;line-height:1.35!important;display:-webkit-box!important;-webkit-line-clamp:4!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+.listia-ai-copy button{font-size:12px!important;margin-top:7px!important;padding:8px 10px!important;width:100%!important}
+.listia-v2-card>h2{font-size:15px!important;margin-bottom:7px!important}
+.listia-quick-actions{gap:6px!important}
+.listia-quick-action{min-height:54px!important;padding:8px 9px!important;border-radius:13px!important}
+.listia-quick-action small{margin-top:2px!important;color:#9295a0!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+.listia-insight{display:none!important}
+
+/* Account / Control remain scrollable only inside their content area, not through the whole PWA. */
+.listia-control-v2,.listia-account-v2{height:100%!important;min-height:0!important;overflow:hidden!important;padding:2px 0 0!important;gap:8px!important}
+.listia-control-body,.listia-account-body{min-height:0!important;overflow:auto!important;overscroll-behavior:contain!important;padding-bottom:8px!important}
+.listia-account-card{padding:12px!important;border-radius:17px!important;margin-bottom:8px!important}
+
+/* Ambient LISTIA orb. No microphone icon, no permanent chat window. */
+#listiaVoiceButton.listia-orb{position:fixed!important;right:17px!important;bottom:calc(var(--listia-nav-h) + 12px + env(safe-area-inset-bottom))!important;z-index:98!important;width:64px!important;height:64px!important;border:0!important;border-radius:50%!important;background:transparent!important;padding:0!important;cursor:pointer!important;isolation:isolate!important;animation:listiaAmbientBeat 2.7s ease-in-out infinite!important;filter:drop-shadow(0 10px 24px rgba(101,43,255,.36))!important}
+.listia-orb-core{position:absolute!important;inset:0!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:radial-gradient(circle at 34% 25%,#fff 0 2%,#65d8ff 4%,#6c3cff 36%,#e63dff 67%,#ff4e9d 82%,#39105f 100%)!important;box-shadow:inset 0 0 18px rgba(255,255,255,.22),0 0 0 1px rgba(255,255,255,.18),0 0 28px rgba(123,54,255,.55)!important;overflow:hidden!important}
+.listia-orb-core:before{content:'';position:absolute;inset:-18%;border-radius:50%;background:conic-gradient(from 20deg,transparent 0 22%,rgba(79,208,255,.55) 30%,transparent 42%,rgba(255,79,190,.48) 62%,transparent 78%);filter:blur(8px);animation:listiaOrbRotate 5.2s linear infinite}
+.listia-orb-star{position:relative;z-index:2;color:#fff;font-size:29px!important;line-height:1!important;text-shadow:0 0 12px rgba(255,255,255,.88)}
+#listiaVoiceButton[data-state="listening"]{animation:listiaListeningBeat 1.05s ease-in-out infinite!important}
+#listiaVoiceButton[data-state="thinking"] .listia-orb-core:before{animation-duration:.72s!important}
+#listiaVoiceButton[data-state="speaking"]{animation:listiaSpeakingBeat .82s ease-in-out infinite!important}
+#listiaVoiceButton.active:after{content:'';position:absolute;right:1px;bottom:2px;width:11px;height:11px;border-radius:50%;background:#62f199;border:2px solid #08090e;z-index:4}
+@keyframes listiaAmbientBeat{0%,100%{transform:scale(1)}48%{transform:scale(1.045)}56%{transform:scale(1.015)}}
+@keyframes listiaListeningBeat{0%,100%{transform:scale(1)}45%{transform:scale(1.11);filter:drop-shadow(0 0 26px rgba(108,60,255,.72))}60%{transform:scale(1.03)}}
+@keyframes listiaSpeakingBeat{0%,100%{transform:scale(1.01)}50%{transform:scale(1.09)}}
+@keyframes listiaOrbRotate{to{transform:rotate(360deg)}}
+
+/* Compact transient voice feedback; disappears automatically. */
+.listia-ambient-status{position:fixed;right:16px;bottom:calc(var(--listia-nav-h) + 86px + env(safe-area-inset-bottom));z-index:97;max-width:min(290px,calc(100vw - 32px));padding:9px 12px;border-radius:14px;background:rgba(12,13,20,.94);border:1px solid rgba(255,255,255,.10);box-shadow:0 12px 36px rgba(0,0,0,.32);color:#ececf3;backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);overflow-wrap:anywhere}
+.listia-ambient-status[hidden]{display:none!important}
+.listia-decision-sheet{position:fixed;left:14px;right:14px;bottom:calc(var(--listia-nav-h) + 14px + env(safe-area-inset-bottom));z-index:100;padding:13px;border-radius:20px;background:rgba(12,13,20,.985);border:1px solid rgba(255,255,255,.12);box-shadow:0 22px 55px rgba(0,0,0,.45);color:#fff}
+.listia-decision-sheet[hidden]{display:none!important}.listia-decision-copy{display:grid;gap:5px}.listia-decision-copy strong{font-size:14px}.listia-decision-copy span{font-size:12px;color:#a9acb6}.listia-decision-actions{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}.listia-decision-actions button{min-height:40px;padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#181a23;color:#fff;font-weight:750}
+
+/* Old voice/modal artifacts must never surface again. */
+.listia-voice-panel,.listia-voice-transcript,.listia-voice-head,.listia-voice-close,.listia-voice-status{display:none!important}
+
+@media(max-width:390px){
+  :root{--listia-top-h:64px;--listia-nav-h:64px}
+  body.listia-shell-v2 .brand-logo{max-height:40px!important;max-width:165px!important}
+  .listia-v2-head h1{font-size:23px!important}.listia-v2-head p{font-size:12px!important}
+  .listia-v2-kpi{padding:7px 5px!important;min-height:73px!important}.listia-v2-kpi strong{font-size:22px!important}
+  .listia-v2-grid{gap:7px!important}.listia-v2-card{padding:9px!important}.listia-ai-orb{width:56px!important;height:56px!important;flex-basis:56px!important}
+  .listia-ai-copy p{-webkit-line-clamp:3!important}.listia-quick-action{min-height:50px!important;padding:7px 8px!important}
+  #listiaVoiceButton.listia-orb{width:59px!important;height:59px!important;right:13px!important}.listia-orb-star{font-size:27px!important}
+}
