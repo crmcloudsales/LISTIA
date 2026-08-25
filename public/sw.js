@@ -1,4 +1,4 @@
-const CACHE="listia-pwa-v0.9.8";
+const CACHE="listia-pwa-v0.9.9";
 const CORE=[
   "/","/index.html","/styles.css?v=0.9.3","/billing.css?v=1","/billing.js?v=1","/runtime.js?v=1",
   "/i18n-extra.js","/i18n.js?v=0.9.5","/global-locales.js?v=2","/japanese-locale.js?v=1","/listia-voice.js?v=1",
@@ -8,9 +8,9 @@ const CORE=[
   "/manifest-de.webmanifest?v=0.9.5","/manifest-ar-ae.webmanifest?v=0.9.5",
   "/manifest-ru.webmanifest","/manifest-he.webmanifest","/manifest-zh-cn.webmanifest","/manifest-ja.webmanifest",
   "/listia-logo-transparent.webp","/listia-mark-transparent.webp",
-  "/listia-isotipo-192-v2.png?v=4","/listia-isotipo-512-v2.png?v=4",
-  "/listia-isotipo-maskable-192-v3.png?v=5","/listia-isotipo-maskable-512-v3.png?v=5",
-  "/listia-isotipo-180-v2.png?v=4","/listia-isotipo-32-v2.png?v=4"
+  "/listia-app-icon-192.png?v=1","/listia-app-icon-512.png?v=1",
+  "/listia-app-icon-maskable-192.png?v=1","/listia-app-icon-maskable-512.png?v=1",
+  "/listia-app-icon-180.png?v=1","/listia-app-icon-32.png?v=1"
 ];
 self.addEventListener("install",e=>{
   self.skipWaiting();

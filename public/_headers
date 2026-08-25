@@ -35,3 +35,9 @@
 
 /listia-isotipo-*-v2.png
   Cache-Control: public, max-age=31536000, immutable
+
+/listia-app-icon-*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+/listia-app-icon-official.jpg
+  Cache-Control: public, max-age=31536000, immutable
