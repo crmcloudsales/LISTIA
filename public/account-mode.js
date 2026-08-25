@@ -16,8 +16,7 @@
     mode=next||'guest'; document.documentElement.dataset.listiaAccountMode=mode;
     document.body?.classList.toggle('listia-professional',mode==='professional');
     document.body?.classList.toggle('listia-seeker',mode==='seeker');
-    window.dispatchEvent(new CustomEvent('listia:accountmode',{detail:{mode}}));
-    ensureChatMode();
+    window.dispatchEvent(new CustomEvent('listia:accountmode',{detail:{mode}})); ensureChatMode();
   }
   function injectSignupChoice(){
     const form=document.getElementById('signupForm'); if(!form||document.getElementById('listiaAccountModeChoice'))return;
@@ -26,28 +25,25 @@
       <label class="account-mode-option selected"><input type="radio" name="listiaAccountMode" value="professional" checked><span><strong>Trabajar con LISTIA</strong><small>Publicar propiedades y gestionar mi operación.</small></span></label>
       <label class="account-mode-option"><input type="radio" name="listiaAccountMode" value="seeker"><span><strong>Buscar propiedades</strong><small>Cuenta gratuita para siempre. Buscar, guardar y contactar inmobiliarios.</small></span></label>`;
     const terms=document.getElementById('termsCheck')?.closest('label'); form.insertBefore(box,terms||form.lastElementChild);
-    box.addEventListener('change',()=>{const chosen=box.querySelector('input:checked')?.value||'professional';localStorage.setItem(PENDING_KEY,chosen);box.querySelectorAll('.account-mode-option').forEach(x=>x.classList.toggle('selected',x.querySelector('input')?.checked));});
-    localStorage.setItem(PENDING_KEY,box.querySelector('input:checked')?.value||'professional');
+    const paint=()=>box.querySelectorAll('.account-mode-option').forEach(x=>x.classList.toggle('selected',x.querySelector('input')?.checked));
+    box.addEventListener('change',paint);
+    form.addEventListener('submit',()=>{const chosen=box.querySelector('input:checked')?.value||'professional';localStorage.setItem(PENDING_KEY,chosen)},{capture:true});
   }
   async function resolveMode(){
-    const session=readSession();
-    if(!session?.access_token){setMode('guest');return}
-    let user=session.user;
-    if(!user?.id)user=await api('/auth/v1/user',{token:session.access_token});
-    if(!user?.id){setMode('guest');return}
+    const session=readSession(); if(!session?.access_token){setMode('guest');return}
+    let user=session.user; if(!user?.id)user=await api('/auth/v1/user',{token:session.access_token}); if(!user?.id){setMode('guest');return}
     const pending=localStorage.getItem(PENDING_KEY);
     if(pending==='seeker'||pending==='professional'){
-      await api(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',token:session.access_token,body:{account_mode:pending}});
-      localStorage.removeItem(PENDING_KEY);
+      const updated=await api(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',token:session.access_token,body:{account_mode:pending}});
+      if(updated!==null)localStorage.removeItem(PENDING_KEY);
     }
     const rows=await api(`/rest/v1/profiles?select=account_mode&id=eq.${encodeURIComponent(user.id)}&limit=1`,{token:session.access_token});
-    const resolved=Array.isArray(rows)&&rows[0]?.account_mode?rows[0].account_mode:'professional'; setMode(resolved);
-    if(resolved==='seeker')setTimeout(routeSeeker,80);
+    const resolved=Array.isArray(rows)&&rows[0]?.account_mode?rows[0].account_mode:'professional'; setMode(resolved); if(resolved==='seeker')setTimeout(routeSeeker,80);
   }
   function routeSeeker(){
     const active=document.querySelector('.screen.active'); if(!active)return;
     if(['screen-login','screen-signup','screen-forgot','screen-reset','screen-marketplace','screen-marketplace-detail'].includes(active.id))return;
-    const entry=document.getElementById('marketplaceEntry'); if(entry)entry.click();
+    document.getElementById('marketplaceEntry')?.click();
   }
   function ensureChatMode(){
     const panel=document.querySelector('.listia-voice-panel'); if(!panel)return;
@@ -58,7 +54,7 @@
     if(allowChat&&!form){
       form=document.createElement('form');form.className='listia-chat-form';form.innerHTML='<input class="listia-chat-input" type="text" maxlength="500" placeholder="Escribe lo que buscas…" aria-label="Escribe a LISTIA"><button type="submit">Enviar</button>';
       panel.append(form);
-      form.addEventListener('submit',e=>{e.preventDefault();const input=form.querySelector('input');const text=input.value.trim();if(!text)return;const transcript=panel.querySelector('.listia-voice-transcript');if(transcript){const row=document.createElement('div');row.className='listia-voice-turn user';row.textContent=text;transcript.append(row);transcript.scrollTop=transcript.scrollHeight}input.value='';window.LISTIA_VOICE?.execute?.(text);});
+      form.addEventListener('submit',e=>{e.preventDefault();const input=form.querySelector('input');const text=input.value.trim();if(!text)return;const transcript=panel.querySelector('.listia-voice-transcript');if(transcript){const row=document.createElement('div');row.className='listia-voice-turn user';row.textContent=text;transcript.append(row);transcript.scrollTop=transcript.scrollHeight}input.value='';window.LISTIA_VOICE?.execute?.(text)});
     } else if(form){form.hidden=!allowChat}
   }
   function boot(){
