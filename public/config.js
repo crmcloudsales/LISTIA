@@ -20,7 +20,7 @@ window.LISTIA_CONFIG = {
     const link = document.createElement("link");
     link.id = "listiaReadabilityStyles";
     link.rel = "stylesheet";
-    link.href = "/readability.css?v=2";
+    link.href = "/readability.css?v=3";
     document.head.append(link);
   }
 })();
