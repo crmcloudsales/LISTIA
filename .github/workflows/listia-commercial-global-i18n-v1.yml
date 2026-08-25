@@ -37,7 +37,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Validate 11-language source and build Worker
+      - name: Validate source and build Worker
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -47,6 +47,9 @@ jobs:
           python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
           test "$(grep -c '<option value=' commercial/index.html)" -eq 7
+          grep -Fq 'https://listiaapp.com/marketplace' commercial/marketplace.html
+          grep -Fq 'LISTIA busca por ti' commercial/marketplace.html
+          grep -Fq 'id="map"' commercial/marketplace.html
           grep -Fq "ru:" commercial/global-locales.js
           grep -Fq "he:" commercial/global-locales.js
           grep -Fq "'zh-CN':" commercial/global-locales.js
@@ -65,7 +68,7 @@ jobs:
           for candidate in primary security; do
             if [[ "${candidate}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
             [[ -n "${token}" ]] || continue
-            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-11lang-${GITHUB_SHA:0:12}" --message "LISTIA commercial 11-language release ${GITHUB_SHA:0:12}" --preview-alias commercial-11lang 2>&1 | tee /tmp/upload.log; then
+            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-marketplace-${GITHUB_SHA:0:12}" --message "LISTIA commercial marketplace release ${GITHUB_SHA:0:12}" --preview-alias commercial-marketplace 2>&1 | tee /tmp/upload.log; then
               selected="${candidate}"
               version="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/upload.log | tail -1)"
               preview="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' /tmp/upload.log | head -1 | sed 's/[),]$//' || true)"
@@ -77,22 +80,27 @@ jobs:
           echo "version_id=${version}" >> "$GITHUB_OUTPUT"
           echo "preview_url=${preview}" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke-test preview
+      - name: Smoke-test preview including marketplace
         shell: bash
         run: |
           set -Eeuo pipefail
           base='${{ steps.upload.outputs.preview_url }}'
           for attempt in {1..8}; do
             code="$(curl -sS -L --max-time 20 -o /tmp/preview.html -w '%{http_code}' "${base}?lang=ja" || true)"
-            [[ "${code}" == 200 ]] && break
+            market="$(curl -sS -L --max-time 20 -o /tmp/marketplace.html -w '%{http_code}' "${base%/}/marketplace" || true)"
+            [[ "${code}" == 200 && "${market}" == 200 ]] && break
             sleep 4
           done
           test "${code}" = 200
+          test "${market}" = 200
           grep -Fq 'LISTIA' /tmp/preview.html
-          for path in global-locales.js japanese-locale.js terms.html privacy.html cloudco; do
+          grep -Fq 'LISTIA busca por ti' /tmp/marketplace.html
+          grep -Fq 'id="map"' /tmp/marketplace.html
+          for path in global-locales.js japanese-locale.js terms.html privacy.html cloudco sitemap.xml; do
             code="$(curl -sS -L --max-time 20 -o "/tmp/${path//\//_}" -w '%{http_code}' "${base%/}/${path}" || true)"
             test "${code}" = 200
           done
+          grep -Fq 'https://listiaapp.com/marketplace' /tmp/sitemap.xml
           grep -Fq 'Version 1.4' /tmp/terms.html
           grep -Fq 'Version 1.3' /tmp/privacy.html
           grep -Fq 'cloudco-arrival' /tmp/cloudco
@@ -102,9 +110,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           if [[ '${{ steps.upload.outputs.token_kind }}' == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
-          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA commercial 11-language release ${GITHUB_SHA:0:12}" --yes
+          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA commercial marketplace release ${GITHUB_SHA:0:12}" --yes
 
-      - name: Verify live commercial site, legal pages and CloudCo
+      - name: Verify live commercial site and marketplace
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -112,12 +120,14 @@ jobs:
           ok=false
           for attempt in $(seq 1 24); do
             root="$(curl -sS -L --max-time 20 -o /tmp/root.html -w '%{http_code}' 'https://listiaapp.com/?lang=ru' || true)"
+            marketplace="$(curl -sS -L --max-time 20 -o /tmp/marketplace-live.html -w '%{http_code}' 'https://listiaapp.com/marketplace' || true)"
             terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://listiaapp.com/terms.html' || true)"
             privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://listiaapp.com/privacy.html' || true)"
             cloudco="$(curl -sS -L --max-time 20 -o /tmp/cloudco.html -w '%{http_code}' 'https://listiaapp.com/cloudco' || true)"
+            sitemap="$(curl -sS -L --max-time 20 -o /tmp/sitemap-live.xml -w '%{http_code}' 'https://listiaapp.com/sitemap.xml' || true)"
             global="$(curl -sS -L --max-time 20 -o /tmp/global.js -w '%{http_code}' 'https://listiaapp.com/global-locales.js' || true)"
             japanese="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://listiaapp.com/japanese-locale.js' || true)"
-            if [[ "$root" == 200 && "$terms" == 200 && "$privacy" == 200 && "$cloudco" == 200 && "$global" == 200 && "$japanese" == 200 ]] && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html && grep -Fq 'cloudco-arrival' /tmp/cloudco.html && grep -Fq 'cloudco-logo-official.webp?v=2' /tmp/cloudco.html && grep -Fq 'Русский' /tmp/global.js && grep -Fq '日本語' /tmp/ja.js; then ok=true; break; fi
+            if [[ "$root" == 200 && "$marketplace" == 200 && "$terms" == 200 && "$privacy" == 200 && "$cloudco" == 200 && "$sitemap" == 200 && "$global" == 200 && "$japanese" == 200 ]] && grep -Fq 'LISTIA busca por ti' /tmp/marketplace-live.html && grep -Fq 'id="map"' /tmp/marketplace-live.html && grep -Fq 'https://listiaapp.com/marketplace' /tmp/sitemap-live.xml && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html && grep -Fq 'cloudco-arrival' /tmp/cloudco.html && grep -Fq 'cloudco-logo-official.webp?v=2' /tmp/cloudco.html && grep -Fq 'Русский' /tmp/global.js && grep -Fq '日本語' /tmp/ja.js; then ok=true; break; fi
             sleep 5
           done
           [[ "$ok" == true ]]
@@ -125,7 +135,7 @@ jobs:
             code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://listiaapp.com/?lang=${lang}")"
             test "$code" = 200
           done
-          for url in 'https://www.listiaapp.com/?lang=ru' 'https://app.listiaapp.com/?lang=ru' 'https://app.listiaapp.com/?lang=ja'; do
+          for url in 'https://www.listiaapp.com/marketplace' 'https://app.listiaapp.com/?lang=ru' 'https://app.listiaapp.com/?lang=ja'; do
             code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "$url")"
             test "$code" = 200
           done
@@ -137,19 +147,19 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           {
-            echo 'LISTIA COMMERCIAL 11-LANGUAGE DEPLOYMENT VERIFIED'
+            echo 'LISTIA COMMERCIAL + MARKETPLACE DEPLOYMENT VERIFIED'
             echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "source_commit=${GITHUB_SHA}"
+            echo 'marketplace_live=true'
+            echo 'marketplace_url=https://listiaapp.com/marketplace'
+            echo 'marketplace_map=true'
+            echo 'marketplace_in_sitemap=true'
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
-            echo 'russian_live=true'
-            echo 'japanese_live=true'
             echo 'terms_version=1.4'
             echo 'privacy_version=1.3'
-            echo 'cloudco_timeline_live=true'
-            echo 'cloudco_logo_cache_bust=v2'
           } > COMMERCIAL_LIVE_DEPLOYMENT_PROOF.txt
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
           git add COMMERCIAL_LIVE_DEPLOYMENT_PROOF.txt
-          git commit -m 'Record verified LISTIA 11-language commercial deployment' || exit 0
+          git commit -m 'Record verified LISTIA marketplace deployment' || exit 0
           git push origin main
