@@ -2,13 +2,13 @@
   'use strict';
 
   const LABELS = {
-    es:{search:'Buscar',operation:'Operación',type:'Tipo de propiedad',min:'Precio mínimo',max:'Precio máximo',results:'propiedades'},
-    en:{search:'Search',operation:'Operation',type:'Property type',min:'Minimum price',max:'Maximum price',results:'properties'},
-    fr:{search:'Recherche',operation:'Opération',type:'Type de bien',min:'Prix minimum',max:'Prix maximum',results:'biens'},
-    it:{search:'Cerca',operation:'Operazione',type:'Tipo di proprietà',min:'Prezzo minimo',max:'Prezzo massimo',results:'proprietà'},
-    'pt-BR':{search:'Buscar',operation:'Operação',type:'Tipo de imóvel',min:'Preço mínimo',max:'Preço máximo',results:'imóveis'},
-    de:{search:'Suche',operation:'Vorgang',type:'Immobilientyp',min:'Mindestpreis',max:'Höchstpreis',results:'Immobilien'},
-    'ar-AE':{search:'بحث',operation:'العملية',type:'نوع العقار',min:'أقل سعر',max:'أعلى سعر',results:'عقارات'}
+    es:{search:'Buscar',operation:'Operación',type:'Tipo de propiedad',min:'Precio mínimo',max:'Precio máximo',results:'propiedades',sent:'Tu solicitud fue enviada, se pondrán en contacto contigo por esta propiedad.',signup:'Crea tu cuenta gratis para enviar tu solicitud por esta propiedad.'},
+    en:{search:'Search',operation:'Operation',type:'Property type',min:'Minimum price',max:'Maximum price',results:'properties',sent:'Your request was sent. They will contact you about this property.',signup:'Create your free account to send your request for this property.'},
+    fr:{search:'Recherche',operation:'Opération',type:'Type de bien',min:'Prix minimum',max:'Prix maximum',results:'biens',sent:'Votre demande a été envoyée. On vous contactera au sujet de ce bien.',signup:'Créez votre compte gratuit pour envoyer votre demande.'},
+    it:{search:'Cerca',operation:'Operazione',type:'Tipo di proprietà',min:'Prezzo minimo',max:'Prezzo massimo',results:'proprietà',sent:'La tua richiesta è stata inviata. Ti contatteranno per questa proprietà.',signup:'Crea il tuo account gratuito per inviare la richiesta.'},
+    'pt-BR':{search:'Buscar',operation:'Operação',type:'Tipo de imóvel',min:'Preço mínimo',max:'Preço máximo',results:'imóveis',sent:'Sua solicitação foi enviada. Entrarão em contato com você sobre este imóvel.',signup:'Crie sua conta gratuita para enviar sua solicitação.'},
+    de:{search:'Suche',operation:'Vorgang',type:'Immobilientyp',min:'Mindestpreis',max:'Höchstpreis',results:'Immobilien',sent:'Deine Anfrage wurde gesendet. Du wirst zu dieser Immobilie kontaktiert.',signup:'Erstelle dein kostenloses Konto, um deine Anfrage zu senden.'},
+    'ar-AE':{search:'بحث',operation:'العملية',type:'نوع العقار',min:'أقل سعر',max:'أعلى سعر',results:'عقارات',sent:'تم إرسال طلبك. سيتم التواصل معك بخصوص هذا العقار.',signup:'أنشئ حسابك المجاني لإرسال طلبك بخصوص هذا العقار.'}
   };
 
   function locale(){
@@ -70,12 +70,96 @@
     if(btn){btn.setAttribute('aria-haspopup','dialog');btn.setAttribute('aria-expanded',panel?.classList.contains('open')?'true':'false')}
   }
 
+  function showInterestToast(text,kind='success'){
+    let toast=document.getElementById('marketplaceInterestToast');
+    if(!toast){
+      toast=document.createElement('div');
+      toast.id='marketplaceInterestToast';
+      toast.className='marketplace-interest-toast';
+      toast.setAttribute('role','status');
+      toast.setAttribute('aria-live','polite');
+      document.body.append(toast);
+    }
+    toast.className=`marketplace-interest-toast ${kind}`;
+    toast.textContent=text;
+    toast.classList.add('show');
+    clearTimeout(window.__listiaInterestToastTimer);
+    window.__listiaInterestToastTimer=setTimeout(()=>toast.classList.remove('show'),5200);
+  }
+
+  function readSession(){
+    try{return JSON.parse(localStorage.getItem('listia_session')||'null')}catch{return null}
+  }
+
+  async function resolveSignedInContact(){
+    const session=readSession();
+    if(!session?.access_token) return null;
+    let user=session.user||null;
+    const cfg=window.LISTIA_CONFIG||{};
+    const apiKey=cfg.SUPABASE_PUBLISHABLE_KEY||cfg.SUPABASE_ANON_KEY||'';
+    if((!user?.email||!user?.id)&&cfg.SUPABASE_URL&&apiKey){
+      try{
+        const r=await fetch(`${cfg.SUPABASE_URL}/auth/v1/user`,{headers:{apikey:apiKey,Authorization:`Bearer ${session.access_token}`},cache:'no-store'});
+        if(r.ok) user=await r.json();
+      }catch{}
+    }
+    if(!user) return null;
+    const meta=user.user_metadata||{};
+    const name=String(meta.full_name||meta.name||meta.display_name||user.email?.split('@')[0]||'').trim();
+    const email=String(user.email||meta.email||'').trim();
+    const whatsapp=String(meta.whatsapp||meta.phone||user.phone||'').trim();
+    if(!email&&!whatsapp) return null;
+    return {name,email,whatsapp};
+  }
+
+  function waitForInterestResult(form){
+    return new Promise(resolve=>{
+      const check=()=>{
+        const success=form.querySelector('.marketplace-success');
+        const error=form.querySelector('.marketplace-error');
+        if(success?.textContent?.trim()) return resolve(true);
+        if(error?.textContent?.trim()) return resolve(false);
+      };
+      const observer=new MutationObserver(()=>{const result=check();if(result!==undefined){observer.disconnect();resolve(result)}});
+      observer.observe(form,{childList:true,subtree:true,characterData:true,attributes:true});
+      setTimeout(()=>{observer.disconnect();resolve(false)},9000);
+    });
+  }
+
+  async function autoSendMarketplaceInterest(){
+    const form=document.querySelector('#screen-marketplace-detail .marketplace-interest-grid');
+    if(!form||form.dataset.listiaAutoSent==='1') return;
+    form.dataset.listiaAutoSent='1';
+    const contact=await resolveSignedInContact();
+    if(!contact){
+      form.dataset.listiaAutoSent='0';
+      showInterestToast(t().signup,'info');
+      return;
+    }
+    const set=(name,value)=>{const input=form.elements?.namedItem?.(name);if(input&&value&&!input.value)input.value=value};
+    set('name',contact.name); set('email',contact.email); set('whatsapp',contact.whatsapp);
+    const resultPromise=waitForInterestResult(form);
+    form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    if(await resultPromise) showInterestToast(t().sent,'success');
+    else form.dataset.listiaAutoSent='0';
+  }
+
+  function installInterestFlow(){
+    if(document.documentElement.dataset.listiaInterestFlow==='1') return;
+    document.documentElement.dataset.listiaInterestFlow='1';
+    document.addEventListener('click',event=>{
+      const button=event.target.closest?.('.marketplace-card .marketplace-actions .primary');
+      if(!button) return;
+      setTimeout(autoSendMarketplaceInterest,90);
+    },true);
+  }
+
   function repair(){repairMarketplace();repairOffice();repairVoice()}
   let timer=0;
   const schedule=()=>{clearTimeout(timer);timer=setTimeout(repair,30)};
   const observer=new MutationObserver(schedule);
   function boot(){
-    repair(); observer.observe(document.body,{childList:true,subtree:true});
+    repair(); installInterestFlow(); observer.observe(document.body,{childList:true,subtree:true});
     window.addEventListener('listia:languagechange',()=>setTimeout(repair,0));
     window.addEventListener('focus',schedule);
   }
