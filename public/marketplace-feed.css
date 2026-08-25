@@ -1,0 +1,6 @@
+/* LISTIA authorized marketplace feed UI. Minimum text size 12px. */
+.marketplace-source-pill{display:inline-flex;align-items:center;width:max-content;max-width:100%;padding:5px 9px;border-radius:999px;border:1px solid rgba(114,240,160,.22);background:rgba(114,240,160,.07);color:#8ef1ad;font-size:12px;line-height:1.25;font-weight:800}
+.marketplace-source-contact{display:grid;gap:8px;padding:16px;border:1px solid rgba(114,240,160,.18);border-radius:18px;background:rgba(114,240,160,.045)}
+.marketplace-source-contact>strong{font-size:17px;line-height:1.3}.marketplace-source-contact>span{font-size:12px;line-height:1.5;color:#aaa8b3}.marketplace-source-contact>small{font-size:12px;line-height:1.35;color:#8ef1ad;font-weight:750}
+.marketplace-source-actions{display:flex;gap:9px;flex-wrap:wrap}.marketplace-source-actions a{display:inline-flex;align-items:center;min-height:42px;padding:9px 12px;border-radius:12px;background:#181820;border:1px solid rgba(255,255,255,.09);color:#fff;text-decoration:none;font-size:12px;font-weight:750;overflow-wrap:anywhere}
+@media(max-width:520px){.marketplace-source-actions{display:grid;grid-template-columns:1fr}.marketplace-source-actions a{width:100%}}
