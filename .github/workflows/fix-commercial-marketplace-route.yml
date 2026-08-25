@@ -1,0 +1,42 @@
+name: Fix LISTIA commercial marketplace route
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-commercial-marketplace-route.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Repair builder syntax and trigger commercial deployment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/build-commercial-worker.py')
+          s=p.read_text(encoding='utf-8')
+          bad='a.output.write_text(worker,encoding="utf-8");print(f"Commercial Worker build validated for {len(LANGUAGES)} languages ({len(worker.encode(\'utf-8\'))} bytes).")");return 0'
+          good='a.output.write_text(worker,encoding="utf-8");print(f"Commercial Worker build validated for {len(LANGUAGES)} languages ({len(worker.encode(\'utf-8\'))} bytes).") ;return 0'
+          if bad in s:
+              s=s.replace(bad,good)
+          else:
+              s=s.replace('bytes).")");return 0','bytes).") ;return 0')
+          p.write_text(s,encoding='utf-8')
+          PY
+          python3 -m py_compile scripts/build-commercial-worker.py
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/build-commercial-worker.py
+          git commit -m 'Fix commercial marketplace Worker builder syntax' || exit 0
+          git push origin main
