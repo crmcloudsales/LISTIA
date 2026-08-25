@@ -5,4 +5,10 @@ body.listia-shell-v2 .marketplace-entry{min-width:88px!important;width:auto!impo
 body.listia-shell-v2 .language-control{min-width:0!important;width:104px!important}
 body.listia-shell-v2 .language-select{width:100%!important;min-width:0!important;white-space:nowrap!important;text-overflow:ellipsis!important}
 body.listia-shell-v2 .listia-v2-kpi span{letter-spacing:-.01em!important}
+/* The floating animated orb is LISTIA. Do not duplicate her inside cards. */
+body.listia-shell-v2 .listia-ai-card .listia-ai-orb{display:none!important}
+body.listia-shell-v2 .listia-ai-card{display:flex!important;align-items:stretch!important;justify-content:center!important;text-align:left!important}
+body.listia-shell-v2 .listia-ai-copy{display:flex!important;flex-direction:column!important;justify-content:center!important}
+body.listia-shell-v2 .listia-ai-copy strong{justify-content:flex-start!important;white-space:normal!important}
+body.listia-shell-v2 .listia-ai-copy button{margin-top:10px!important}
 @media(max-width:360px){body.listia-shell-v2 .brandbar{grid-template-columns:minmax(112px,1fr) auto auto!important;padding-left:10px!important;padding-right:10px!important;column-gap:5px!important}body.listia-shell-v2 .brand-logo{max-width:145px!important}body.listia-shell-v2 .marketplace-entry{min-width:78px!important;padding-left:7px!important;padding-right:7px!important}.listia-nav-btn span{font-size:12px!important;letter-spacing:-.02em!important}}
