@@ -1,0 +1,5 @@
+LISTIA OFFICIAL APPLICATION ICON
+version=1
+source_sha256=aab91cc3ce7cd1bece514a3763253147dcf4e364b5074d02b852befe1973befa
+scope=application-icon-only
+brand-logo-unchanged=true
