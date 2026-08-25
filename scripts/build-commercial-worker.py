@@ -52,5 +52,5 @@ def main()->int:
     p=argparse.ArgumentParser();p.add_argument("input",type=Path);p.add_argument("output",type=Path);a=p.parse_args()
     html=a.input.read_text(encoding="utf-8");c=Path("commercial") if Path("commercial/cloudco.html").exists() else a.input.parent;pub=Path("public") if Path("public/terms.html").exists() else a.input.parent.parent/"public"
     worker=build_worker(html,(c/"marketplace.html").read_text(encoding="utf-8"),(c/"cloudco.html").read_text(encoding="utf-8"),(c/"footer-legal.js").read_text(encoding="utf-8"),(c/"global-locales.js").read_text(encoding="utf-8"),(c/"japanese-locale.js").read_text(encoding="utf-8"),(pub/"terms.html").read_text(encoding="utf-8"),(pub/"privacy.html").read_text(encoding="utf-8"),(pub/"legal.css").read_text(encoding="utf-8"),b64(c/"cloudco-assets"/"cloudco-logo-official.webp"),b64(pub/"listia-mark-transparent.webp"))
-    a.output.write_text(worker,encoding="utf-8");print(f"Commercial Worker build validated for {len(LANGUAGES)} languages ({len(worker.encode('utf-8'))} bytes).")");return 0
+    a.output.write_text(worker,encoding="utf-8");print(f"Commercial Worker build validated for {len(LANGUAGES)} languages ({len(worker.encode('utf-8'))} bytes).") ;return 0
 if __name__=="__main__": raise SystemExit(main())
