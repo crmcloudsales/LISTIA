@@ -19,7 +19,8 @@ window.LISTIA_CONFIG = {
     ["listiaAccountMarketplaceStyles", "/account-marketplace.css?v=1"],
     ["listiaMarketplaceFeedStyles", "/marketplace-feed.css?v=1"],
     ["listiaContactEngineStyles", "/contact-engine.css?v=1"],
-    ["listiaAppShellV2Styles", "/app-shell-v2.css?v=1"]
+    ["listiaAppShellV2Styles", "/app-shell-v2.css?v=1"],
+    ["listiaPwaPolishStyles", "/pwa-polish.css?v=1"]
   ];
   for (const [id, href] of styles) {
     if (document.getElementById(id)) continue;
@@ -42,7 +43,7 @@ window.LISTIA_CONFIG = {
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
     ["/contact-engine.js?v=1", "listiaContactEngineLoader"],
-    ["/listia-voice.js?v=2", "listiaVoiceLoader"],
+    ["/listia-voice.js?v=3", "listiaVoiceLoader"],
     ["/marketplace-assistant.js?v=1", "listiaMarketplaceAssistantLoader"],
     ["/marketplace-feed-enhancements.js?v=2", "listiaMarketplaceFeedLoader"],
     ["/marketplace.js?v=1", "listiaMarketplaceLoader"],
