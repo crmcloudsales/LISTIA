@@ -1,0 +1,63 @@
+(() => {
+  'use strict';
+  const SESSION_KEY='listia_session';
+  const $=s=>document.querySelector(s);
+  const $$=s=>[...document.querySelectorAll(s)];
+  const svgs={
+    office:'<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/></svg>',
+    listing:'<svg viewBox="0 0 24 24"><path d="M4 20V8l8-5 8 5v12"/><path d="M8 20v-6h8v6"/><path d="M9 10h6"/></svg>',
+    control:'<svg viewBox="0 0 24 24"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-8"/><path d="M22 19H2"/></svg>',
+    ai:'<svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><path d="m8.5 8.5-2-2m9 9 2 2m0-11-2 2m-7 7-2 2"/></svg>',
+    account:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.6-4.3 3.2-6.5 7.5-6.5s6.9 2.2 7.5 6.5"/></svg>'
+  };
+
+  function session(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
+  function showScreen(id){const target=document.getElementById(id);if(!target)return false;$$('.screen').forEach(s=>s.classList.toggle('active',s===target));window.scrollTo({top:0,behavior:'instant'});syncShell();return true}
+  function firstText(ids,fallback=''){for(const id of ids){const el=document.getElementById(id);if(el?.textContent?.trim())return el.textContent.trim()}return fallback}
+  function copyCount(from,to){const src=document.getElementById(from),dst=document.getElementById(to);if(!src||!dst)return;const sync=()=>dst.textContent=(src.textContent||'0').trim()||'0';sync();new MutationObserver(sync).observe(src,{childList:true,characterData:true,subtree:true})}
+
+  function buildNav(){if(document.getElementById('listiaBottomNav'))return;const nav=document.createElement('nav');nav.id='listiaBottomNav';nav.className='listia-bottom-nav';nav.hidden=true;nav.setAttribute('aria-label','LISTIA');const items=[['office','OFFICE'],['listing','LISTING'],['control','CONTROL'],['ai','IA CHAT'],['account','ACCOUNT']];items.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.className='listia-nav-btn';b.dataset.listiaTab=key;b.innerHTML=`${svgs[key]}<span>${label}</span>`;b.addEventListener('click',()=>openTab(key));nav.append(b)});document.body.append(nav)}
+
+  function openTab(key){
+    if(key==='office')showScreen('screen-ready');
+    else if(key==='listing'){if(!showScreen('screen-properties')){const btn=document.getElementById('officePropertiesBtn');btn?.click()}}
+    else if(key==='control'){ensureControl();showScreen('screen-control-v2')}
+    else if(key==='ai'){window.LISTIA_VOICE?.open?.(true);setActive('ai');return}
+    else if(key==='account'){ensureAccount();showScreen('screen-account-v2')}
+    setActive(key)
+  }
+  function setActive(key){$$('.listia-nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.listiaTab===key))}
+
+  function buildOffice(){const screen=document.getElementById('screen-ready');if(!screen||document.getElementById('listiaOfficeDashboardV2'))return;const dash=document.createElement('div');dash.id='listiaOfficeDashboardV2';dash.className='listia-v2-screen';dash.innerHTML=`
+    <div class="listia-v2-head"><div><h1 id="v2Greeting">Tu operación</h1><p id="v2Business">LISTIA está trabajando para ti.</p></div><span class="listia-v2-badge">● LISTIA ACTIVA</span></div>
+    <div class="listia-v2-kpis">
+      <article class="listia-v2-kpi green"><span>Citas</span><strong id="v2Appointments">0</strong><small>hoy</small></article>
+      <article class="listia-v2-kpi orange"><span>Oportunidades</span><strong id="v2Opportunities">0</strong><small>nuevas</small></article>
+      <article class="listia-v2-kpi blue"><span>Leads</span><strong id="v2Leads">0</strong><small>gestionados</small></article>
+      <article class="listia-v2-kpi purple"><span>Propiedades</span><strong id="v2Properties">0</strong><small>activas</small></article>
+    </div>
+    <div class="listia-v2-grid">
+      <section class="listia-v2-card listia-ai-card"><div class="listia-ai-orb"></div><div class="listia-ai-copy"><strong>LISTIA Assistant</strong><p>Háblame normal. Puedo trabajar con propiedades, contactos, leads, citas y marketplace.</p><button id="v2TalkBtn" type="button">Hablar con LISTIA</button></div></section>
+      <section class="listia-v2-card"><h2>Acciones rápidas</h2><div class="listia-quick-actions"><button class="listia-quick-action" id="v2AddProperty"><span>Publicar propiedad<small>Entrega brochure, PDF, fotos o video</small></span><b>+</b></button><button class="listia-quick-action" id="v2OpenLeads"><span>Leads<small>Ver y dar seguimiento</small></span><b>›</b></button><button class="listia-quick-action" id="v2Marketplace"><span>Marketplace<small>Buscar propiedades</small></span><b>›</b></button></div></section>
+      <section class="listia-v2-card listia-insight"><div class="listia-insight-icon">✦</div><p><strong>Insight inteligente</strong><br><span id="v2Insight">LISTIA priorizará lo que necesita atención y te mostrará resultados, no tareas.</span></p></section>
+    </div>`;
+    screen.prepend(dash);
+    copyCount('officeAppointmentCount','v2Appointments');copyCount('officeOpportunityCount','v2Opportunities');copyCount('officeLeadCount','v2Leads');copyCount('officePropertyCount','v2Properties');
+    const business=firstText(['officeBusinessName','checkpointBusinessName','planBusinessName'],'');const market=firstText(['officeBusinessMarket','checkpointBusinessMarket','businessMarket'],'');
+    if(business)document.getElementById('v2Business').textContent=[business,market].filter(Boolean).join(' · ');
+    document.getElementById('v2TalkBtn').addEventListener('click',()=>window.LISTIA_VOICE?.open?.(true));
+    document.getElementById('v2AddProperty').addEventListener('click',()=>document.getElementById('officeAddPropertyBtn')?.click());
+    document.getElementById('v2OpenLeads').addEventListener('click',()=>document.querySelector('#listiaModuleActions [data-module="leads"]')?.click());
+    document.getElementById('v2Marketplace').addEventListener('click',()=>{const m=document.querySelector('[data-open-marketplace],#openMarketplaceBtn,.marketplace-nav-button');if(m)m.click();else showScreen('screen-marketplace')});
+  }
+
+  function ensureControl(){if(document.getElementById('screen-control-v2'))return;const section=document.createElement('section');section.className='screen';section.id='screen-control-v2';section.innerHTML=`<div class="listia-control-v2"><div class="listia-v2-head"><div><h1>Control Center</h1><p>Lo importante de tu negocio, sin ruido.</p></div><span class="listia-v2-badge">EN VIVO</span></div><div class="listia-v2-kpis"><article class="listia-v2-kpi green"><span>Citas</span><strong id="ctrlAppointments">0</strong><small>hoy</small></article><article class="listia-v2-kpi orange"><span>Oportunidades</span><strong id="ctrlOpportunities">0</strong><small>nuevas</small></article><article class="listia-v2-kpi blue"><span>Leads</span><strong id="ctrlLeads">0</strong><small>gestionados</small></article><article class="listia-v2-kpi purple"><span>Listings</span><strong id="ctrlProperties">0</strong><small>activos</small></article></div><div class="listia-control-body"><div class="listia-v2-card"><h2>Rendimiento</h2><div class="listia-mini-chart"><i style="height:28%"></i><i style="height:42%"></i><i style="height:54%"></i><i style="height:72%"></i><i style="height:61%"></i><i style="height:78%"></i><i style="height:86%"></i></div><div class="listia-control-list"><div class="listia-control-row"><span>LISTIA está trabajando</span><strong>Activa</strong></div><div class="listia-control-row"><span>Prioridad</span><strong>Seguimiento + oportunidades</strong></div><div class="listia-control-row"><span>Próxima recomendación</span><strong>Se genera con tus datos</strong></div></div></div></div></div>`;document.querySelector('main.main')?.append(section);copyCount('officeAppointmentCount','ctrlAppointments');copyCount('officeOpportunityCount','ctrlOpportunities');copyCount('officeLeadCount','ctrlLeads');copyCount('officePropertyCount','ctrlProperties')}
+
+  function ensureAccount(){if(document.getElementById('screen-account-v2'))return;const section=document.createElement('section');section.className='screen';section.id='screen-account-v2';const s=session();const email=s?.user?.email||'';section.innerHTML=`<div class="listia-account-v2"><div class="listia-v2-head"><div><h1>Account</h1><p>Tu cuenta y tu negocio.</p></div><span class="listia-v2-badge">SEGURO</span></div><div></div><div class="listia-account-body"><div class="listia-account-card"><strong>Cuenta LISTIA</strong><span>${email||'Sesión activa'}</span></div><div class="listia-account-card"><strong>Negocio</strong><span>${firstText(['officeBusinessName','checkpointBusinessName'],'Tu organización')}</span></div><div class="listia-account-card"><strong>Configuración</strong><button type="button" id="accountMarketplace">Marketplace</button><button type="button" id="accountLanguage">Idioma y preferencias</button><button type="button" id="accountLogout">Cerrar sesión</button></div></div></div>`;document.querySelector('main.main')?.append(section);document.getElementById('accountMarketplace')?.addEventListener('click',()=>showScreen('screen-marketplace'));document.getElementById('accountLanguage')?.addEventListener('click',()=>document.getElementById('languageSelect')?.focus());document.getElementById('accountLogout')?.addEventListener('click',()=>document.getElementById('officeLogoutBtn')?.click())}
+
+  function syncShell(){const s=session();const active=$('.screen.active');const id=active?.id||'';const appReady=Boolean(s?.access_token)&&!['screen-login','screen-signup','screen-forgot','screen-reset','screen-onboarding','screen-plan','screen-google','screen-checkpoint','screen-business-dna'].includes(id);document.body.classList.toggle('listia-shell-v2',appReady);document.body.dataset.accountMode=(localStorage.getItem('listia_account_mode')||localStorage.getItem('listia_mode')||'professional').includes('seek')?'seeker':'professional';const nav=document.getElementById('listiaBottomNav');if(nav)nav.hidden=!appReady;if(!appReady)return;if(id==='screen-ready')setActive('office');else if(id==='screen-properties')setActive('listing');else if(id==='screen-control-v2')setActive('control');else if(id==='screen-account-v2')setActive('account')}
+
+  function boot(){buildNav();buildOffice();ensureControl();ensureAccount();syncShell();new MutationObserver(()=>{buildOffice();syncShell()}).observe(document.querySelector('main.main')||document.body,{subtree:true,attributes:true,attributeFilter:['class']});window.addEventListener('storage',syncShell)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.LISTIA_APP_SHELL={openTab,showScreen};
+})();
