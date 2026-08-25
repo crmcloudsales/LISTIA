@@ -14,6 +14,17 @@ window.LISTIA_CONFIG = {
   STRIPE_PUBLISHABLE_KEY: "pk_live_51U5BGR0falgc3pBvgIUoHEp5kwm2pRSRrTfubFkeQjGmopTbFd0ZmEIhjqeyOfzpGpziH2IzYn24d62og1eTyOVd00z8tLsz8A"
 };
 
+// Global UI guardrails load before optional runtime modules.
+(() => {
+  if (!document.getElementById("listiaReadabilityStyles")) {
+    const link = document.createElement("link");
+    link.id = "listiaReadabilityStyles";
+    link.rel = "stylesheet";
+    link.href = "/readability.css?v=2";
+    document.head.append(link);
+  }
+})();
+
 // Keep optional runtime modules isolated from the core PWA.
 (() => {
   const modules = [
@@ -25,7 +36,7 @@ window.LISTIA_CONFIG = {
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
-    ["/listia-voice.js?v=1", "listiaVoiceLoader"]
+    ["/listia-voice.js?v=2", "listiaVoiceLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
