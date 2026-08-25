@@ -46,6 +46,19 @@
   const setHTML=(id,value)=>{const el=document.getElementById(id);if(el)el.innerHTML=value};
   const persist=lang=>{try{localStorage.setItem('listia_language',lang)}catch{}document.cookie=`listia_lang=${encodeURIComponent(lang)};path=/;max-age=31536000;SameSite=Lax`};
 
+  function ensureOfficialFavicon(){
+    let favicon=document.getElementById('favicon') || document.querySelector('link[rel="icon"]');
+    if(!favicon){
+      favicon=document.createElement('link');
+      favicon.rel='icon';
+      favicon.id='favicon';
+      document.head.append(favicon);
+    }
+    favicon.type='image/png';
+    favicon.sizes='32x32';
+    favicon.href='https://app.listiaapp.com/listia-app-icon-32.png?v=2';
+  }
+
   function ensureOptions(){
     const selector=document.getElementById('languageSelect'); if(!selector)return;
     for(const [key,cfg] of Object.entries(custom)){
@@ -100,6 +113,7 @@
   }
 
   function init(){
+    ensureOfficialFavicon();
     ensureOptions();ensureHreflang();patchApi();
     const selector=document.getElementById('languageSelect');
     if(selector&&!selector.dataset.globalLocalesBound){selector.dataset.globalLocalesBound='1';selector.addEventListener('change',e=>{const key=normalize(e.target.value);if(key){e.stopImmediatePropagation();apply(key,{persistChoice:true})}},true);}
