@@ -20,7 +20,8 @@ window.LISTIA_CONFIG = {
     ["listiaMarketplaceFeedStyles", "/marketplace-feed.css?v=1"],
     ["listiaContactEngineStyles", "/contact-engine.css?v=1"],
     ["listiaAppShellV2Styles", "/app-shell-v2.css?v=1"],
-    ["listiaPwaPolishStyles", "/pwa-polish.css?v=1"]
+    ["listiaPwaPolishStyles", "/pwa-polish.css?v=1"],
+    ["listiaPwaPolishHotfixStyles", "/pwa-polish-hotfix.css?v=1"]
   ];
   for (const [id, href] of styles) {
     if (document.getElementById(id)) continue;
