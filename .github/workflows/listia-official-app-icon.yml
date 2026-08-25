@@ -1,0 +1,166 @@
+name: Install official LISTIA application icon
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/icon-source/**'
+      - '.github/workflows/listia-official-app-icon.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-official-app-icon
+  cancel-in-progress: false
+
+jobs:
+  install-icon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Skip cleanup-triggered run when source is already consumed
+        id: source
+        shell: bash
+        run: |
+          if [[ -f .github/icon-source/part07.b64 ]]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reconstruct and verify exact user-supplied source
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat .github/icon-source/part*.b64 | tr -d '\n\r ' | base64 --decode > /tmp/listia-app-icon-official.jpg
+          echo 'aab91cc3ce7cd1bece514a3763253147dcf4e364b5074d02b852befe1973befa  /tmp/listia-app-icon-official.jpg' | sha256sum -c -
+          file /tmp/listia-app-icon-official.jpg
+
+      - name: Build PWA icon sizes without redesigning the image
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          src=Path('/tmp/listia-app-icon-official.jpg')
+          im=Image.open(src)
+          if im.size != (1536,1536):
+              raise SystemExit(f'Unexpected source size: {im.size}')
+          if im.mode not in ('RGB','RGBA'):
+              im=im.convert('RGB')
+          out=Path('public')
+          (out/'listia-app-icon-official.jpg').write_bytes(src.read_bytes())
+          for size in (32,180,192,512):
+              resized=im.resize((size,size),Image.Resampling.LANCZOS)
+              resized.save(out/f'listia-app-icon-{size}.png',format='PNG',optimize=True)
+          # The supplied square artwork already includes a safe purple field around the white mark.
+          # Maskable derivatives therefore preserve the same artwork and only resize it.
+          for size in (192,512):
+              resized=im.resize((size,size),Image.Resampling.LANCZOS)
+              resized.save(out/f'listia-app-icon-maskable-{size}.png',format='PNG',optimize=True)
+          PY
+
+      - name: Point every localized PWA manifest to the official app icon
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          icons=[
+            {'src':'/listia-app-icon-192.png?v=1','sizes':'192x192','type':'image/png','purpose':'any'},
+            {'src':'/listia-app-icon-512.png?v=1','sizes':'512x512','type':'image/png','purpose':'any'},
+            {'src':'/listia-app-icon-maskable-192.png?v=1','sizes':'192x192','type':'image/png','purpose':'maskable'},
+            {'src':'/listia-app-icon-maskable-512.png?v=1','sizes':'512x512','type':'image/png','purpose':'maskable'},
+          ]
+          for p in sorted(Path('public').glob('manifest*.webmanifest')):
+              data=json.loads(p.read_text(encoding='utf-8'))
+              data['icons']=icons
+              p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          index=Path('public/index.html')
+          s=index.read_text(encoding='utf-8')
+          import re
+          s=re.sub(r'<link href="/listia-isotipo-180-v2\.png\?v=\d+" rel="apple-touch-icon" sizes="180x180"/>',
+                   '<link href="/listia-app-icon-180.png?v=1" rel="apple-touch-icon" sizes="180x180"/>',s)
+          s=re.sub(r'<link href="/listia-isotipo-32-v2\.png\?v=\d+" rel="icon" sizes="32x32" type="image/png"/>',
+                   '<link href="/listia-app-icon-32.png?v=1" rel="icon" sizes="32x32" type="image/png"/>',s)
+          index.write_text(s,encoding='utf-8')
+
+          sw=Path('public/sw.js')
+          s=sw.read_text(encoding='utf-8')
+          s=re.sub(r'const CACHE="listia-pwa-v[^"]+";', 'const CACHE="listia-pwa-v0.9.9";', s)
+          replacements={
+            '/listia-isotipo-192-v2.png?v=4':'/listia-app-icon-192.png?v=1',
+            '/listia-isotipo-512-v2.png?v=4':'/listia-app-icon-512.png?v=1',
+            '/listia-isotipo-maskable-192-v3.png?v=5':'/listia-app-icon-maskable-192.png?v=1',
+            '/listia-isotipo-maskable-512-v3.png?v=5':'/listia-app-icon-maskable-512.png?v=1',
+            '/listia-isotipo-180-v2.png?v=4':'/listia-app-icon-180.png?v=1',
+            '/listia-isotipo-32-v2.png?v=4':'/listia-app-icon-32.png?v=1',
+          }
+          for old,new in replacements.items(): s=s.replace(old,new)
+          sw.write_text(s,encoding='utf-8')
+
+          headers=Path('public/_headers')
+          hs=headers.read_text(encoding='utf-8')
+          block='\n/listia-app-icon-*.png\n  Cache-Control: public, max-age=31536000, immutable\n\n/listia-app-icon-official.jpg\n  Cache-Control: public, max-age=31536000, immutable\n'
+          if '/listia-app-icon-*.png' not in hs:
+              hs=hs.rstrip()+block+'\n'
+          headers.write_text(hs,encoding='utf-8')
+          PY
+
+      - name: Verify application icon wiring only
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          for size in (32,180,192,512):
+              p=Path(f'public/listia-app-icon-{size}.png')
+              assert Image.open(p).size==(size,size), (p,Image.open(p).size)
+          for size in (192,512):
+              p=Path(f'public/listia-app-icon-maskable-{size}.png')
+              assert Image.open(p).size==(size,size), (p,Image.open(p).size)
+          manifests=list(Path('public').glob('manifest*.webmanifest'))
+          assert len(manifests)>=12, len(manifests)
+          for p in manifests:
+              t=p.read_text(encoding='utf-8')
+              assert 'listia-app-icon-192.png?v=1' in t, p
+              assert 'listia-app-icon-maskable-512.png?v=1' in t, p
+          idx=Path('public/index.html').read_text(encoding='utf-8')
+          assert '/listia-app-icon-180.png?v=1' in idx
+          assert '/listia-app-icon-32.png?v=1' in idx
+          # Explicitly ensure the normal LISTIA brand logo remains unchanged.
+          assert 'class="brand-logo" src="/listia-logo-transparent.webp"' in idx
+          PY
+
+      - name: Commit official icon and consume staging chunks
+        if: steps.source.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf .github/icon-source
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public .github/icon-source
+          git commit -m 'feat: set supplied artwork as official LISTIA application icon'
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt*2))
+          done
+          exit 1
