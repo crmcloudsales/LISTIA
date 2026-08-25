@@ -3,6 +3,27 @@
   const nativeFetch=window.fetch.bind(window);
   const MARKETPLACE_MARK='marketplace_listings?select=';
   window.LISTIA_MARKETPLACE_DATA=[];
+  window.LISTIA_MARKETPLACE_COUNTRY='';
+
+  function shuffle(values){
+    const a=[...values];
+    for(let i=a.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  async function detectCountry(){
+    try{
+      const r=await nativeFetch('/cdn-cgi/trace',{cache:'no-store'});
+      if(!r.ok)return;
+      const raw=await r.text();
+      const match=raw.match(/(?:^|\n)loc=([A-Z]{2})(?:\n|$)/);
+      if(match)window.LISTIA_MARKETPLACE_COUNTRY=match[1];
+    }catch(_){ }
+  }
+  detectCountry();
 
   window.fetch=async function(input,init){
     let target=input;
@@ -14,7 +35,10 @@
     const finalUrl=typeof target==='string'?target:(target?.url||raw);
     if(finalUrl.includes(MARKETPLACE_MARK)&&response.ok){
       response.clone().json().then(rows=>{
-        if(Array.isArray(rows)) window.LISTIA_MARKETPLACE_DATA=rows;
+        if(Array.isArray(rows)){
+          window.LISTIA_MARKETPLACE_DATA=rows;
+          setTimeout(repair,0);
+        }
       }).catch(()=>{});
     }
     return response;
@@ -69,9 +93,39 @@
       }
     });
   }
+
+  let lastShuffleFingerprint='';
+  function shuffleVisibleCards(){
+    const grid=document.getElementById('marketplaceGrid');
+    if(!grid)return;
+    const cards=[...grid.querySelectorAll('.marketplace-card')];
+    if(cards.length<2)return;
+    const titles=cards.map(card=>text(card.querySelector('.marketplace-title')?.textContent));
+    const fingerprint=[...titles].sort().join('|');
+    if(fingerprint===lastShuffleFingerprint)return;
+    const data=window.LISTIA_MARKETPLACE_DATA||[];
+    const country=String(window.LISTIA_MARKETPLACE_COUNTRY||'').toUpperCase();
+    const rowFor=card=>data.find(x=>text(x.title)===text(card.querySelector('.marketplace-title')?.textContent));
+    const local=[]; const rest=[];
+    for(const card of cards){
+      const row=rowFor(card);
+      if(country&&String(row?.country_code||'').toUpperCase()===country)local.push(card);else rest.push(card);
+    }
+    const ordered=[...shuffle(local),...shuffle(rest)];
+    lastShuffleFingerprint=fingerprint;
+    const fragment=document.createDocumentFragment();
+    ordered.forEach(card=>fragment.append(card));
+    grid.append(fragment);
+  }
+
   let timer=0;
-  const repair=()=>{clearTimeout(timer);timer=setTimeout(()=>{addSourceContact();markAuthorizedCards()},40)};
+  const repair=()=>{clearTimeout(timer);timer=setTimeout(()=>{addSourceContact();markAuthorizedCards();shuffleVisibleCards()},60)};
   const mo=new MutationObserver(repair);
-  function boot(){mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});repair();window.addEventListener('listia:languagechange',repair)}
+  function boot(){
+    mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+    repair();
+    window.addEventListener('listia:languagechange',()=>{lastShuffleFingerprint='';repair()});
+    window.addEventListener('focus',()=>{lastShuffleFingerprint='';repair()});
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
