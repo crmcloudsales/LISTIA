@@ -1,33 +1,112 @@
-/* LISTIA readability floor — mobile-first.
-   Product rule: no user-facing text should require zooming. Legacy 8px/9px/10px labels are raised to 11px. */
-.app-shell small,
-.plan-price small,
-.status-pill,
-.source-copy small,
-.source-state,
-.discovery-item-copy small,
-.discovery-note span,
-.dna-summary span,
-.office-primary small,
-.office-stat span,
-.office-actions .secondary small,
-.office-connected small,
-.property-card-top small,
-.property-status,
-.property-card-meta span,
-.empty-state span,
-.file-drop small,
-.selected-files strong,
-.selected-files span,
-label span em,
-.plan-note {
-  font-size:11px !important;
-  line-height:1.4;
+/* LISTIA readability + responsive guardrails — mobile first.
+   Product rule: no user-facing text below 12px and no shrinking text to make it fit. */
+
+/* Absolute legibility floor for user-facing copy inside the PWA. */
+.app-shell :where(small, .eyebrow, .context-line, .status-pill, .source-state, .discovery-summary,
+.discovery-item-copy strong, .discovery-item-copy small, .discovery-note strong, .discovery-note span,
+.dna-summary span, .dna-summary strong, .office-org, .office-primary small, .office-stat span,
+.office-actions .secondary small, .office-connected strong, .office-connected small,
+.property-card-top strong, .property-card-top small, .property-status, .property-card-meta b,
+.property-card-meta span, .empty-state strong, .empty-state span, .file-drop strong, .file-drop small,
+.selected-files strong, .selected-files span, label span em, .plan-note, .listia-module-head span,
+.listia-module-meta, .listia-module-message, .listia-module-button small) {
+  font-size: 12px !important;
+  line-height: 1.45;
 }
 
-/* Keep dense status text readable without making cards visually heavy. */
+/* Keep compact labels readable without collisions. */
 .property-status,
 .status-pill,
 .source-state {
-  letter-spacing:.02em;
+  letter-spacing: .02em;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Cards must wrap structurally instead of concatenating text. */
+.property-card,
+.property-card-top,
+.property-card-top > div,
+.property-card-meta,
+.office-actions,
+.office-connected,
+.office-connected > div,
+.listia-module-card,
+.listia-module-head,
+.listia-module-meta {
+  min-width: 0;
+}
+
+.property-card-top {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.property-card-top > div {
+  flex: 1 1 190px;
+}
+.property-card-top strong,
+.property-card-top small {
+  display: block;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+}
+.property-status {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.property-card-meta {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.property-card-meta > * {
+  min-width: 0;
+}
+
+/* Office modules: every label gets its own layout box. */
+.listia-module-actions {
+  gap: 12px !important;
+}
+.listia-module-button {
+  min-width: 0;
+  gap: 5px !important;
+}
+.listia-module-button strong,
+.listia-module-button small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.listia-module-head {
+  flex-wrap: wrap;
+}
+.listia-module-meta {
+  row-gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+/* Prevent mobile viewport overflow and accidental text overlap. */
+.panel,
+.office-grid,
+.office-actions,
+.property-list,
+.listia-module-list {
+  max-width: 100%;
+}
+
+@media (max-width: 520px) {
+  .main { padding-left: 14px; padding-right: 14px; }
+  .panel { padding-left: 20px; padding-right: 20px; }
+  .office-heading { gap: 12px; }
+  .office-mark { width: 48px; }
+  .office-grid { gap: 10px; }
+  .office-stat { min-width: 0; padding: 14px 12px; }
+  .office-stat span { overflow-wrap: anywhere; }
+  .listia-module-actions { grid-template-columns: 1fr 1fr !important; }
+}
+
+@media (max-width: 380px) {
+  .listia-module-actions { grid-template-columns: 1fr !important; }
+  .office-grid { grid-template-columns: 1fr 1fr; }
 }
