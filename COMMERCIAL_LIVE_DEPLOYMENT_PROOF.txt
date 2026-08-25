@@ -1,6 +1,6 @@
 LISTIA COMMERCIAL 11-LANGUAGE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-24T13:31:52Z
-source_commit=d2aa96f11b3b9479b6983cbe1c7ce49db159f763
+verified_at_utc=2026-08-25T05:45:20Z
+source_commit=a5293e0b7d6200232cd5a04dda324cdb374cf592
 languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja
 russian_live=true
 japanese_live=true
