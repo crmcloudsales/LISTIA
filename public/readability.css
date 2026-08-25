@@ -1,20 +1,26 @@
 /* LISTIA readability + responsive guardrails — mobile first.
    Product rule: no user-facing text below 12px and no shrinking text to make it fit. */
 
-/* Absolute legibility floor for user-facing copy inside the PWA. */
+/* Absolute 12px floor for every compact/user-facing text role used by the PWA. */
 .app-shell :where(small, .eyebrow, .context-line, .status-pill, .source-state, .discovery-summary,
 .discovery-item-copy strong, .discovery-item-copy small, .discovery-note strong, .discovery-note span,
 .dna-summary span, .dna-summary strong, .office-org, .office-primary small, .office-stat span,
 .office-actions .secondary small, .office-connected strong, .office-connected small,
 .property-card-top strong, .property-card-top small, .property-status, .property-card-meta b,
 .property-card-meta span, .empty-state strong, .empty-state span, .file-drop strong, .file-drop small,
-.selected-files strong, .selected-files span, label span em, .plan-note, .listia-module-head span,
-.listia-module-meta, .listia-module-message, .listia-module-button small) {
+.selected-files strong, .selected-files span, label span, label span em, .plan-note, .plan-card small,
+.connection-card small, .permission-note span, .checkpoint-list span, .listia-module-head span,
+.listia-module-meta, .listia-module-message, .listia-module-button small, .text-link, .separator span,
+.install-body, .install-note, .listia-voice-status, .listia-voice-turn) {
   font-size: 12px !important;
-  line-height: 1.45;
+  line-height: 1.45 !important;
 }
 
-/* Keep compact labels readable without collisions. */
+/* Never solve a layout problem by hiding or compressing copy. */
+.app-shell :where(p, span, strong, small, b, em, label, button, a) {
+  overflow-wrap: anywhere;
+}
+
 .property-status,
 .status-pill,
 .source-state {
@@ -24,89 +30,103 @@
   overflow-wrap: anywhere;
 }
 
-/* Cards must wrap structurally instead of concatenating text. */
+/* Every multi-part card gets real layout boxes so labels cannot concatenate. */
 .property-card,
 .property-card-top,
 .property-card-top > div,
 .property-card-meta,
+.office-grid,
 .office-actions,
+.office-actions > *,
 .office-connected,
 .office-connected > div,
 .listia-module-card,
 .listia-module-head,
-.listia-module-meta {
+.listia-module-head > *,
+.listia-module-meta,
+.discovery-head,
+.discovery-source-row,
+.source-copy {
   min-width: 0;
 }
 
 .property-card-top {
   align-items: flex-start;
   flex-wrap: wrap;
+  gap: 10px 12px;
 }
-.property-card-top > div {
-  flex: 1 1 190px;
-}
+.property-card-top > div { flex: 1 1 190px; }
 .property-card-top strong,
 .property-card-top small {
   display: block;
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: clip !important;
-  overflow-wrap: anywhere;
 }
-.property-status {
-  flex: 0 1 auto;
-  max-width: 100%;
-}
+.property-status { flex: 0 1 auto; max-width: 100%; }
 .property-card-meta {
+  display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
+  gap: 8px 14px !important;
 }
-.property-card-meta > * {
-  min-width: 0;
-}
+.property-card-meta > * { min-width: 0; }
 
-/* Office modules: every label gets its own layout box. */
-.listia-module-actions {
-  gap: 12px !important;
-}
+/* Office: titles/descriptions/counts remain separate at every width. */
+.office-actions,
+.listia-module-actions { gap: 12px !important; }
+.office-actions .secondary,
 .listia-module-button {
   min-width: 0;
-  gap: 5px !important;
+  height: auto !important;
+  min-height: 64px;
+  white-space: normal !important;
 }
+.office-actions .secondary strong,
+.office-actions .secondary small,
 .listia-module-button strong,
 .listia-module-button small {
   display: block;
-  overflow-wrap: anywhere;
+  width: 100%;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
-.listia-module-head {
-  flex-wrap: wrap;
-}
+.listia-module-head { flex-wrap: wrap; gap: 8px 12px; }
 .listia-module-meta {
-  row-gap: 6px;
-  overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px !important;
 }
+.listia-module-meta > * { display: inline-block; min-width: 0; }
 
-/* Prevent mobile viewport overflow and accidental text overlap. */
+/* Prevent viewport overflow and accidental overlap. */
 .panel,
 .office-grid,
 .office-actions,
 .property-list,
-.listia-module-list {
-  max-width: 100%;
-}
+.listia-module-list,
+.discovery-card,
+.discovery-source-row { max-width: 100%; }
 
 @media (max-width: 520px) {
   .main { padding-left: 14px; padding-right: 14px; }
   .panel { padding-left: 20px; padding-right: 20px; }
-  .office-heading { gap: 12px; }
-  .office-mark { width: 48px; }
+  .office-heading { gap: 12px; align-items: flex-start; }
+  .office-mark { width: 48px; flex: 0 0 48px; }
   .office-grid { gap: 10px; }
   .office-stat { min-width: 0; padding: 14px 12px; }
   .office-stat span { overflow-wrap: anywhere; }
+  .office-actions,
   .listia-module-actions { grid-template-columns: 1fr 1fr !important; }
+  .property-card { padding-left: 16px; padding-right: 16px; }
+  .discovery-source-row { flex-wrap: wrap; gap: 8px 10px; }
+  .source-copy { flex: 1 1 150px; }
 }
 
 @media (max-width: 380px) {
+  .office-actions,
   .listia-module-actions { grid-template-columns: 1fr !important; }
   .office-grid { grid-template-columns: 1fr 1fr; }
+  .property-card-top > div { flex-basis: 100%; }
 }
