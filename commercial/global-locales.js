@@ -20,6 +20,16 @@
     }
   };
 
+  const baseAliases = {
+    es:'es','es-mx':'es',
+    en:'en','en-us':'en','en-gb':'en',
+    fr:'fr','fr-fr':'fr','fr-ca':'fr',
+    it:'it','it-it':'it',
+    pt:'pt-BR','pt-br':'pt-BR','pt-pt':'pt-BR',
+    de:'de','de-de':'de','de-at':'de','de-ch':'de',
+    ar:'ar-AE','ar-ae':'ar-AE'
+  };
+
   let currentCustom = null;
   const normalize = value => {
     const code=String(value||'').trim().toLowerCase().replaceAll('_','-');
@@ -27,6 +37,10 @@
       if(cfg.aliases.includes(code)||cfg.aliases.includes(code.split('-')[0])) return key;
     }
     return null;
+  };
+  const normalizeBase = value => {
+    const code=String(value||'').trim().toLowerCase().replaceAll('_','-');
+    return baseAliases[code] || baseAliases[code.split('-')[0]] || null;
   };
   const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
   const setHTML=(id,value)=>{const el=document.getElementById(id);if(el)el.innerHTML=value};
@@ -65,10 +79,15 @@
     return true;
   }
 
-  function initial(){
-    let value=null;try{value=normalize(new URLSearchParams(location.search).get('lang'));if(!value){const m=document.cookie.match(/(?:^|;\s*)listia_lang=([^;]+)/);if(m)value=normalize(decodeURIComponent(m[1]));}if(!value)value=normalize(localStorage.getItem('listia_language'));}catch{}
-    if(!value){for(const candidate of (navigator.languages?.length?navigator.languages:[navigator.language])){value=normalize(candidate);if(value)break;}}
-    return value;
+  function explicitLanguage(){
+    let raw=null;
+    try{
+      raw=new URLSearchParams(location.search).get('lang');
+      if(!raw){const m=document.cookie.match(/(?:^|;\s*)listia_lang=([^;]+)/);if(m)raw=decodeURIComponent(m[1]);}
+      if(!raw)raw=localStorage.getItem('listia_language');
+    }catch{}
+    if(!raw)return null;
+    return normalize(raw)||normalizeBase(raw);
   }
 
   function patchApi(){
@@ -84,7 +103,17 @@
     ensureOptions();ensureHreflang();patchApi();
     const selector=document.getElementById('languageSelect');
     if(selector&&!selector.dataset.globalLocalesBound){selector.dataset.globalLocalesBound='1';selector.addEventListener('change',e=>{const key=normalize(e.target.value);if(key){e.stopImmediatePropagation();apply(key,{persistChoice:true})}},true);}
-    const lang=initial();if(lang)apply(lang);
+
+    const explicit=explicitLanguage();
+    if(explicit){
+      if(normalize(explicit)) apply(explicit);
+      else window.ListiaI18n?.apply?.(explicit);
+    }else{
+      // First-visit commercial default is always English, independent of browser locale.
+      window.ListiaI18n?.apply?.('en');
+      // The language control advertises Spanish as the default alternative.
+      if(selector) selector.value='es';
+    }
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
