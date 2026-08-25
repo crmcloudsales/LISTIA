@@ -1,0 +1,62 @@
+(() => {
+  'use strict';
+  const numberWords={cero:0,un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10};
+  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const toNum=s=>{const n=Number(String(s).replace(/,/g,''));return Number.isFinite(n)?n:(numberWords[norm(s)]??null)};
+  let bedroomFilter=0;
+
+  function copy(){const l=String(window.LISTIA_I18N?.getLanguage?.()||document.documentElement.lang||'es').toLowerCase();return l.startsWith('es')?{
+    label:'Recámaras',assistant:'LISTIA busca por ti',hint:'Dime por voz o escribe qué propiedad buscas. También puedes usar los filtros manualmente.',working:'Estoy buscando propiedades que coincidan contigo…',found:n=>`Encontré ${n} ${n===1?'propiedad':'propiedades'} con esos criterios.`,none:'No encontré coincidencias exactas. Puedes ampliar el rango o cambiar algún criterio.',voice:'Ya estoy buscando en el marketplace.'
+  }:{label:'Bedrooms',assistant:'LISTIA searches for you',hint:'Tell me by voice or text what property you want. You can also use the filters manually.',working:'I’m searching for matching properties…',found:n=>`I found ${n} matching ${n===1?'property':'properties'}.`,none:'I did not find an exact match. Try widening a filter.',voice:'I’m searching the marketplace now.'}}
+
+  function parse(raw){
+    const t=norm(raw); const q={raw};
+    const range=t.match(/(?:de|entre)\s+(\d+(?:[.,]\d+)?|un|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:a|y)\s+(\d+(?:[.,]\d+)?|un|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+millones?/);
+    if(range){q.min=toNum(range[1])*1000000;q.max=toNum(range[2])*1000000}
+    const explicit=t.match(/(?:entre|de)\s*\$?([\d,.]{5,})\s*(?:a|y|hasta)\s*\$?([\d,.]{5,})/); if(explicit&&!q.min){q.min=toNum(explicit[1]);q.max=toNum(explicit[2])}
+    const beds=t.match(/(\d+|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s*(?:recamaras|habitaciones|dormitorios|bedrooms?)/); if(beds)q.bedrooms=toNum(beds[1]);
+    if(/\brenta\b|\balquiler\b|\brentar\b/.test(t))q.operation='rent'; else if(/\bventa\b|\bcomprar\b|\bcompra\b/.test(t))q.operation='sale';
+    if(/departamento|depa|apartment/.test(t))q.type='Departamento'; else if(/\bcasa\b|house/.test(t))q.type='Casa'; else if(/terreno|land|lote/.test(t))q.type='Terreno';
+    const known=['playa del carmen','tulum','cancun','cancún','ciudad de mexico','cdmx','guadalajara','monterrey','miami','houston','los angeles','toronto'];
+    q.location=known.find(x=>t.includes(norm(x)))||'';
+    if(!q.location){const m=t.match(/\ben\s+([a-z\s]{3,40}?)(?=\s+(?:de|entre|por|con|que|y)\b|$)/);if(m)q.location=m[1].trim()}
+    return q;
+  }
+  function ensureUI(){
+    const filters=document.querySelector('.marketplace-filters'); if(!filters)return;
+    if(!document.getElementById('marketplaceBedrooms')){
+      const lab=document.createElement('label');lab.className='marketplace-filter-field marketplace-bedrooms-field';const s=document.createElement('span');s.textContent=copy().label;const input=document.createElement('input');input.id='marketplaceBedrooms';input.type='number';input.min='0';input.max='20';input.inputMode='numeric';input.placeholder='2';input.setAttribute('aria-label',copy().label);lab.append(s,input);filters.append(lab);input.addEventListener('input',()=>{bedroomFilter=Number(input.value||0);setTimeout(applyBedroomFilter,30)});
+    }
+    const panel=document.querySelector('#screen-marketplace .marketplace-panel');
+    if(panel&&!document.getElementById('marketplaceAssistantCard')){
+      const card=document.createElement('section');card.id='marketplaceAssistantCard';card.className='marketplace-assistant-card';card.innerHTML='<div class="marketplace-assistant-orb">✦</div><div class="marketplace-assistant-copy"><strong></strong><span></span><small id="marketplaceAssistantStatus"></small></div><button type="button" id="marketplaceAssistantTalk">Hablar con LISTIA</button>';
+      card.querySelector('strong').textContent=copy().assistant;card.querySelector('span').textContent=copy().hint;card.querySelector('#marketplaceAssistantTalk').addEventListener('click',()=>document.getElementById('listiaVoiceButton')?.click());
+      filters.parentNode.insertBefore(card,filters);
+    }
+  }
+  function setStatus(text,busy=false){ensureUI();const s=document.getElementById('marketplaceAssistantStatus');if(s){s.textContent=text||'';s.classList.toggle('working',busy)}}
+  function visibleCards(){return [...document.querySelectorAll('#marketplaceGrid .marketplace-card')].filter(c=>!c.hidden)}
+  function applyBedroomFilter(){
+    const cards=[...document.querySelectorAll('#marketplaceGrid .marketplace-card')];
+    cards.forEach(card=>{if(!bedroomFilter){card.hidden=false;return}const txt=norm(card.querySelector('.marketplace-meta')?.textContent||'');const m=txt.match(/(\d+(?:[.,]\d+)?)\s*(?:recamaras|habitaciones|dormitorios|bedrooms?)/);card.hidden=!(m&&Number(m[1].replace(',','.'))===bedroomFilter)});
+    const n=visibleCards().length;const count=document.getElementById('marketplaceCount');if(count)count.textContent=String(n);if(document.getElementById('screen-marketplace')?.classList.contains('active'))setStatus(n?copy().found(n):copy().none,false);
+  }
+  function setField(id,value){const el=document.getElementById(id);if(!el||value===undefined||value===null)return;if(String(value)!==String(el.value)){el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))}}
+  function openMarketplace(){const entry=document.getElementById('marketplaceEntry');if(entry){entry.click();return true}const screen=document.getElementById('screen-marketplace');if(screen){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s===screen));return true}return false}
+  async function search(raw){
+    openMarketplace(); ensureUI(); const q=parse(raw); setStatus(copy().working,true);
+    await new Promise(r=>setTimeout(r,120));
+    if(q.location)setField('marketplaceSearch',q.location); if(q.operation)setField('marketplaceOperation',q.operation); if(q.type)setField('marketplaceType',q.type); if(q.min)setField('marketplaceMin',Math.round(q.min)); if(q.max)setField('marketplaceMax',Math.round(q.max));
+    if(q.bedrooms){bedroomFilter=q.bedrooms;setField('marketplaceBedrooms',q.bedrooms)} else {bedroomFilter=Number(document.getElementById('marketplaceBedrooms')?.value||0)}
+    setTimeout(applyBedroomFilter,250); return q;
+  }
+  function isMarketplaceIntent(t){
+    const x=norm(t); if(/mis propiedades|mi inventario|mis inmuebles/.test(x))return false;
+    if(/marketplace|mercado inmobiliario|buscar en el mercado/.test(x))return true;
+    const hasProperty=/propiedad|inmueble|departamento|depa|casa|terreno|apartamento/.test(x); const hasSearch=/buscar|busca|buscame|encuentra|encontrar|muestra|muestrame|quiero|necesito|estoy buscando/.test(x); return hasProperty&&hasSearch;
+  }
+  function registerVoice(){let tries=0;const go=()=>{if(window.LISTIA_VOICE?.registerAction){window.LISTIA_VOICE.registerAction('marketplace-smart-search',(normalized,raw)=>isMarketplaceIntent(raw||normalized),async({text})=>{await search(text);return{response:copy().voice}});return}if(tries++<40)setTimeout(go,150)};go()}
+  function observe(){const mo=new MutationObserver(()=>{ensureUI();if(bedroomFilter)setTimeout(applyBedroomFilter,20)});mo.observe(document.body,{childList:true,subtree:true});}
+  window.LISTIA_MARKETPLACE_ASSISTANT={search,parse};
+  registerVoice(); if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{ensureUI();observe()},{once:true});else{ensureUI();observe()}
+})();
