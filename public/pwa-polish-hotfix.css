@@ -1,0 +1,8 @@
+/* LISTIA mobile header hotfix after full PWA visual review. */
+body.listia-shell-v2 .brandbar{display:grid!important;grid-template-columns:minmax(120px,1fr) auto auto!important;align-items:center!important;column-gap:7px!important}
+body.listia-shell-v2 .brand-logo{width:auto!important;max-width:158px!important;min-width:0!important}
+body.listia-shell-v2 .marketplace-entry{min-width:88px!important;width:auto!important;padding:8px 9px!important;font-size:12px!important;line-height:1.1!important;white-space:nowrap!important;overflow-wrap:normal!important}
+body.listia-shell-v2 .language-control{min-width:0!important;width:104px!important}
+body.listia-shell-v2 .language-select{width:100%!important;min-width:0!important;white-space:nowrap!important;text-overflow:ellipsis!important}
+body.listia-shell-v2 .listia-v2-kpi span{letter-spacing:-.01em!important}
+@media(max-width:360px){body.listia-shell-v2 .brandbar{grid-template-columns:minmax(112px,1fr) auto auto!important;padding-left:10px!important;padding-right:10px!important;column-gap:5px!important}body.listia-shell-v2 .brand-logo{max-width:145px!important}body.listia-shell-v2 .marketplace-entry{min-width:78px!important;padding-left:7px!important;padding-right:7px!important}.listia-nav-btn span{font-size:12px!important;letter-spacing:-.02em!important}}
