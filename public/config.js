@@ -16,11 +16,16 @@ window.LISTIA_CONFIG = {
 
 // Global UI guardrails load before optional runtime modules.
 (() => {
-  if (!document.getElementById("listiaReadabilityStyles")) {
+  const styles = [
+    ["listiaReadabilityStyles", "/readability.css?v=3"],
+    ["listiaPwaComponentStyles", "/pwa-components.css?v=1"]
+  ];
+  for (const [id, href] of styles) {
+    if (document.getElementById(id)) continue;
     const link = document.createElement("link");
-    link.id = "listiaReadabilityStyles";
+    link.id = id;
     link.rel = "stylesheet";
-    link.href = "/readability.css?v=3";
+    link.href = href;
     document.head.append(link);
   }
 })();
@@ -37,7 +42,8 @@ window.LISTIA_CONFIG = {
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
     ["/listia-voice.js?v=2", "listiaVoiceLoader"],
-    ["/marketplace.js?v=1", "listiaMarketplaceLoader"]
+    ["/marketplace.js?v=1", "listiaMarketplaceLoader"],
+    ["/pwa-fixes.js?v=1", "listiaPwaFixesLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
