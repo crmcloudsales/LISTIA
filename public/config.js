@@ -36,7 +36,8 @@ window.LISTIA_CONFIG = {
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
-    ["/listia-voice.js?v=2", "listiaVoiceLoader"]
+    ["/listia-voice.js?v=2", "listiaVoiceLoader"],
+    ["/marketplace.js?v=1", "listiaMarketplaceLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
