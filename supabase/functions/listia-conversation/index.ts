@@ -31,14 +31,21 @@ Deno.serve(async(req:Request)=>{
   ])
   const history=(Array.isArray(body.history)?body.history:[]).slice(-10).map(x=>({role:x.role==='assistant'?'assistant':'user',content:clean(x.content,1200)})).filter(x=>x.content)
   const context={organization:org||null,billing:billing||null,properties:properties||[],lead_count:leads?.length||0,appointments:appointments||[]}
-  const providerUrl=Deno.env.get('LISTIA_LLM_URL')||'https://api.openai.com/v1/chat/completions'
-  const providerKey=Deno.env.get('LISTIA_LLM_API_KEY')||Deno.env.get('OPENAI_API_KEY')||''
-  const model=Deno.env.get('LISTIA_LLM_MODEL')||'gpt-4.1-mini'
-  if(!providerKey)return json(req,{ok:true,mode:'contextual_fallback',reply:locale.startsWith('es')?'Entendí tu mensaje. Ya tengo el contexto de tu cuenta, pero el motor conversacional todavía no tiene credenciales de ejecución configuradas. Puedo seguir ejecutando las acciones disponibles en LISTIA.':'I understood you. I have your account context, but the conversational runtime credentials are not configured yet. I can still execute the actions currently available in LISTIA.',context})
+
+  const nvidiaKey=Deno.env.get('NVIDIA_API_KEY')||Deno.env.get('NIM_API_KEY')||''
+  const genericKey=Deno.env.get('LISTIA_LLM_API_KEY')||Deno.env.get('OPENAI_API_KEY')||''
+  const useNvidia=Boolean(nvidiaKey)
+  const providerUrl=useNvidia?'https://integrate.api.nvidia.com/v1/chat/completions':(Deno.env.get('LISTIA_LLM_URL')||'https://api.openai.com/v1/chat/completions')
+  const providerKey=useNvidia?nvidiaKey:genericKey
+  const model=useNvidia?(Deno.env.get('LISTIA_NVIDIA_MODEL')||'nvidia/nemotron-3.5-lightning-30b-a3b'):(Deno.env.get('LISTIA_LLM_MODEL')||'gpt-4.1-mini')
+  if(!providerKey)return json(req,{ok:true,mode:'contextual_fallback',provider:'none',reply:locale.startsWith('es')?'Entendí tu mensaje. Ya tengo el contexto de tu cuenta y puedo seguir ejecutando las acciones disponibles en LISTIA.':'I understood you. I have your account context and can keep executing the actions currently available in LISTIA.',action:{type:'none'}})
+
   const system=`You are LISTIA, an AI operating system for real-estate professionals. Speak naturally and concisely like a capable conversational assistant, never like a menu or command parser. Reply in the user's language (${locale}). Use the supplied account context when relevant. Do not invent account facts. If the user wants an action that the browser can perform, return a JSON action object as well as a natural reply. Allowed action types: open_screen, marketplace_search, add_property, open_leads, open_agenda, none. For marketplace_search include criteria when explicit. Ask only for genuinely missing information. Output strict JSON: {"reply":"...","action":{"type":"none"}}.`
-  const r=await fetch(providerUrl,{method:'POST',headers:{'authorization':`Bearer ${providerKey}`,'content-type':'application/json'},body:JSON.stringify({model,temperature:.35,response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'system',content:`Account context: ${JSON.stringify(context)}`},...history,{role:'user',content:message}]})})
-  if(!r.ok){console.error('LISTIA provider',r.status,await r.text());return json(req,{error:'conversation_provider_error'},502)}
+  const payload:any={model,temperature:.3,max_tokens:700,response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'system',content:`Account context: ${JSON.stringify(context)}`},...history,{role:'user',content:message}]}
+  if(useNvidia)payload.chat_template_kwargs={enable_thinking:false}
+  const r=await fetch(providerUrl,{method:'POST',headers:{'authorization':`Bearer ${providerKey}`,'content-type':'application/json'},body:JSON.stringify(payload)})
+  if(!r.ok){console.error('LISTIA provider',useNvidia?'nvidia':'generic',r.status,await r.text());return json(req,{error:'conversation_provider_error',provider:useNvidia?'nvidia':'generic'},502)}
   const data=await r.json();const raw=data?.choices?.[0]?.message?.content||'';let parsed:any={};try{parsed=JSON.parse(raw)}catch{parsed={reply:raw,action:{type:'none'}}}
-  return json(req,{ok:true,mode:'llm',reply:clean(parsed.reply,4000),action:parsed.action&&typeof parsed.action==='object'?parsed.action:{type:'none'}})
+  return json(req,{ok:true,mode:'llm',provider:useNvidia?'nvidia_nemotron':'generic',model,reply:clean(parsed.reply,4000),action:parsed.action&&typeof parsed.action==='object'?parsed.action:{type:'none'}})
  }catch(error){console.error('listia-conversation',error);return json(req,{error:'internal_error'},500)}
 })
