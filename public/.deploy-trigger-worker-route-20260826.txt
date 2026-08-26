@@ -1,0 +1,2 @@
+Trigger corrected LISTIA PWA deployment through Cloudflare Workers Static Assets and Worker Route app.listiaapp.com/*.
+Generated 2026-08-26.
