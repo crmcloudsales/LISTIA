@@ -25,10 +25,14 @@
       const key=btn.dataset.listiaTab;
       if(!key||!ICONS[key])return;
       const span=btn.querySelector('span');
-      btn.querySelector('svg')?.remove();
-      btn.insertAdjacentHTML('afterbegin',ICONS[key]);
-      if(span) span.textContent=labels[key]||key;
-      btn.setAttribute('aria-label',labels[key]||key);
+      const desiredLabel=labels[key]||key;
+      if(btn.dataset.premiumIcon!==key){
+        btn.querySelector('svg')?.remove();
+        btn.insertAdjacentHTML('afterbegin',ICONS[key]);
+        btn.dataset.premiumIcon=key;
+      }
+      if(span && span.textContent!==desiredLabel) span.textContent=desiredLabel;
+      if(btn.getAttribute('aria-label')!==desiredLabel) btn.setAttribute('aria-label',desiredLabel);
     });
   }
   function polishOffice(){
@@ -36,11 +40,14 @@
     const lang=language();
     const greeting=dash.querySelector('#v2Greeting');
     const business=dash.querySelector('#v2Business');
-    if(greeting){greeting.textContent=lang==='es'?'Tu operación':lang==='en'?'Your operation':greeting.textContent}
+    if(greeting){
+      const desired=lang==='es'?'Tu operación':lang==='en'?'Your operation':greeting.textContent;
+      if(greeting.textContent!==desired) greeting.textContent=desired;
+    }
     if(business&&!business.textContent.trim()) business.textContent=lang==='es'?'Tu espacio de trabajo':'Your workspace';
   }
   function run(){polishNav();polishOffice()}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(run,0),{once:true});else setTimeout(run,0);
-  new MutationObserver(run).observe(document.documentElement,{subtree:true,childList:true});
+  function boot(){run();setTimeout(run,150);setTimeout(run,700)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
   window.addEventListener('listia:languagechange',run);
 })();
