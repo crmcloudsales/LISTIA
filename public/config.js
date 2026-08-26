@@ -54,7 +54,7 @@ window.LISTIA_CONFIG = {
     ["/app-shell-v2.js?v=1", "listiaAppShellV2Loader"],
     ["/assistant-intelligence.js?v=1", "listiaAssistantIntelligenceLoader"],
     ["/onboarding-hardening.js?v=1", "listiaOnboardingHardeningLoader"],
-    ["/premium-shell.js?v=1", "listiaPremiumShellLoader"]
+    ["/premium-shell.js?v=2", "listiaPremiumShellLoader"]
   ];
 
   for (const [src, datasetKey] of modules) {
