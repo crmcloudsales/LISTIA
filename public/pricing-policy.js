@@ -96,7 +96,7 @@
   style.dataset.listiaPricingPolicy = '1';
   style.textContent = `
     #screen-plan .plan-copy small{font-size:12px!important;line-height:1.5!important;color:#aaa7b2!important}
-    #screen-plan .plan-price small{font-size:11px!important;color:#96929d!important}
+    #screen-plan .plan-price small{font-size:12px!important;color:#96929d!important}
     .plan-note{font-size:12px!important;line-height:1.5!important;color:#aaa8b3!important;font-weight:650!important;margin-top:2px!important}
   `;
   document.head.append(style);
