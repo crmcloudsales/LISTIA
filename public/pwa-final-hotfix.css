@@ -1,0 +1,19 @@
+/* LISTIA mobile stability hotfix — 2026-08-26 */
+@media (max-width: 720px){
+  .listia-v2-grid{grid-template-columns:1fr!important;grid-template-rows:auto auto auto!important;overflow:auto!important;min-height:0!important}
+  .listia-v2-card{width:100%!important;min-width:0!important;overflow:hidden!important}
+  .listia-quick-actions{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;width:100%!important}
+  .listia-quick-action{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;min-height:64px!important;width:100%!important;padding:11px 13px!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}
+  .listia-quick-action span{display:block!important;min-width:0!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important;writing-mode:horizontal-tb!important}
+  .listia-quick-action small{display:block!important;font-size:12px!important;line-height:1.35!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+  .listia-quick-action b{justify-self:end!important;align-self:center!important}
+  .listia-ai-card{grid-column:1/-1!important;width:100%!important}
+  .listia-insight{grid-column:1/-1!important}
+  .listia-v2-screen{overflow:hidden!important}
+  .listia-v2-kpis{grid-template-columns:1fr 1fr!important}
+}
+@media (max-width:390px){
+  .listia-v2-kpis{grid-template-columns:1fr 1fr!important}
+  .listia-v2-head{align-items:flex-start!important}
+  .listia-v2-badge{font-size:12px!important;max-width:46%;white-space:normal!important;text-align:center!important}
+}
