@@ -54,6 +54,7 @@ window.LISTIA_CONFIG = {
     ["/pwa-fixes.js?v=1", "listiaPwaFixesLoader"],
     ["/app-shell-v2.js?v=1", "listiaAppShellV2Loader"],
     ["/listing-workspace.js?v=1", "listiaListingWorkspaceLoader"],
+    ["/billing-management.js?v=1", "listiaBillingManagementLoader"],
     ["/assistant-intelligence.js?v=2", "listiaAssistantIntelligenceLoader"],
     ["/onboarding-hardening.js?v=1", "listiaOnboardingHardeningLoader"],
     ["/premium-shell.js?v=2", "listiaPremiumShellLoader"]
