@@ -53,6 +53,7 @@ window.LISTIA_CONFIG = {
     ["/account-mode.js?v=1", "listiaAccountModeLoader"],
     ["/pwa-fixes.js?v=1", "listiaPwaFixesLoader"],
     ["/app-shell-v2.js?v=1", "listiaAppShellV2Loader"],
+    ["/listing-workspace.js?v=1", "listiaListingWorkspaceLoader"],
     ["/assistant-intelligence.js?v=2", "listiaAssistantIntelligenceLoader"],
     ["/onboarding-hardening.js?v=1", "listiaOnboardingHardeningLoader"],
     ["/premium-shell.js?v=2", "listiaPremiumShellLoader"]
