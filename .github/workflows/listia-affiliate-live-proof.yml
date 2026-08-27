@@ -1,0 +1,23 @@
+name: LISTIA Affiliate Live Proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-affiliate-live-proof.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify affiliate page
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          code="$(curl -sS -L --max-time 20 -o /tmp/affiliate.html -w '%{http_code}' 'https://listiaapp.com/affiliate')"
+          echo "status=$code"
+          test "$code" = 200
+          grep -Fq 'LISTIA Affiliate Program' /tmp/affiliate.html
+          grep -Fq '40%' /tmp/affiliate.html
+          echo 'affiliate_live=true'
