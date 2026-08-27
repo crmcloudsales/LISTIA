@@ -22,7 +22,8 @@ window.LISTIA_CONFIG = {
     ["listiaAppShellV2Styles", "/app-shell-v2.css?v=1"],
     ["listiaPwaPolishStyles", "/pwa-polish.css?v=1"],
     ["listiaPwaPolishHotfixStyles", "/pwa-polish-hotfix.css?v=2"],
-    ["listiaPremiumShellStyles", "/premium-shell.css?v=1"]
+    ["listiaPremiumShellStyles", "/premium-shell.css?v=1"],
+    ["listiaPwaFinalHotfixStyles", "/pwa-final-hotfix.css?v=1"]
   ];
   for (const [id, href] of styles) {
     if (document.getElementById(id)) continue;
