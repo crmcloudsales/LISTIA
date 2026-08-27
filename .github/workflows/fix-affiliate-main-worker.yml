@@ -1,0 +1,57 @@
+name: Fix LISTIA affiliate main Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-affiliate-main-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch commercial Worker builder for affiliate route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/build-commercial-worker.py')
+          s=p.read_text(encoding='utf-8')
+          old='def build_worker(html:str,marketplace_html:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str)->str:'
+          new='def build_worker(html:str,marketplace_html:str,affiliate_html:str,affiliate_icon_svg:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str)->str:'
+          if old in s: s=s.replace(old,new)
+          marker='    validate_html(html);validate_marketplace(marketplace_html);validate_locale_assets(global_locales_js,japanese_js,footer_js);validate_cloudco(cloudco_html,footer_js);validate_legal(terms_html,privacy_html)\n'
+          repl=marker+"    if 'LISTIA Affiliate Program' not in affiliate_html or '40%' not in affiliate_html: raise ValueError('affiliate portal validation failed')\n"
+          if "affiliate portal validation failed" not in s: s=s.replace(marker,repl)
+          old_urls='    urls=[*(f"https://listiaapp.com/?lang={x}" for x in LANGUAGES),"https://listiaapp.com/marketplace"]'
+          new_urls='    urls=[*(f"https://listiaapp.com/?lang={x}" for x in LANGUAGES),"https://listiaapp.com/marketplace","https://listiaapp.com/affiliate"]'
+          s=s.replace(old_urls,new_urls)
+          old_const='const MARKETPLACE_HTML={json.dumps(marketplace_html,ensure_ascii=False)};\\nconst CLOUDCO_HTML='
+          new_const='const MARKETPLACE_HTML={json.dumps(marketplace_html,ensure_ascii=False)};\\nconst AFFILIATE_HTML={json.dumps(affiliate_html,ensure_ascii=False)};\\nconst AFFILIATE_ICON={json.dumps(affiliate_icon_svg,ensure_ascii=False)};\\nconst CLOUDCO_HTML='
+          if 'const AFFILIATE_HTML=' not in s: s=s.replace(old_const,new_const)
+          market_route="if(url.pathname==='/marketplace'||url.pathname==='/marketplace/'||url.pathname==='/marketplace/index.html')return response(MARKETPLACE_HTML,200,'text/html; charset=UTF-8',method,{{'x-robots-tag':'index, follow, max-image-preview:large'}},'public, max-age=30, must-revalidate');"
+          affiliate_route=market_route+"if(url.pathname==='/affiliate'||url.pathname==='/affiliate/'||url.pathname==='/affiliate/index.html')return response(AFFILIATE_HTML,200,'text/html; charset=UTF-8',method,{{'x-robots-tag':'index, follow, max-image-preview:large'}},'public, max-age=30, must-revalidate');if(url.pathname==='/listia-official-icon-v3.svg')return response(AFFILIATE_ICON,200,'image/svg+xml; charset=UTF-8',method,{{}},'public, max-age=31536000, immutable');"
+          if "url.pathname==='/affiliate'" not in s: s=s.replace(market_route,affiliate_route)
+          old_call='worker=build_worker(html,(c/"marketplace.html").read_text(encoding="utf-8"),(c/"cloudco.html").read_text(encoding="utf-8"),(c/"footer-legal.js").read_text(encoding="utf-8"),(c/"global-locales.js").read_text(encoding="utf-8"),(c/"japanese-locale.js").read_text(encoding="utf-8"),(pub/"terms.html").read_text(encoding="utf-8"),(pub/"privacy.html").read_text(encoding="utf-8"),(pub/"legal.css").read_text(encoding="utf-8"),b64(c/"cloudco-assets"/"cloudco-logo-official.webp"),b64(pub/"listia-mark-transparent.webp"))'
+          new_call='worker=build_worker(html,(c/"marketplace.html").read_text(encoding="utf-8"),(c/"affiliate.html").read_text(encoding="utf-8"),(c/"listia-official-icon-v3.svg").read_text(encoding="utf-8"),(c/"cloudco.html").read_text(encoding="utf-8"),(c/"footer-legal.js").read_text(encoding="utf-8"),(c/"global-locales.js").read_text(encoding="utf-8"),(c/"japanese-locale.js").read_text(encoding="utf-8"),(pub/"terms.html").read_text(encoding="utf-8"),(pub/"privacy.html").read_text(encoding="utf-8"),(pub/"legal.css").read_text(encoding="utf-8"),b64(c/"cloudco-assets"/"cloudco-logo-official.webp"),b64(pub/"listia-mark-transparent.webp"))'
+          s=s.replace(old_call,new_call)
+          p.write_text(s,encoding='utf-8')
+          PY
+          python3 -m py_compile scripts/build-commercial-worker.py
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
+          grep -Fq "url.pathname==='/affiliate'" /tmp/listia-commercial-worker.mjs
+          grep -Fq 'LISTIA Affiliate Program' /tmp/listia-commercial-worker.mjs
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/build-commercial-worker.py
+          git commit -m 'Serve LISTIA affiliate portal from production Worker'
+          git push origin main
