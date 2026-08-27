@@ -5,13 +5,13 @@
   let syncTimer = 0;
 
   const text = {
-    es: { free: 'Free incluye 1 propiedad.', blocked: 'Tu suscripción tiene un pago pendiente. Regulariza el pago para continuar.' },
-    en: { free: 'Free includes 1 property.', blocked: 'Your subscription has a pending payment. Bring the account current to continue.' },
-    fr: { free: 'Free inclut 1 bien.', blocked: 'Votre abonnement comporte un paiement en attente. Régularisez-le pour continuer.' },
-    it: { free: 'Free include 1 proprietà.', blocked: 'Il tuo abbonamento ha un pagamento in sospeso. Regolarizzalo per continuare.' },
-    'pt-BR': { free: 'Free inclui 1 imóvel.', blocked: 'Sua assinatura tem um pagamento pendente. Regularize o pagamento para continuar.' },
-    de: { free: 'Free enthält 1 Immobilie.', blocked: 'Für dein Abonnement ist eine Zahlung ausstehend. Bitte begleiche sie, um fortzufahren.' },
-    'ar-AE': { free: 'تتضمن Free عقارًا واحدًا.', blocked: 'يوجد دفع مستحق على اشتراكك. يرجى تسوية الدفع للمتابعة.' },
+    es: { free: 'Free incluye hasta 3 propiedades.', blocked: 'Tu suscripción tiene un pago pendiente. Regulariza el pago para continuar.' },
+    en: { free: 'Free includes up to 3 properties.', blocked: 'Your subscription has a pending payment. Bring the account current to continue.' },
+    fr: { free: 'Free inclut jusqu’à 3 biens.', blocked: 'Votre abonnement comporte un paiement en attente. Régularisez-le pour continuer.' },
+    it: { free: 'Free include fino a 3 proprietà.', blocked: 'Il tuo abbonamento ha un pagamento in sospeso. Regolarizzalo per continuare.' },
+    'pt-BR': { free: 'Free inclui até 3 imóveis.', blocked: 'Sua assinatura tem um pagamento pendente. Regularize o pagamento para continuar.' },
+    de: { free: 'Free enthält bis zu 3 Immobilien.', blocked: 'Für dein Abonnement ist eine Zahlung ausstehend. Bitte begleiche sie, um fortzufahren.' },
+    'ar-AE': { free: 'تتضمن Free ما يصل إلى 3 عقارات.', blocked: 'يوجد دفع مستحق على اشتراكك. يرجى تسوية الدفع للمتابعة.' },
   };
 
   function locale() {
