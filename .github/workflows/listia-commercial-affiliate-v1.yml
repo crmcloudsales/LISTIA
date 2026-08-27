@@ -1,0 +1,62 @@
+name: LISTIA Affiliate Portal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'commercial/affiliate.html'
+      - '.github/workflows/listia-commercial-affiliate-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-affiliate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Build standalone affiliate Worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          html=Path('commercial/affiliate.html').read_text(encoding='utf-8')
+          icon=Path('commercial/listia-official-icon-v3.svg').read_text(encoding='utf-8')
+          worker=f'''const HTML={json.dumps(html,ensure_ascii=False)};\nconst ICON={json.dumps(icon,ensure_ascii=False)};\nconst H={{'x-content-type-options':'nosniff','referrer-policy':'strict-origin-when-cross-origin','x-frame-options':'DENY','cross-origin-opener-policy':'same-origin','permissions-policy':'camera=(), microphone=(), geolocation=()'}};\nfunction r(body,status,type,method,extra={{}}){{return new Response(method==='HEAD'?null:body,{{status,headers:{{...H,...extra,'content-type':type,'cache-control':status===200?'public, max-age=60, must-revalidate':'no-store'}}}})}}\nexport default{{async fetch(req){{const u=new URL(req.url),m=req.method.toUpperCase();if(m!=='GET'&&m!=='HEAD')return r('',405,'text/plain',m,{{allow:'GET, HEAD'}});if(u.pathname==='/affiliate'||u.pathname==='/affiliate/'||u.pathname==='/affiliate/index.html')return r(HTML,200,'text/html; charset=UTF-8',m,{{'x-robots-tag':'index, follow, max-image-preview:large'}});if(u.pathname==='/affiliate/icon.svg')return r(ICON,200,'image/svg+xml; charset=UTF-8',m);return r('Not Found',404,'text/plain; charset=UTF-8',m)}}}};'''
+          Path('/tmp/listia-affiliate-worker.mjs').write_text(worker,encoding='utf-8')
+          PY
+          node --check /tmp/listia-affiliate-worker.mjs
+          grep -Fq '40%' commercial/affiliate.html
+          grep -Fq 'affiliate-portal' commercial/affiliate.html
+      - name: Deploy affiliate route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ok=false
+          for candidate in primary security; do
+            if [[ "$candidate" == primary ]]; then token="$CLOUDFLARE_API_TOKEN_PRIMARY"; else token="$CLOUDFLARE_API_TOKEN_SECURITY"; fi
+            [[ -n "$token" ]] || continue
+            if CLOUDFLARE_API_TOKEN="$token" npx --yes wrangler@4 deploy /tmp/listia-affiliate-worker.mjs --name listia-affiliate --compatibility-date 2026-08-26 --route 'listiaapp.com/affiliate*' --keep-vars; then ok=true; break; fi
+          done
+          [[ "$ok" == true ]]
+      - name: Verify live affiliate portal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ok=false
+          for attempt in $(seq 1 24); do
+            code="$(curl -sS -L --max-time 20 -o /tmp/affiliate-live.html -w '%{http_code}' 'https://listiaapp.com/affiliate' || true)"
+            if [[ "$code" == 200 ]] && grep -Fq 'LISTIA Affiliate Program' /tmp/affiliate-live.html && grep -Fq '40%' /tmp/affiliate-live.html; then ok=true; break; fi
+            sleep 5
+          done
+          [[ "$ok" == true ]]
