@@ -2,6 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url><loc>https://listiaapp.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://listiaapp.com/marketplace</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://listiaapp.com/affiliate</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://listiaapp.com/?lang=en</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://listiaapp.com/?lang=es</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://listiaapp.com/?lang=fr</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
