@@ -38,6 +38,7 @@ jobs:
             public/control-attention.js \
             public/account-center.js \
             public/account-resilience.js \
+            public/account-edit.js \
             public/ui-state-labels.js \
             public/listing-workspace.js \
             public/listings-v2.js \
