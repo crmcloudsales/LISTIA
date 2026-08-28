@@ -6,6 +6,7 @@ on:
     paths:
       - 'sites-worker/router.js'
       - 'public/managed-site-health.js'
+      - 'public/listings-v2.js'
       - 'public/config.js'
       - 'public/sw.js'
       - 'supabase/functions/website-provision/index.ts'
@@ -27,6 +28,7 @@ jobs:
           set -Eeuo pipefail
           node --check sites-worker/router.js
           node --check public/managed-site-health.js
+          node --check public/listings-v2.js
           node --check public/config.js
           node --check public/sw.js
 
@@ -44,6 +46,20 @@ jobs:
             exit 1
           fi
 
+      - name: Require server-side website provisioning
+        run: |
+          set -Eeuo pipefail
+          grep -Fq "/functions/v1/website-provision" public/listings-v2.js
+          if grep -Fq "organization_websites?on_conflict" public/listings-v2.js; then
+            echo 'Listings UI must not write organization_websites directly.'
+            exit 1
+          fi
+          if grep -Fq "listia:domain-action" public/listings-v2.js; then
+            echo 'Listings UI must not trigger a second provisioning request after direct Edge Function provisioning.'
+            exit 1
+          fi
+          grep -Fq "listia:website-provisioned" public/listings-v2.js
+
       - name: Preserve website settings during repair
         run: |
           set -Eeuo pipefail
@@ -57,6 +73,8 @@ jobs:
           set -Eeuo pipefail
           grep -Fq '/managed-site-health.js?v=1' public/config.js
           grep -Fq '/managed-site-health.js?v=1' public/sw.js
+          grep -Fq '/listings-v2.js?v=5' public/config.js
+          grep -Fq '/listings-v2.js?v=5' public/sw.js
           node <<'NODE'
           const fs=require('fs');
           const config=fs.readFileSync('public/config.js','utf8');
@@ -64,5 +82,5 @@ jobs:
           const a=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
           const b=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
           if(!a||!b||a[1]!==b[1]) throw new Error(`Version mismatch config=${a?.[1]} sw=${b?.[1]}`);
-          if(a[1]!=='0.26.5') throw new Error(`Expected 0.26.5, got ${a[1]}`);
+          if(a[1]!=='0.26.6') throw new Error(`Expected 0.26.6, got ${a[1]}`);
           NODE
