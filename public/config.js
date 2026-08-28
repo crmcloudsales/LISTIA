@@ -48,6 +48,7 @@ window.LISTIA_CONFIG = {
     ["/affiliate-attribution.js?v=1", "listiaAffiliateAttributionLoader"],
     ["/property-status.js?v=1", "listiaPropertyStatusLoader"],
     ["/draft-actions.js?v=1", "listiaDraftActionsLoader"],
+    ["/property-processing-auto.js?v=1", "listiaPropertyProcessingLoader"],
     ["/office-modules.js?v=1", "listiaOfficeModulesLoader"],
     ["/contact-engine.js?v=1", "listiaContactEngineLoader"],
     ["/listia-voice.js?v=4", "listiaVoiceLoader"],
