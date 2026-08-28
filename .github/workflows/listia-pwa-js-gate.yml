@@ -73,15 +73,24 @@ jobs:
           const fs=require('fs'),path=require('path');
           const out=[];
           function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())walk(p);else if(e.isFile()&&p.endsWith('.js')){const s=fs.readFileSync(p,'utf8');const direct=/\.observe\s*\(\s*(?:document\.body|document\.documentElement)\s*,\s*\{[^}]{0,800}?childList\s*:\s*true/gs;const fallback=/\.observe\s*\(\s*[^,;]{0,180}\|\|\s*document\.body\s*,\s*\{[^}]{0,800}?childList\s*:\s*true/gs;if(direct.test(s)||fallback.test(s))out.push(p)}}}
-          walk('public');
-          fs.writeFileSync('freeze-observers.txt',out.join('\n')+(out.length?'\n':''));
-          for(const p of out)console.log('Unsafe global childList MutationObserver:',p);
+          walk('public');fs.writeFileSync('freeze-observers.txt',out.join('\n')+(out.length?'\n':''));for(const p of out)console.log('Unsafe global childList MutationObserver:',p);
           NODE
-      - name: Upload freeze observer audit
+      - name: Build runtime risk report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');let out=[];
+          function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())walk(p);else if(e.isFile()&&p.endsWith('.js')){const s=fs.readFileSync(p,'utf8');const lines=s.split(/\n/);lines.forEach((line,i)=>{if(/setInterval\s*\(/.test(line)||/window\.fetch\s*=/.test(line)||/Object\.defineProperty\s*\(\s*window\s*,\s*['"]fetch/.test(line))out.push(`${p}:${i+1}: ${line.trim().slice(0,500)}`)})}}}
+          walk('public');fs.writeFileSync('runtime-risks.txt',out.join('\n')+(out.length?'\n':''));
+          NODE
+      - name: Upload runtime audits
         uses: actions/upload-artifact@v4
         with:
-          name: freeze-observer-audit
-          path: freeze-observers.txt
+          name: listia-runtime-audit
+          path: |
+            freeze-observers.txt
+            runtime-risks.txt
           if-no-files-found: error
           retention-days: 1
       - name: Reject global childList mutation observers
