@@ -39,87 +39,50 @@ jobs:
           for source in security primary; do
             if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
             [[ -n "$token" ]] || continue
-            if CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" \
-              npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-guard.jsonc; then
-              selected="$source"; break
-            fi
+            if CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-guard.jsonc; then selected="$source"; break; fi
           done
           [[ -n "$selected" ]] || { echo 'LISTIA_GUARD_DEPLOY_BLOCKED'; exit 1; }
 
-      - name: Install hostile-probe routes without overwriting protected routes
+      - name: Install exact and wildcard hostile-probe routes
         shell: bash
         run: |
           set -Eeuo pipefail
           token="$CF_PRIMARY_TOKEN"; [[ -n "$token" ]] || token="$CF_SECURITY_TOKEN"
           [[ -n "$token" ]] || exit 2
           auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
-
-          prefixes=(
-            '/.env*'
-            '/.git*'
-            '/.svn*'
-            '/.hg*'
-            '/.aws*'
-            '/.ssh*'
-            '/wp-admin*'
-            '/wp-login*'
-            '/xmlrpc.php*'
-            '/wp-content/*'
-            '/wp-includes/*'
-            '/phpmyadmin*'
-            '/pma/*'
-            '/adminer.php*'
-            '/server-status*'
-            '/vendor/phpunit/*'
-            '/cgi-bin/*'
-            '/actuator*'
-            '/solr/*'
-            '/jenkins/*'
-            '/manager/html*'
-          )
-
+          prefixes=( '/.env*' '/.git*' '/.svn*' '/.hg*' '/.aws*' '/.ssh*' '/wp-admin*' '/wp-login*' '/xmlrpc.php*' '/wp-content/*' '/wp-includes/*' '/phpmyadmin*' '/pma/*' '/adminer.php*' '/server-status*' '/vendor/phpunit/*' '/cgi-bin/*' '/actuator*' '/solr/*' '/jenkins/*' '/manager/html*' )
+          hosts=( 'listiaapp.com' 'app.listiaapp.com' 'www.listiaapp.com' 'brain.listiaapp.com' '*.listiaapp.com' )
           for path in "${prefixes[@]}"; do
-            for host in 'listiaapp.com' '*.listiaapp.com'; do
+            for host in "${hosts[@]}"; do
               pattern="${host}${path}"
               curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
               route_id=$(jq -r --arg p "$pattern" '.result[] | select(.pattern==$p) | .id' /tmp/routes.json | head -n1)
               current=$(jq -r --arg p "$pattern" '.result[] | select(.pattern==$p) | .script // ""' /tmp/routes.json | head -n1)
-              if [[ -n "$route_id" && "$route_id" != null && -n "$current" && "$current" != "$WORKER_NAME" ]]; then
-                echo "Refusing to overwrite route $pattern owned by $current"; exit 3
-              fi
+              if [[ -n "$route_id" && "$route_id" != null && -n "$current" && "$current" != "$WORKER_NAME" ]]; then echo "Refusing overwrite $pattern owned by $current"; exit 3; fi
               payload=$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
-              if [[ -n "$route_id" && "$route_id" != null ]]; then
-                curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/write.json
-              else
-                curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" --data "$payload" > /tmp/write.json
-              fi
+              if [[ -n "$route_id" && "$route_id" != null ]]; then curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/write.json; else curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" --data "$payload" > /tmp/write.json; fi
               jq -e '.success == true' /tmp/write.json >/dev/null
             done
           done
-
           echo '### LISTIA Hostile Probe Guard' >> "$GITHUB_STEP_SUMMARY"
-          echo "- Protected route patterns: $((${#prefixes[@]} * 2))" >> "$GITHUB_STEP_SUMMARY"
-          echo '- Existing app/commercial/managed-site routes were not overwritten' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Protected route patterns: $((${#prefixes[@]} * ${#hosts[@]}))" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Exact app/www/brain routes override normal catch-all Workers only for known hostile prefixes' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke normal traffic and personalized hostile response
         shell: bash
         run: |
           set -Eeuo pipefail
           expected='JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️'
-          for url in 'https://app.listiaapp.com/' 'https://listiaapp.com/' 'https://www.listiaapp.com/'; do
-            code=$(curl -sS -L -o /tmp/normal -w '%{http_code}' "$url")
-            [[ "$code" == 200 ]] || { echo "Normal route broken: $url => $code"; exit 10; }
-          done
-          for url in \
-            'https://app.listiaapp.com/.env' \
-            'https://listiaapp.com/.git/config' \
-            'https://www.listiaapp.com/wp-admin/' \
-            'https://brain.listiaapp.com/server-status' \
-            'https://app.listiaapp.com/actuator/env'; do
-            code=$(curl -sS -o /tmp/probe -w '%{http_code}' "$url" || true)
-            body=$(cat /tmp/probe || true)
-            [[ "$code" == 403 ]] || { echo "Probe route not blocked: $url => $code"; exit 11; }
-            [[ "$body" == "$expected" ]] || { echo "Personalized hostile response missing on $url"; exit 12; }
+          for url in 'https://app.listiaapp.com/' 'https://listiaapp.com/' 'https://www.listiaapp.com/'; do code=$(curl -sS -L -o /tmp/normal -w '%{http_code}' "$url"); [[ "$code" == 200 ]] || { echo "Normal route broken: $url => $code"; exit 10; }; done
+          for i in $(seq 1 20); do
+            passed=true
+            for url in 'https://app.listiaapp.com/.env' 'https://listiaapp.com/.git/config' 'https://www.listiaapp.com/wp-admin/' 'https://brain.listiaapp.com/server-status' 'https://app.listiaapp.com/actuator/env'; do
+              code=$(curl -sS -o /tmp/probe -w '%{http_code}' "$url" || true); body=$(cat /tmp/probe || true)
+              if [[ "$code" != 403 || "$body" != "$expected" ]]; then passed=false; break; fi
+            done
+            [[ "$passed" == true ]] && break
+            [[ "$i" != 20 ]] || { echo 'Personalized guard failed to converge'; exit 11; }
+            sleep 2
           done
           echo '- Normal traffic smoke: passed' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Hostile response smoke: passed' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Personalized hostile response: passed' >> "$GITHUB_STEP_SUMMARY"
