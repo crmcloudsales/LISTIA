@@ -40,6 +40,7 @@ jobs:
             public/website-status.js \
             public/website-provision-bridge.js \
             public/developments.js \
+            public/development-property-bridge.js \
             public/property-processing-auto.js \
             public/property-status.js \
             public/property-complete.js \
