@@ -1,0 +1,36 @@
+name: LISTIA Cloudflare WAF Slot Audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-cloudflare-waf-slot-audit-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Read current LISTIA custom WAF rules
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode 'name=listiaapp.com' --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          zone=$(jq -r '.result[0].id // empty' "$z")
+          [[ -n "$zone" ]] || exit 1
+          r=$(mktemp)
+          curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_request_firewall_custom/entrypoint" > "$r"
+          jq -r '.result.rules[] | [.id,.description,.action,.enabled,.expression] | @tsv' "$r" | while IFS=$'\t' read -r id desc action enabled expr; do
+            echo "RULE_ID=${id}"
+            echo "DESCRIPTION=${desc}"
+            echo "ACTION=${action} ENABLED=${enabled}"
+            echo "EXPRESSION=${expr}"
+            echo '---'
+          done
