@@ -8,7 +8,9 @@ on:
       - 'supabase/functions/listia-public-chat/**'
       - 'supabase/functions/listia-contact-import/**'
       - 'supabase/functions/listia-contact-import-chunk-1/**'
+      - 'supabase/functions/web-event-ingest/**'
       - 'supabase/migrations/*harden_public_site_resolver_v1.sql'
+      - 'supabase/migrations/*add_web_event_ingest_rate_limit_v1.sql'
       - '.github/workflows/listia-edge-security-gate.yml'
   workflow_dispatch:
 
@@ -32,7 +34,8 @@ jobs:
             supabase/functions/managed-site-resolver/index.ts \
             supabase/functions/listia-public-chat/index.ts \
             supabase/functions/listia-contact-import/index.ts \
-            supabase/functions/listia-contact-import-chunk-1/index.ts; do
+            supabase/functions/listia-contact-import-chunk-1/index.ts \
+            supabase/functions/web-event-ingest/index.ts; do
             node --experimental-strip-types --check "$f"
           done
 
@@ -84,3 +87,22 @@ jobs:
           grep -Fq 'MAX_BODY_BYTES = 32768' "$f"
           grep -Fq 'private.public_chat_rate_limits' "$f"
           grep -Fq "type.includes('application/json')" "$f"
+
+      - name: Enforce public telemetry boundaries
+        run: |
+          set -Eeuo pipefail
+          f=supabase/functions/web-event-ingest/index.ts
+          m=supabase/migrations/20260828212233_add_web_event_ingest_rate_limit_v1.sql
+          grep -Fq "const EVENTS = new Set(['page_view','listing_view'])" "$f"
+          grep -Fq 'const organizationId=site?.organization?.id' "$f"
+          grep -Fq 'host!==originHost' "$f"
+          grep -Fq 'consume_web_event_ingest_rate_limit' "$f"
+          grep -Fq 'MAX_BODY_BYTES = 16384' "$f"
+          grep -Fq "event==='listing_view'&&!listingId" "$f"
+          if grep -Fq "'lead_submit'" "$f"; then
+            echo 'Anonymous telemetry must not manufacture conversion events.'
+            exit 1
+          fi
+          grep -Fq 'create table if not exists private.web_event_rate_limits' "$m"
+          grep -Fq 'revoke all on table private.web_event_rate_limits from public, anon, authenticated' "$m"
+          grep -Fq 'grant execute on function private.consume_web_event_ingest_rate_limit(text,text) to service_role' "$m"
