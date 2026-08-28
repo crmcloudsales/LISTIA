@@ -33,15 +33,14 @@ jobs:
       - name: Install crawler dependencies
         run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
 
-      - name: Crawl public Quintana Roo result pages
+      - name: Crawl all public Quintana Roo result pages
         id: qroo_crawl
         shell: bash
         env:
           QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
           QROO_CRAWL_OUT: data/qroo-crawl
           QROO_CHUNK_SIZE: '1500'
-          QROO_WORKERS: '2'
-          QROO_MAX_PAGES: '1'
+          QROO_WORKERS: '10'
         run: |
           set +e
           mkdir -p data/qroo-crawl
@@ -49,7 +48,7 @@ jobs:
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           echo "Crawler exit code: $code"
-          cat data/qroo-crawl/crawl.log || true
+          tail -n 100 data/qroo-crawl/crawl.log || true
           exit 0
 
       - name: Upload crawl diagnostics
@@ -72,8 +71,9 @@ jobs:
           from pathlib import Path
           m=json.loads(Path('data/qroo-crawl/manifest.json').read_text())
           print(m)
-          assert m['unique_listings'] >= 10
-          assert m['chunks']
+          assert m['unique_listings'] >= 30000
+          assert len(m['chunks']) >= 20
+          assert len(m['failures']) <= 25
           PY
 
       - name: Commit latest normalized inventory snapshot
@@ -84,6 +84,6 @@ jobs:
           git config user.name 'LISTIA Inventory Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add data/qroo-crawl
-          git commit -m 'Refresh Quintana Roo inventory snapshot' || exit 0
+          git commit -m 'Refresh full Quintana Roo inventory snapshot' || exit 0
           git pull --rebase origin main
           git push origin main
