@@ -1,151 +1,23 @@
 (() => {
-  const cfg = window.LISTIA_CONFIG || {};
-  const API_KEY = cfg.SUPABASE_PUBLISHABLE_KEY || cfg.SUPABASE_ANON_KEY || '';
-  const SESSION_KEY = 'listia_session';
-  let timer = 0;
-  let busy = false;
-
-  const copy = {
-    es: { approve: 'Aprobar borrador', approving: 'Aprobando…', approved: 'Propiedad lista', error: 'No pudimos aprobar el borrador.' },
-    en: { approve: 'Approve draft', approving: 'Approving…', approved: 'Property ready', error: 'We could not approve the draft.' },
-    fr: { approve: 'Approuver le brouillon', approving: 'Approbation…', approved: 'Bien prêt', error: 'Impossible d’approuver le brouillon.' },
-    it: { approve: 'Approva bozza', approving: 'Approvazione…', approved: 'Proprietà pronta', error: 'Impossibile approvare la bozza.' },
-    'pt-BR': { approve: 'Aprovar rascunho', approving: 'Aprovando…', approved: 'Propriedade pronta', error: 'Não foi possível aprovar o rascunho.' },
-    de: { approve: 'Entwurf freigeben', approving: 'Freigabe…', approved: 'Immobilie bereit', error: 'Der Entwurf konnte nicht freigegeben werden.' },
-    'ar-AE': { approve: 'اعتماد المسودة', approving: 'جارٍ الاعتماد…', approved: 'العقار جاهز', error: 'تعذر اعتماد المسودة.' }
+  'use strict';
+  const cfg=window.LISTIA_CONFIG||{},API_KEY=cfg.SUPABASE_PUBLISHABLE_KEY||cfg.SUPABASE_ANON_KEY||'',SESSION_KEY='listia_session';
+  let timer=0,busy=false;
+  const COPY={
+    es:{approve:'Aprobar borrador',approving:'Aprobando…',approved:'Propiedad lista',publish:'Publicar',publishing:'Publicando…',published:'Publicada',complete:'Completar datos',rights:'Confirmo que tengo derecho a publicar esta propiedad y su contenido.',site:'Antes de publicar, elige cómo administrará LISTIA tu sitio.',siteAction:'Configurar sitio',error:'No pude completar esta acción. Intenta de nuevo.'},
+    en:{approve:'Approve draft',approving:'Approving…',approved:'Property ready',publish:'Publish',publishing:'Publishing…',published:'Published',complete:'Complete details',rights:'I confirm I have the right to publish this property and its content.',site:'Before publishing, choose how LISTIA will manage your website.',siteAction:'Set up website',error:'I could not complete this action. Try again.'}
   };
-
-  function locale() {
-    const raw = String(localStorage.getItem('listia_language') || document.documentElement.lang || 'en').toLowerCase();
-    if (raw.startsWith('es')) return 'es';
-    if (raw.startsWith('fr')) return 'fr';
-    if (raw.startsWith('it')) return 'it';
-    if (raw.startsWith('pt')) return 'pt-BR';
-    if (raw.startsWith('de')) return 'de';
-    if (raw.startsWith('ar')) return 'ar-AE';
-    return 'en';
-  }
-  const c = () => copy[locale()] || copy.en;
-
-  function readSession() {
-    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
-    catch { return null; }
-  }
-
-  async function get(path, token) {
-    const response = await fetch(`${cfg.SUPABASE_URL}${path}`, {
-      headers: { apikey: API_KEY, Authorization: `Bearer ${token}` },
-      cache: 'no-store'
-    });
-    if (!response.ok) return null;
-    return response.json().catch(() => null);
-  }
-
-  async function context() {
-    const session = readSession();
-    if (!session?.access_token || !cfg.SUPABASE_URL || !API_KEY) return null;
-    let userId = session.user?.id || null;
-    if (!userId) {
-      const user = await get('/auth/v1/user', session.access_token);
-      userId = user?.id || null;
-    }
-    if (!userId) return null;
-    const memberships = await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`, session.access_token);
-    const organizationId = Array.isArray(memberships) ? memberships[0]?.organization_id : null;
-    return organizationId ? { token: session.access_token, organizationId } : null;
-  }
-
-  function ensureStyles() {
-    if (document.getElementById('listiaDraftActionStyles')) return;
-    const style = document.createElement('style');
-    style.id = 'listiaDraftActionStyles';
-    style.textContent = `
-      .property-draft-action{margin-top:8px;border:0;border-radius:12px;padding:10px 13px;font:inherit;font-weight:700;cursor:pointer;width:100%}
-      .property-draft-action:disabled{cursor:wait;opacity:.65}
-    `;
-    document.head.append(style);
-  }
-
-  async function approve(propertyId, button) {
-    const session = readSession();
-    if (!session?.access_token) return;
-    button.disabled = true;
-    button.textContent = c().approving;
-    try {
-      const response = await fetch(`${cfg.SUPABASE_URL}/functions/v1/property-draft-approve`, {
-        method: 'POST',
-        headers: {
-          apikey: API_KEY,
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ property_id: propertyId })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'approval_failed');
-      button.textContent = c().approved;
-      window.setTimeout(() => location.reload(), 450);
-    } catch (error) {
-      console.error('LISTIA draft approval', error);
-      button.disabled = false;
-      button.textContent = c().approve;
-      const toast = document.getElementById('toast');
-      if (toast) {
-        toast.textContent = c().error;
-        toast.className = 'toast error';
-        toast.hidden = false;
-        window.setTimeout(() => { toast.hidden = true; }, 4200);
-      }
-    }
-  }
-
-  async function sync() {
-    if (busy || !document.getElementById('screen-properties')?.classList.contains('active')) return;
-    busy = true;
-    try {
-      const ctx = await context();
-      if (!ctx) return;
-      const properties = await get(`/rest/v1/properties?select=id,created_at&organization_id=eq.${encodeURIComponent(ctx.organizationId)}&status=neq.archived&order=created_at.desc`, ctx.token);
-      const drafts = await get(`/rest/v1/property_drafts?select=property_id,status,missing_fields&organization_id=eq.${encodeURIComponent(ctx.organizationId)}&status=eq.draft`, ctx.token);
-      const cards = [...document.querySelectorAll('#propertyList .property-card')];
-      const propertyRows = Array.isArray(properties) ? properties : [];
-      const byId = new Map((Array.isArray(drafts) ? drafts : []).map(draft => [String(draft.property_id), draft]));
-
-      cards.forEach((card, index) => {
-        card.querySelector('.property-draft-action')?.remove();
-        const property = propertyRows[index];
-        if (!property) return;
-        const draft = byId.get(String(property.id));
-        if (!draft || (Array.isArray(draft.missing_fields) && draft.missing_fields.length)) return;
-        const workflow = card.querySelector('.property-workflow');
-        if (!workflow) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'property-draft-action secondary';
-        button.textContent = c().approve;
-        button.addEventListener('click', () => approve(String(property.id), button));
-        workflow.append(button);
-      });
-    } finally {
-      busy = false;
-    }
-  }
-
-  function schedule() {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => sync().catch(() => {}), 180);
-  }
-
-  function boot() {
-    ensureStyles();
-    const list = document.getElementById('propertyList');
-    if (list) new MutationObserver(schedule).observe(list, { childList: true, subtree: false });
-    const screen = document.getElementById('screen-properties');
-    if (screen) new MutationObserver(schedule).observe(screen, { attributes: true, attributeFilter: ['class'] });
-    window.addEventListener('listia:languagechange', schedule);
-    schedule();
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
-  else boot();
+  function locale(){return String(window.LISTIA_I18N?.getLanguage?.()||localStorage.getItem('listia_language')||document.documentElement.lang||'en').startsWith('es')?'es':'en'}
+  const c=()=>COPY[locale()]||COPY.en;
+  function session(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
+  async function request(path,{method='GET',body}={}){const s=session();if(!s?.access_token||!cfg.SUPABASE_URL||!API_KEY)throw new Error('session');const headers={apikey:API_KEY,Authorization:`Bearer ${s.access_token}`};if(body!==undefined)headers['Content-Type']='application/json';const r=await fetch(`${cfg.SUPABASE_URL}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(data?.error||`HTTP ${r.status}`),{code:data?.error,data});return data}
+  async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await request(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]?.organization_id?{organizationId:m[0].organization_id,role:m[0].role}:null}
+  function toast(text,error=false){const t=document.getElementById('toast');if(!t)return;t.textContent=text;t.className=`toast ${error?'error':'success'}`;t.hidden=false;setTimeout(()=>t.hidden=true,3500)}
+  function styles(){if(document.getElementById('listiaDraftActionStyles'))return;const s=document.createElement('style');s.id='listiaDraftActionStyles';s.textContent=`.property-flow-actions{display:grid;gap:7px;margin-top:10px}.property-flow-actions button{width:100%;border-radius:12px;padding:10px 12px;font:700 12px/1.2 system-ui,sans-serif}.property-flow-actions .primary-action{border:0;background:linear-gradient(135deg,#7135f5,#9752ff);color:#fff}.property-flow-actions .secondary-action{border:1px solid rgba(255,255,255,.10);background:#151720;color:#fff}.property-flow-actions button:disabled{opacity:.55}.listia-rights-modal{position:fixed;inset:0;z-index:160;display:none;align-items:flex-end;background:rgba(0,0,0,.65);backdrop-filter:blur(8px)}.listia-rights-modal.open{display:flex}.listia-rights-sheet{width:100%;padding:20px 18px calc(20px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;background:#10121a;border:1px solid rgba(255,255,255,.1)}.listia-rights-sheet p{color:#b2b5bf;font-size:13px;line-height:1.45}.listia-rights-check{display:flex;gap:10px;align-items:flex-start;color:#fff;font-size:13px;line-height:1.4}.listia-rights-check input{margin-top:3px}.listia-rights-sheet button{width:100%;margin-top:12px;border-radius:13px;padding:12px;font-weight:800}.listia-rights-confirm{border:0;background:#7c3cff;color:#fff}.listia-rights-cancel{border:1px solid rgba(255,255,255,.1);background:#171923;color:#ddd}`;document.head.append(s)}
+  async function approve(propertyId,button){button.disabled=true;button.textContent=c().approving;try{await request('/functions/v1/property-draft-approve',{method:'POST',body:{property_id:propertyId}});button.textContent=c().approved;toast(c().approved);window.LISTIA_PROPERTY_PROCESSING?.schedule?.(50);setTimeout(schedule,250)}catch(e){console.warn('LISTIA approve',e);button.disabled=false;button.textContent=c().approve;toast(c().error,true)}}
+  function siteSetup(){window.LISTIA_APP_SHELL?.showScreen?.('screen-properties');document.getElementById('listingsV2')?.scrollIntoView?.({behavior:'smooth',block:'start'});toast(c().site)}
+  function rightsModal(propertyId,organizationId,button){let m=document.getElementById('listiaRightsModal');if(!m){m=document.createElement('div');m.id='listiaRightsModal';m.className='listia-rights-modal';document.body.append(m)}const x=c();m.innerHTML=`<div class="listia-rights-sheet"><strong>LISTIA</strong><p>${x.rights}</p><label class="listia-rights-check"><input id="listiaRightsCheck" type="checkbox"><span>${x.rights}</span></label><button class="listia-rights-confirm" id="listiaRightsConfirm" type="button" disabled>${x.publish}</button><button class="listia-rights-cancel" id="listiaRightsCancel" type="button">Cancel</button></div>`;m.classList.add('open');const check=document.getElementById('listiaRightsCheck'),confirm=document.getElementById('listiaRightsConfirm');check.onchange=()=>confirm.disabled=!check.checked;document.getElementById('listiaRightsCancel').onclick=()=>m.classList.remove('open');confirm.onclick=async()=>{confirm.disabled=true;confirm.textContent=x.publishing;button.disabled=true;button.textContent=x.publishing;try{await request('/functions/v1/property-publish',{method:'POST',body:{organization_id:organizationId,property_id:propertyId,rights_confirmed:true}});m.classList.remove('open');button.textContent=x.published;toast(x.published);window.dispatchEvent(new CustomEvent('listia:listings-refresh'));window.LISTIA_CONTROL?.refresh?.();setTimeout(schedule,250)}catch(e){console.warn('LISTIA publish',e);confirm.disabled=false;confirm.textContent=x.publish;button.disabled=false;button.textContent=x.publish;if(e.code==='website_required'){m.classList.remove('open');siteSetup()}else toast(x.error,true)}}}
+  async function sync(){if(busy||!document.getElementById('screen-properties')?.classList.contains('active'))return;busy=true;try{const ctx=await context();if(!ctx)return;const [properties,drafts,websites]=await Promise.all([request(`/rest/v1/properties?select=id,status,created_at&organization_id=eq.${encodeURIComponent(ctx.organizationId)}&status=neq.archived&order=created_at.desc`),request(`/rest/v1/property_drafts?select=property_id,status,missing_fields&organization_id=eq.${encodeURIComponent(ctx.organizationId)}`),request(`/rest/v1/organization_websites?select=organization_id&organization_id=eq.${encodeURIComponent(ctx.organizationId)}&limit=1`)]);const cards=[...document.querySelectorAll('#propertyList .property-card')],pRows=Array.isArray(properties)?properties:[],draftMap=new Map((Array.isArray(drafts)?drafts:[]).map(d=>[String(d.property_id),d])),hasWebsite=Array.isArray(websites)&&websites.length>0;cards.forEach((card,index)=>{card.querySelector('.property-flow-actions')?.remove();const p=pRows[index];if(!p)return;const d=draftMap.get(String(p.id)),actions=document.createElement('div');actions.className='property-flow-actions';if(p.status==='published'){const b=document.createElement('button');b.className='secondary-action';b.disabled=true;b.textContent=c().published;actions.append(b)}else if(d&&Array.isArray(d.missing_fields)&&d.missing_fields.length){const b=document.createElement('button');b.className='secondary-action';b.textContent=`${c().complete} · ${d.missing_fields.length}`;b.onclick=()=>document.getElementById('propertiesAddBtn')?.click();actions.append(b)}else if(d?.status==='draft'&&p.status!=='ready'){const b=document.createElement('button');b.className='primary-action';b.textContent=c().approve;b.onclick=()=>approve(String(p.id),b);actions.append(b)}else if(d?.status==='approved'&&p.status==='ready'){const b=document.createElement('button');b.className='primary-action';b.textContent=hasWebsite?c().publish:c().siteAction;b.onclick=()=>hasWebsite?rightsModal(String(p.id),ctx.organizationId,b):siteSetup();actions.append(b)}if(actions.children.length)card.append(actions)})}catch(e){console.warn('LISTIA property actions sync',e)}finally{busy=false}}
+  function schedule(){clearTimeout(timer);timer=setTimeout(()=>sync(),160)}
+  function boot(){styles();const list=document.getElementById('propertyList');if(list)new MutationObserver(schedule).observe(list,{childList:true});const screen=document.getElementById('screen-properties');if(screen)new MutationObserver(schedule).observe(screen,{attributes:true,attributeFilter:['class']});window.addEventListener('listia:languagechange',schedule);window.addEventListener('listia:property-processed',schedule);window.addEventListener('listia:listings-refresh',schedule);schedule()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
