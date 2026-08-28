@@ -4,6 +4,7 @@
   const nativeFetch = window.fetch.bind(window);
   const LEGACY_MARK = '/rest/v1/marketplace_listings?select=';
   const SAFE_MARK = '/rest/v1/rpc/marketplace_public_feed';
+  const SAFE_V2_MARK = '/rest/v1/rpc/marketplace_public_feed_v2';
 
   window.LISTIA_MARKETPLACE_DATA = [];
   window.LISTIA_MARKETPLACE_COUNTRY = '';
@@ -47,7 +48,7 @@
     const response = await nativeFetch(target, init);
     const finalUrl = typeof target === 'string' ? target : (target?.url || raw);
 
-    if (finalUrl.includes(SAFE_MARK) && response.ok) {
+    if (finalUrl.includes(SAFE_MARK) && !finalUrl.includes(SAFE_V2_MARK) && response.ok) {
       response.clone().json().then(rows => {
         if (Array.isArray(rows)) {
           window.LISTIA_MARKETPLACE_DATA = rows;
@@ -149,6 +150,10 @@
       repair();
     });
     window.addEventListener('focus', () => {
+      lastShuffleFingerprint = '';
+      repair();
+    });
+    window.addEventListener('listia:marketplace-data', () => {
       lastShuffleFingerprint = '';
       repair();
     });
