@@ -34,17 +34,37 @@ jobs:
         run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
 
       - name: Crawl all public Quintana Roo result pages
+        id: qroo_crawl
+        shell: bash
         env:
           QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
           QROO_CRAWL_OUT: data/qroo-crawl
           QROO_CHUNK_SIZE: '1500'
-          QROO_WORKERS: '14'
-        run: python scripts/crawl-quintana-roo-properties-parallel.py
+          QROO_WORKERS: '6'
+        run: |
+          set +e
+          mkdir -p data/qroo-crawl
+          python scripts/crawl-quintana-roo-properties-parallel.py > data/qroo-crawl/crawl.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "Crawler exit code: $code"
+          tail -n 80 data/qroo-crawl/crawl.log || true
+          exit 0
+
+      - name: Upload crawl diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qroo-crawl-diagnostics
+          path: data/qroo-crawl/crawl.log
+          if-no-files-found: warn
+          retention-days: 2
 
       - name: Validate snapshot
         shell: bash
         run: |
           set -Eeuo pipefail
+          test "${{ steps.qroo_crawl.outputs.exit_code }}" = "0"
           test -s data/qroo-crawl/manifest.json
           python - <<'PY'
           import json
@@ -59,6 +79,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          rm -f data/qroo-crawl/crawl.log
           git config user.name 'LISTIA Inventory Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add data/qroo-crawl
