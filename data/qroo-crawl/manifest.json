@@ -1,0 +1,14 @@
+{
+  "source": "qroo-public-marketplace-crawl",
+  "base_url": "https://propiedades.com/quintana-roo/",
+  "pages_attempted": 1,
+  "unique_listings": 47,
+  "chunks": [
+    {
+      "file": "chunk-0001.json",
+      "count": 47
+    }
+  ],
+  "failures": [],
+  "workers": 2
+}
