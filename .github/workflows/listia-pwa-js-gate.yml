@@ -30,7 +30,15 @@ jobs:
             public/app-shell-v2.js \
             public/listia-voice.js \
             public/assistant-intelligence.js \
+            public/ai-chat.js \
+            public/control-center.js \
+            public/listing-workspace.js \
             public/listings-v2.js \
+            public/property-processing-auto.js \
+            public/property-status.js \
+            public/draft-actions.js \
+            public/office-modules.js \
+            public/contact-engine.js \
             public/marketplace.js \
             public/marketplace-assistant.js \
             public/billing.js \
