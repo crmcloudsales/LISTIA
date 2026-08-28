@@ -54,6 +54,7 @@ jobs:
             public/draft-actions.js \
             public/office-modules.js \
             public/lead-stage-actions.js \
+            public/lead-workspace.js \
             public/appointment-actions.js \
             public/contact-engine.js \
             public/marketplace.js \
