@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'sites-worker/index.js'
       - 'supabase/functions/managed-site-resolver/**'
       - 'supabase/functions/listia-public-chat/**'
       - 'supabase/functions/listia-contact-import/**'
@@ -30,6 +31,7 @@ jobs:
       - name: Validate Edge Function syntax
         run: |
           set -Eeuo pipefail
+          node --check sites-worker/index.js
           for f in \
             supabase/functions/managed-site-resolver/index.ts \
             supabase/functions/listia-public-chat/index.ts \
@@ -50,6 +52,18 @@ jobs:
             echo 'Managed-site resolver must not depend on service_role or faux Turnstile gateway authentication.'
             exit 1
           fi
+
+      - name: Enforce Worker resolver secret boundary
+        run: |
+          set -Eeuo pipefail
+          f=sites-worker/index.js
+          grep -Fq 'async function site(host){' "$f"
+          if grep -Fq 'x-listia-gateway-secret' "$f"; then
+            echo 'Managed Sites Worker must never forward Turnstile secret to the public resolver.'
+            exit 1
+          fi
+          grep -Fq "x-listia-turnstile-secret':env.TURNSTILE_SECRET" "$f"
+          grep -Fq 'verifyTurnstile(env,body?.turnstile_token,host,ip)' "$f"
 
       - name: Enforce public site SQL projection
         run: |
