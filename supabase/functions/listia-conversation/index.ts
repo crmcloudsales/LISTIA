@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const LISTIA_AI_GATEWAY = Deno.env.get('LISTIA_AI_GATEWAY_URL') || 'https://ai.listiaapp.com/'
 const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com','https://listiaapp.com','https://www.listiaapp.com'])
 const cors=(req:Request)=>{const origin=req.headers.get('origin')||'';return {'access-control-allow-origin':allowedOrigins.has(origin)?origin:'https://app.listiaapp.com','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'authorization, x-client-info, apikey, content-type','vary':'Origin'}}
 const json=(req:Request,body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors(req),'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})
@@ -21,6 +22,18 @@ function fallbackReply(message:string,locale:string,name:string,context:any){
  return {reply:es?`${prefix}te escucho. Dime qué resultado quieres conseguir y lo resolvemos paso a paso.`:`${prefix}I’m listening. Tell me the result you want and we’ll work through it step by step.`,action:{type:'none'}}
 }
 
+async function edgeAi(jwt:string,message:string,locale:string,history:Array<{role:string;content:string}>){
+ try{
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000)
+  const r=await fetch(LISTIA_AI_GATEWAY,{method:'POST',headers:{authorization:`Bearer ${jwt}`,'content-type':'application/json'},body:JSON.stringify({message,locale,history}),signal:controller.signal})
+  clearTimeout(timeout)
+  if(!r.ok){console.warn('LISTIA edge AI',r.status,await r.text().catch(()=>''));return null}
+  const data=await r.json().catch(()=>null) as any
+  if(!data?.reply)return null
+  return {reply:clean(data.reply,4000),action:data.action&&typeof data.action==='object'?data.action:{type:'none'},model:data.model||null}
+ }catch(error){console.warn('LISTIA edge AI unavailable',error);return null}
+}
+
 Deno.serve(async(req:Request)=>{
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(req)})
  if(req.method!=='POST')return json(req,{error:'method_not_allowed'},405)
@@ -32,8 +45,13 @@ Deno.serve(async(req:Request)=>{
   const body=await req.json().catch(()=>({})) as {message?:string;locale?:string;history?:Array<{role?:string;content?:string}>}
   const message=clean(body.message,4000);if(!message)return json(req,{error:'message_required'},400)
   const requestedLocale=clean(body.locale,16)||'en'
+  const history=(Array.isArray(body.history)?body.history:[]).slice(-12).map(x=>({role:x.role==='assistant'?'assistant':'user',content:clean(x.content,1200)})).filter(x=>x.content)
   const {data:member}=await admin.from('organization_members').select('organization_id,role,status').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle()
   if(!member?.organization_id)return json(req,{error:'organization_access_denied'},403)
+
+  const edge=await edgeAi(jwt,message,requestedLocale,history)
+  if(edge)return json(req,{ok:true,mode:'edge_ai',provider:'listia_edge_ai',model:edge.model,reply:edge.reply,action:edge.action})
+
   const orgId=member.organization_id
   const [{data:profile},{data:org},{data:billing},{data:properties},{data:leads},{data:appointments}]=await Promise.all([
    admin.from('profiles').select('full_name,locale,account_mode').eq('id',user.id).maybeSingle(),
@@ -41,12 +59,11 @@ Deno.serve(async(req:Request)=>{
    admin.from('organization_billing').select('plan_key,billing_status,access_state').eq('organization_id',orgId).maybeSingle(),
    admin.from('properties').select('id,title,status,operation_type,price,currency,location_text').eq('organization_id',orgId).limit(20),
    admin.from('leads').select('id,status,created_at').eq('organization_id',orgId).order('created_at',{ascending:false}).limit(20),
-   admin.from('appointments').select('id,status,start_at').eq('organization_id',orgId).order('start_at',{ascending:true}).limit(20)
+   admin.from('appointments').select('id,status,starts_at').eq('organization_id',orgId).order('starts_at',{ascending:true}).limit(20)
   ])
   const locale=clean(profile?.locale,16)||requestedLocale
   const meta=user.user_metadata||{}
   const userName=first(profile?.full_name||meta.full_name||meta.name||meta.display_name||'')
-  const history=(Array.isArray(body.history)?body.history:[]).slice(-12).map(x=>({role:x.role==='assistant'?'assistant':'user',content:clean(x.content,1200)})).filter(x=>x.content)
   const context={user:{first_name:userName,locale,role:member.role,account_mode:profile?.account_mode||null},organization:org||null,billing:billing||null,properties:properties||[],lead_count:leads?.length||0,appointments:appointments||[]}
 
   const nvidiaKey=Deno.env.get('NVIDIA_API_KEY')||Deno.env.get('NIM_API_KEY')||''
