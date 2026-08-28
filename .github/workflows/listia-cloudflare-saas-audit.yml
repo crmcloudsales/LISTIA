@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -20,28 +20,65 @@ jobs:
       CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
       - name: Probe Cloudflare for SaaS read access
+        id: probe
+        shell: bash
+        run: |
+          set -u
+          selected=''
+          ready='false'
+          : > /tmp/listia-saas-audit.txt
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || { echo "token_${source}=missing" >> /tmp/listia-saas-audit.txt; continue; }
+            headers=(-H "Authorization: Bearer ${token}" -H 'Accept: application/json')
+            custom_http=$(curl -sS --max-time 25 "${headers[@]}" -o "/tmp/custom-${source}.json" -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames?per_page=1" || true)
+            fallback_http=$(curl -sS --max-time 25 "${headers[@]}" -o "/tmp/fallback-${source}.json" -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames/fallback_origin" || true)
+            custom_errors=$(jq -c '[.errors[]? | {code,message}]' "/tmp/custom-${source}.json" 2>/dev/null || echo '[]')
+            fallback_errors=$(jq -c '[.errors[]? | {code,message}]' "/tmp/fallback-${source}.json" 2>/dev/null || echo '[]')
+            echo "${source}.custom_hostnames_http=${custom_http}" >> /tmp/listia-saas-audit.txt
+            echo "${source}.custom_hostnames_errors=${custom_errors}" >> /tmp/listia-saas-audit.txt
+            echo "${source}.fallback_origin_http=${fallback_http}" >> /tmp/listia-saas-audit.txt
+            echo "${source}.fallback_origin_errors=${fallback_errors}" >> /tmp/listia-saas-audit.txt
+            if [[ "$custom_http" == 200 && "$fallback_http" == 200 ]] && jq -e '.success == true' "/tmp/custom-${source}.json" >/dev/null 2>&1 && jq -e '.success == true' "/tmp/fallback-${source}.json" >/dev/null 2>&1; then
+              selected="$source"
+              ready='true'
+              cp "/tmp/fallback-${source}.json" /tmp/fallback-selected.json
+              break
+            fi
+          done
+          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+          echo "selected=${selected}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'LISTIA CLOUDFLARE FOR SAAS READINESS AUDIT'
+            echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "ready=${ready}"
+            echo "token_source=${selected:-none}"
+            cat /tmp/listia-saas-audit.txt
+            if [[ "$ready" == true ]]; then
+              echo "fallback_status=$(jq -r '.result.status // "unknown"' /tmp/fallback-selected.json)"
+              echo "fallback_origin=$(jq -r '.result.origin // "none"' /tmp/fallback-selected.json)"
+            fi
+          } > CLOUDFLARE_SAAS_AUDIT.txt
+      - name: Persist sanitized readiness proof
         shell: bash
         run: |
           set -Eeuo pipefail
-          selected=''
-          for source in security primary; do
-            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
-            [[ -n "$token" ]] || continue
-            headers=(-H "Authorization: Bearer ${token}" -H 'Accept: application/json')
-            custom_http=$(curl -sS --max-time 25 "${headers[@]}" -o /tmp/custom.json -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames?per_page=1" || true)
-            fallback_http=$(curl -sS --max-time 25 "${headers[@]}" -o /tmp/fallback.json -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames/fallback_origin" || true)
-            echo "Cloudflare for SaaS probe (${source}): custom_hostnames=${custom_http} fallback_origin=${fallback_http}"
-            if [[ "$custom_http" == 200 && "$fallback_http" == 200 ]] && jq -e '.success == true' /tmp/custom.json >/dev/null 2>&1 && jq -e '.success == true' /tmp/fallback.json >/dev/null 2>&1; then
-              selected="$source"
-              break
-            fi
-            jq -c '{custom_errors:[(.errors // [])[]|{code,message}]}' /tmp/custom.json 2>/dev/null || true
-            jq -c '{fallback_errors:[(.errors // [])[]|{code,message}]}' /tmp/fallback.json 2>/dev/null || true
-          done
-          [[ -n "$selected" ]] || { echo 'CLOUDFLARE_SAAS_READINESS_BLOCKED'; exit 41; }
-          fallback_status=$(jq -r '.result.status // "unknown"' /tmp/fallback.json)
-          fallback_origin=$(jq -r '.result.origin // "none"' /tmp/fallback.json)
-          echo "Cloudflare for SaaS read access verified with ${selected} token."
-          echo "Fallback origin status=${fallback_status} origin=${fallback_origin}"
-          jq -e '.result | type == "array"' /tmp/custom.json >/dev/null
+          git fetch origin main
+          git reset --hard origin/main
+          cp CLOUDFLARE_SAAS_AUDIT.txt /tmp/CLOUDFLARE_SAAS_AUDIT.txt
+          cp /tmp/CLOUDFLARE_SAAS_AUDIT.txt CLOUDFLARE_SAAS_AUDIT.txt
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add CLOUDFLARE_SAAS_AUDIT.txt
+          git commit -m 'Record LISTIA Cloudflare SaaS readiness audit' || exit 0
+          git push origin main
+      - name: Enforce readiness
+        if: steps.probe.outputs.ready != 'true'
+        shell: bash
+        run: |
+          echo 'CLOUDFLARE_SAAS_READINESS_BLOCKED'
+          exit 41
