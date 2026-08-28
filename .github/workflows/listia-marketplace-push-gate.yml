@@ -36,8 +36,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           grep -Fq '/marketplace-push.js?v=1' public/config.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.26.0"' public/config.js
-          grep -Fq 'listia-pwa-v0.26.0' public/sw.js
+          grep -Fq 'BOOTSTRAP_VERSION:"0.26.1"' public/config.js
+          grep -Fq 'listia-pwa-v0.26.1' public/sw.js
           grep -Fq 'addEventListener("push"' public/sw.js
           grep -Fq 'addEventListener("notificationclick"' public/sw.js
           grep -Fq 'PushManager' public/marketplace-push.js
