@@ -1,14 +1,122 @@
 {
   "source": "qroo-public-marketplace-crawl",
   "base_url": "https://propiedades.com/quintana-roo/",
-  "pages_attempted": 1,
-  "unique_listings": 47,
+  "pages_attempted": 999,
+  "unique_listings": 41472,
   "chunks": [
     {
       "file": "chunk-0001.json",
-      "count": 47
+      "count": 1500
+    },
+    {
+      "file": "chunk-0002.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0003.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0004.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0005.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0006.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0007.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0008.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0009.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0010.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0011.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0012.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0013.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0014.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0015.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0016.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0017.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0018.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0019.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0020.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0021.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0022.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0023.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0024.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0025.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0026.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0027.json",
+      "count": 1500
+    },
+    {
+      "file": "chunk-0028.json",
+      "count": 972
     }
   ],
   "failures": [],
-  "workers": 2
+  "workers": 10
 }
