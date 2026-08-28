@@ -1,0 +1,68 @@
+name: LISTIA Managed Subdomain Health Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sites-worker/router.js'
+      - 'public/managed-site-health.js'
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'supabase/functions/website-provision/index.ts'
+      - '.github/workflows/listia-managed-subdomain-health-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: JavaScript syntax
+        run: |
+          set -Eeuo pipefail
+          node --check sites-worker/router.js
+          node --check public/managed-site-health.js
+          node --check public/config.js
+          node --check public/sw.js
+
+      - name: Enforce exact managed-host boundary
+        run: |
+          set -Eeuo pipefail
+          grep -Fq "listiaapp\\.com" sites-worker/router.js
+          grep -Fq "const HEALTH_PATH = '/.well-known/listia-health'" sites-worker/router.js
+          grep -Fq "const APP_ORIGIN = 'https://app.listiaapp.com'" sites-worker/router.js
+          grep -Fq "website.mode!=='listia_subdomain'" public/managed-site-health.js
+          grep -Fq "mode:'listia_subdomain'" public/managed-site-health.js
+          grep -Fq "/.well-known/listia-health" public/managed-site-health.js
+          if grep -Eq "connect_existing|buy_website|EXTERNAL_CUSTOM_DOMAINS_ENABLED" public/managed-site-health.js; then
+            echo 'Managed-site self-heal must never target external-domain modes.'
+            exit 1
+          fi
+
+      - name: Preserve website settings during repair
+        run: |
+          set -Eeuo pipefail
+          grep -Fq "...existingConfiguration" supabase/functions/website-provision/index.ts
+          grep -Fq "last_verified_at: now" supabase/functions/website-provision/index.ts
+          grep -Fq "external_domains_temporarily_unavailable" supabase/functions/website-provision/index.ts
+          grep -Fq "charge_created: false" supabase/functions/website-provision/index.ts
+
+      - name: Verify PWA wiring and version lock
+        run: |
+          set -Eeuo pipefail
+          grep -Fq '/managed-site-health.js?v=1' public/config.js
+          grep -Fq '/managed-site-health.js?v=1' public/sw.js
+          node <<'NODE'
+          const fs=require('fs');
+          const config=fs.readFileSync('public/config.js','utf8');
+          const sw=fs.readFileSync('public/sw.js','utf8');
+          const a=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
+          const b=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
+          if(!a||!b||a[1]!==b[1]) throw new Error(`Version mismatch config=${a?.[1]} sw=${b?.[1]}`);
+          if(a[1]!=='0.26.5') throw new Error(`Expected 0.26.5, got ${a[1]}`);
+          NODE
