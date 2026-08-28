@@ -1,0 +1,47 @@
+name: LISTIA Cloudflare SaaS Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-cloudflare-saas-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      CF_PRIMARY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Probe Cloudflare for SaaS read access
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          selected=''
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            headers=(-H "Authorization: Bearer ${token}" -H 'Accept: application/json')
+            custom_http=$(curl -sS --max-time 25 "${headers[@]}" -o /tmp/custom.json -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames?per_page=1" || true)
+            fallback_http=$(curl -sS --max-time 25 "${headers[@]}" -o /tmp/fallback.json -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/custom_hostnames/fallback_origin" || true)
+            echo "Cloudflare for SaaS probe (${source}): custom_hostnames=${custom_http} fallback_origin=${fallback_http}"
+            if [[ "$custom_http" == 200 && "$fallback_http" == 200 ]] && jq -e '.success == true' /tmp/custom.json >/dev/null 2>&1 && jq -e '.success == true' /tmp/fallback.json >/dev/null 2>&1; then
+              selected="$source"
+              break
+            fi
+            jq -c '{custom_errors:[(.errors // [])[]|{code,message}]}' /tmp/custom.json 2>/dev/null || true
+            jq -c '{fallback_errors:[(.errors // [])[]|{code,message}]}' /tmp/fallback.json 2>/dev/null || true
+          done
+          [[ -n "$selected" ]] || { echo 'CLOUDFLARE_SAAS_READINESS_BLOCKED'; exit 41; }
+          fallback_status=$(jq -r '.result.status // "unknown"' /tmp/fallback.json)
+          fallback_origin=$(jq -r '.result.origin // "none"' /tmp/fallback.json)
+          echo "Cloudflare for SaaS read access verified with ${selected} token."
+          echo "Fallback origin status=${fallback_status} origin=${fallback_origin}"
+          jq -e '.result | type == "array"' /tmp/custom.json >/dev/null
