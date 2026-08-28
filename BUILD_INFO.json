@@ -1,12 +1,14 @@
 {
-  "version": "0.25.5",
+  "version": "0.26.2",
   "as_of": "2026-08-28",
-  "head_commit_verified": "4a7a978595edec052286711487b335447d960730",
-  "status": "production_active_post_v0_25_5_marketplace_safe_feed",
+  "head_commit_verified": "45b71b0697032c53ae30a681071011ce2c04efc7",
+  "status": "production_active_v0_26_2_marketplace_native_push_notification_center",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
+    "production_source_commit": "45b71b0697032c53ae30a681071011ce2c04efc7",
+    "production_verified_at_utc": "2026-08-28T16:24:42Z",
     "rule": "Verify GitHub main, Supabase live state and production checks before claiming completion. Archived roadmap documents are historical context, not proof of current state."
   },
   "languages": {
@@ -24,11 +26,20 @@
     "pwa": {
       "active": true,
       "host": "https://app.listiaapp.com",
+      "bootstrap_version": "0.26.2",
       "javascript_gate": true,
+      "protected_artifact": true,
+      "build_fingerprint": true,
+      "source_maps": false,
+      "client_js_minified": true,
       "anti_freeze_audit": true,
       "risky_global_mutation_observers": 0,
       "installable": true,
-      "minimum_small_text_px": 12
+      "minimum_small_text_px": 12,
+      "physical_android_qa_complete": false,
+      "physical_iphone_qa_complete": false,
+      "physical_desktop_qa_complete": false,
+      "offline_recovery_qa_complete": false
     },
     "commercial": {
       "active": true,
@@ -41,7 +52,28 @@
       "public_source_provenance_hidden": true,
       "saved_search_matching_scheduled": true,
       "in_app_match_alerts": true,
-      "real_push_email_delivery": false
+      "notification_center": true,
+      "native_web_push_backend_active": true,
+      "native_web_push_ui_active": true,
+      "native_web_push_gate": true,
+      "native_web_push_physical_device_qa_complete": false,
+      "active_push_subscriptions_verified": 0,
+      "email_delivery_configured": false,
+      "email_provider_configured": false,
+      "alert_delivery_health_metric": true
+    },
+    "accounts": {
+      "professional_mode": true,
+      "seeker_mode": true,
+      "account_mode_auth_sync": true,
+      "seeker_marketplace_route": true,
+      "professional_without_workspace_onboarding": true
+    },
+    "assistant": {
+      "conversation_edge_function": true,
+      "conversation_version": 10,
+      "authenticated_without_workspace_supported": true,
+      "professional_actions_require_workspace": true
     },
     "properties": {
       "material_first_intake": true,
@@ -65,7 +97,10 @@
       "rescheduling": true
     },
     "managed_sites": {
-      "provisioning": true,
+      "listia_subdomain_provisioning": true,
+      "external_domain_selection": true,
+      "external_domain_cloudflare_custom_hostname_provisioning": false,
+      "external_domain_ssl_dns_recovery_qa": false,
       "interest_capture": true,
       "supported_locales": 11,
       "locale_prefixed_routes": true,
@@ -78,6 +113,9 @@
     },
     "attribution": {
       "first_party_web_events": true,
+      "product_telemetry_separated_from_conversion_events": true,
+      "pwa_web_event_ingest_version": 3,
+      "authenticated_browser_e2e_after_v3_complete": false,
       "attribution_model": true,
       "conversion_signal_queue": true,
       "real_ad_platform_dispatch": false
@@ -96,7 +134,10 @@
     "integration_connections_connected": true,
     "tokens_server_side_only": true,
     "rls_enabled_on_public_tables": true,
+    "marketplace_public_feed_uses_rls": true,
+    "development_portfolio_uses_rls": true,
     "saved_search_cron": true,
+    "push_dispatch_cron": true,
     "edge_functions_active": true
   },
   "pricing": {
@@ -112,17 +153,21 @@
     "oauth_pkce_one_time_state": true,
     "oauth_tokens_server_side": true,
     "marketplace_safe_projection": true,
+    "privileged_marketplace_feed_warnings_closed": true,
+    "privileged_development_portfolio_warning_closed": true,
     "repo_public": true,
     "leaked_password_protection": false,
     "final_pentest_complete": false
   },
   "remaining_critical": [
-    "Real push/email delivery for saved-search alerts",
-    "Custom-domain end-to-end provisioning, SSL, DNS recovery and external-domain Turnstile QA",
+    "Physical Web Push validation with a real opted-in browser subscription",
+    "Configure and verify a real saved-search email delivery provider",
+    "Custom-domain Cloudflare Custom Hostnames provisioning, SSL, DNS recovery and external-domain Turnstile QA",
     "Real Meta/Google/TikTok/LinkedIn conversion dispatch after account connections exist",
+    "Authenticated browser end-to-end confirmation of product telemetry ingest v3",
     "Physical Android/iPhone/Desktop PWA and offline-recovery QA",
     "Final RLS/CORS/Origin review and penetration testing",
-    "Enable leaked-password protection",
+    "Enable Supabase leaked-password protection",
     "Make repository private at final security closure"
   ],
   "completion_rule": "Do not declare LISTIA 100% complete until real-device end-to-end QA and the final security checklist pass."
