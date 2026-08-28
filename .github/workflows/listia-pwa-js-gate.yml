@@ -47,6 +47,7 @@ jobs:
             public/property-complete-integration.js \
             public/draft-actions.js \
             public/office-modules.js \
+            public/appointment-actions.js \
             public/contact-engine.js \
             public/marketplace.js \
             public/marketplace-extra-locales.js \
