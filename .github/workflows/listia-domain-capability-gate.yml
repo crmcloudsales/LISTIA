@@ -49,5 +49,5 @@ jobs:
           set -Eeuo pipefail
           test -f CLOUDFLARE_SAAS_AUDIT.txt
           grep -Fq 'ready=false' CLOUDFLARE_SAAS_AUDIT.txt
-          grep -Fq 'code\":1404' CLOUDFLARE_SAAS_AUDIT.txt
-          grep -Fq 'code\":1456' CLOUDFLARE_SAAS_AUDIT.txt
+          grep -Fq '"code":1404' CLOUDFLARE_SAAS_AUDIT.txt
+          grep -Fq '"code":1456' CLOUDFLARE_SAAS_AUDIT.txt
