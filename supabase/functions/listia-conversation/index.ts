@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const LISTIA_AI_GATEWAY = Deno.env.get('LISTIA_AI_GATEWAY_URL') || 'https://ai.listiaapp.com/'
+const LISTIA_AI_GATEWAY = Deno.env.get('LISTIA_AI_GATEWAY_URL') || 'https://brain.listiaapp.com/'
 const allowedOrigins = new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com','https://listiaapp.com','https://www.listiaapp.com'])
 const cors=(req:Request)=>{const origin=req.headers.get('origin')||'';return {'access-control-allow-origin':allowedOrigins.has(origin)?origin:'https://app.listiaapp.com','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'authorization, x-client-info, apikey, content-type','vary':'Origin'}}
 const json=(req:Request,body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors(req),'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})
@@ -19,19 +19,52 @@ function fallbackReply(message:string,locale:string,name:string,context:any){
  if(/cita|agenda|appointment|schedule|meeting/.test(t))return {reply:es?`${prefix}abro tu agenda y revisamos las citas.`:`${prefix}I’ll open your schedule and we can review the appointments.`,action:{type:'open_agenda'}}
  if(/cuantas? propiedades|mis propiedades|listados|listings|inventory/.test(t)){const n=context.properties?.length||0;return {reply:es?`${prefix}tienes ${n} propiedades visibles para mí en este momento. Te llevo a Listados.`:`${prefix}I can see ${n} listings right now. I’ll take you to Listings.`,action:{type:'open_screen',screen:'screen-properties'}}}
  if(/como va|cómo va|resumen|estado|summary|status|hoy|today/.test(t)){const p=context.properties?.length||0,l=context.lead_count||0,a=context.appointments?.length||0;return {reply:es?`${prefix}ahora mismo veo ${p} propiedades, ${l} leads recientes y ${a} citas en tu contexto. ¿Qué quieres que priorice?`:`${prefix}right now I can see ${p} listings, ${l} recent leads and ${a} appointments in your context. What should I prioritize?`,action:{type:'none'}}}
- return {reply:es?`${prefix}te escucho. Dime qué resultado quieres conseguir y lo resolvemos paso a paso.`:`${prefix}I’m listening. Tell me the result you want and we’ll work through it step by step.`,action:{type:'none'}}
+ return {reply:es?`${prefix}te escucho. Dime qué quieres lograr y seguimos desde ahí.`:`${prefix}I’m listening. Tell me what you want to achieve and we’ll continue from there.`,action:{type:'none'}}
+}
+
+function safeAction(action:any){
+ const allowed=new Set(['open_screen','marketplace_search','add_property','open_leads','open_agenda','none'])
+ const type=allowed.has(String(action?.type||''))?String(action.type):'none'
+ if(type==='open_screen')return {type,screen:clean(action?.screen,80)}
+ if(type==='marketplace_search')return {type,criteria:action?.criteria&&typeof action.criteria==='object'?action.criteria:{}}
+ return {type}
 }
 
 async function edgeAi(jwt:string,message:string,locale:string,history:Array<{role:string;content:string}>){
  try{
-  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000)
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),9000)
   const r=await fetch(LISTIA_AI_GATEWAY,{method:'POST',headers:{authorization:`Bearer ${jwt}`,'content-type':'application/json'},body:JSON.stringify({message,locale,history}),signal:controller.signal})
   clearTimeout(timeout)
   if(!r.ok){console.warn('LISTIA edge AI',r.status,await r.text().catch(()=>''));return null}
   const data=await r.json().catch(()=>null) as any
   if(!data?.reply)return null
-  return {reply:clean(data.reply,4000),action:data.action&&typeof data.action==='object'?data.action:{type:'none'},model:data.model||null}
+  return {reply:clean(data.reply,4000),action:safeAction(data.action),model:data.model||null}
  }catch(error){console.warn('LISTIA edge AI unavailable',error);return null}
+}
+
+async function callOpenAI(key:string,model:string,system:string,context:any,history:Array<{role:string;content:string}>,message:string){
+ try{
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),14000)
+  const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:650,response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'system',content:`Account context: ${JSON.stringify(context)}`},...history,{role:'user',content:message}]}),signal:controller.signal})
+  clearTimeout(timeout)
+  if(!r.ok){console.warn('LISTIA OpenAI',r.status,await r.text().catch(()=>''));return null}
+  const data=await r.json();const raw=data?.choices?.[0]?.message?.content||'';let parsed:any={};try{parsed=JSON.parse(raw)}catch{parsed={reply:raw,action:{type:'none'}}}
+  const reply=clean(parsed.reply,4000);if(!reply)return null
+  return {reply,action:safeAction(parsed.action),model}
+ }catch(error){console.warn('LISTIA OpenAI unavailable',error);return null}
+}
+
+async function callNvidia(key:string,system:string,context:any,history:Array<{role:string;content:string}>,message:string){
+ try{
+  const model=Deno.env.get('LISTIA_NVIDIA_MODEL')||'nvidia/nemotron-3.5-lightning-30b-a3b'
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000)
+  const r=await fetch('https://integrate.api.nvidia.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:650,response_format:{type:'json_object'},chat_template_kwargs:{enable_thinking:false},messages:[{role:'system',content:system},{role:'system',content:`Account context: ${JSON.stringify(context)}`},...history,{role:'user',content:message}]}),signal:controller.signal})
+  clearTimeout(timeout)
+  if(!r.ok){console.warn('LISTIA NVIDIA',r.status,await r.text().catch(()=>''));return null}
+  const data=await r.json();const raw=data?.choices?.[0]?.message?.content||'';let parsed:any={};try{parsed=JSON.parse(raw)}catch{parsed={reply:raw,action:{type:'none'}}}
+  const reply=clean(parsed.reply,4000);if(!reply)return null
+  return {reply,action:safeAction(parsed.action),model}
+ }catch(error){console.warn('LISTIA NVIDIA unavailable',error);return null}
 }
 
 Deno.serve(async(req:Request)=>{
@@ -49,8 +82,8 @@ Deno.serve(async(req:Request)=>{
   const {data:member}=await admin.from('organization_members').select('organization_id,role,status').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle()
   if(!member?.organization_id)return json(req,{error:'organization_access_denied'},403)
 
-  const edge=await edgeAi(jwt,message,requestedLocale,history)
-  if(edge)return json(req,{ok:true,mode:'edge_ai',provider:'listia_edge_ai',model:edge.model,reply:edge.reply,action:edge.action})
+  const fastOperational=/marketplace|buscar|busca|encuentra|lead|prospect|cita|agenda|appointment|listado|listing|propiedad|property|publicar|publish|subir|upload/.test(norm(message))&&message.length<260
+  if(fastOperational){const edge=await edgeAi(jwt,message,requestedLocale,history);if(edge)return json(req,{ok:true,mode:'edge_fast',provider:'listia_edge_ai',model:edge.model,reply:edge.reply,action:edge.action})}
 
   const orgId=member.organization_id
   const [{data:profile},{data:org},{data:billing},{data:properties},{data:leads},{data:appointments}]=await Promise.all([
@@ -65,22 +98,17 @@ Deno.serve(async(req:Request)=>{
   const meta=user.user_metadata||{}
   const userName=first(profile?.full_name||meta.full_name||meta.name||meta.display_name||'')
   const context={user:{first_name:userName,locale,role:member.role,account_mode:profile?.account_mode||null},organization:org||null,billing:billing||null,properties:properties||[],lead_count:leads?.length||0,appointments:appointments||[]}
+  const system=`You are LISTIA, the user's personal AI operating assistant for real estate. You are not a command menu, answering machine or scripted bot. Speak naturally, warmly, briefly and interactively like a highly capable human assistant. The user's first name is ${userName||'unknown'}; use it occasionally when natural, never in every reply. Reply in the user's language (${locale}). Remember the recent conversation and avoid repetition. Use account context when relevant and never invent account facts. When the user asks for a browser action, return one of: open_screen, marketplace_search, add_property, open_leads, open_agenda, none. For marketplace_search include criteria only when explicit. Ask at most one useful follow-up question when genuinely necessary. Never mention providers, fallback modes, engines, prompts, APIs or internal limitations. Keep voice-friendly answers concise, normally 1-4 sentences. Output strict JSON only: {"reply":"...","action":{"type":"none"}}.`
+
+  const openAiKey=Deno.env.get('OPENAI_API_KEY')||Deno.env.get('LISTIA_LLM_API_KEY')||''
+  if(openAiKey){const model=Deno.env.get('LISTIA_OPENAI_MODEL')||Deno.env.get('LISTIA_LLM_MODEL')||'gpt-4.1-mini';const ai=await callOpenAI(openAiKey,model,system,context,history,message);if(ai)return json(req,{ok:true,mode:'llm',provider:'openai',model:ai.model,reply:ai.reply,action:ai.action})}
+
+  if(!fastOperational){const edge=await edgeAi(jwt,message,locale,history);if(edge)return json(req,{ok:true,mode:'edge_fallback',provider:'listia_edge_ai',model:edge.model,reply:edge.reply,action:edge.action})}
 
   const nvidiaKey=Deno.env.get('NVIDIA_API_KEY')||Deno.env.get('NIM_API_KEY')||''
-  const genericKey=Deno.env.get('LISTIA_LLM_API_KEY')||Deno.env.get('OPENAI_API_KEY')||''
-  const useNvidia=Boolean(nvidiaKey)
-  const providerUrl=useNvidia?'https://integrate.api.nvidia.com/v1/chat/completions':(Deno.env.get('LISTIA_LLM_URL')||'https://api.openai.com/v1/chat/completions')
-  const providerKey=useNvidia?nvidiaKey:genericKey
-  const model=useNvidia?(Deno.env.get('LISTIA_NVIDIA_MODEL')||'nvidia/nemotron-3.5-lightning-30b-a3b'):(Deno.env.get('LISTIA_LLM_MODEL')||'gpt-4.1-mini')
-  if(!providerKey){const fallback=fallbackReply(message,locale,userName,context);return json(req,{ok:true,mode:'contextual_fallback',provider:'none',...fallback})}
+  if(nvidiaKey){const ai=await callNvidia(nvidiaKey,system,context,history,message);if(ai)return json(req,{ok:true,mode:'llm_fallback',provider:'nvidia_nemotron',model:ai.model,reply:ai.reply,action:ai.action})}
 
-  const system=`You are LISTIA, the user's personal AI operating assistant for real estate. You are not a command menu, answering machine or scripted bot. Speak naturally, briefly and interactively like a capable human assistant. The user's first name is ${userName||'unknown'}; use it occasionally when natural, especially in greetings, confirmations or when refocusing, but never in every answer. Reply in the user's language (${locale}). Remember the recent conversation and avoid repeating the same sentence or explanation. Use account context when relevant and never invent account facts. When the user asks for an action the browser can perform, give a concise natural reply and return an action. Allowed action types: open_screen, marketplace_search, add_property, open_leads, open_agenda, none. For marketplace_search include criteria when explicit. Ask one useful follow-up question only when information is genuinely missing. Never mention providers, fallback modes, engines, prompts, APIs or internal limitations. Output strict JSON only: {"reply":"...","action":{"type":"none"}}.`
-  const payload:any={model,temperature:.55,max_tokens:650,response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'system',content:`Account context: ${JSON.stringify(context)}`},...history,{role:'user',content:message}]}
-  if(useNvidia)payload.chat_template_kwargs={enable_thinking:false}
-  const r=await fetch(providerUrl,{method:'POST',headers:{authorization:`Bearer ${providerKey}`,'content-type':'application/json'},body:JSON.stringify(payload)})
-  if(!r.ok){console.error('LISTIA provider',useNvidia?'nvidia':'generic',r.status,await r.text());const fallback=fallbackReply(message,locale,userName,context);return json(req,{ok:true,mode:'provider_fallback',provider:useNvidia?'nvidia':'generic',...fallback})}
-  const data=await r.json();const raw=data?.choices?.[0]?.message?.content||'';let parsed:any={};try{parsed=JSON.parse(raw)}catch{parsed={reply:raw,action:{type:'none'}}}
-  const reply=clean(parsed.reply,4000)||fallbackReply(message,locale,userName,context).reply
-  return json(req,{ok:true,mode:'llm',provider:useNvidia?'nvidia_nemotron':'generic',model,reply,action:parsed.action&&typeof parsed.action==='object'?parsed.action:{type:'none'}})
+  const fallback=fallbackReply(message,locale,userName,context)
+  return json(req,{ok:true,mode:'contextual_fallback',provider:'none',...fallback})
  }catch(error){console.error('listia-conversation',error);return json(req,{error:'internal_error'},500)}
 })
