@@ -7,6 +7,7 @@ on:
       - 'public/config.js'
       - 'public/sw.js'
       - 'public/marketplace-push.js'
+      - 'public/marketplace-notification-center.js'
       - 'supabase/functions/marketplace-alert-dispatch/**'
       - 'supabase/migrations/*marketplace*push*.sql'
       - '.github/workflows/listia-marketplace-push-gate.yml'
@@ -31,17 +32,22 @@ jobs:
           node --check public/config.js
           node --check public/sw.js
           node --check public/marketplace-push.js
+          node --check public/marketplace-notification-center.js
       - name: Verify push wiring
         shell: bash
         run: |
           set -Eeuo pipefail
           grep -Fq '/marketplace-push.js?v=1' public/config.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.26.1"' public/config.js
-          grep -Fq 'listia-pwa-v0.26.1' public/sw.js
+          grep -Fq '/marketplace-notification-center.js?v=1' public/config.js
+          grep -Fq 'MARKETPLACE_EMAIL_ENABLED:false' public/config.js
+          grep -Fq 'BOOTSTRAP_VERSION:"0.26.2"' public/config.js
+          grep -Fq 'listia-pwa-v0.26.2' public/sw.js
+          grep -Fq '/marketplace-notification-center.js?v=1' public/sw.js
           grep -Fq 'addEventListener("push"' public/sw.js
           grep -Fq 'addEventListener("notificationclick"' public/sw.js
           grep -Fq 'PushManager' public/marketplace-push.js
           grep -Fq 'Notification.requestPermission' public/marketplace-push.js
+          grep -Fq 'LISTIA_NOTIFICATION_CENTER' public/marketplace-notification-center.js
           grep -Fq 'npm:web-push@3.6.7' supabase/functions/marketplace-alert-dispatch/index.ts
           grep -Fq 'x-listia-signature' supabase/functions/marketplace-alert-dispatch/index.ts
           test -f supabase/migrations/20260828153500_add_marketplace_native_web_push.sql
