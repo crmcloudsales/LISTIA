@@ -26,7 +26,8 @@ WORKERS = max(2, min(int(os.getenv("QROO_WORKERS", "14")), 24))
 
 def fixed_parse_numbers(lines: list[str], property_type: str):
     # Result cards split values and labels into separate DOM nodes. Join with spaces so
-    # "2" + "Recámaras" becomes parseable, and never treat a bare external ID as a bedroom count.
+    # "2" + "Recámaras" and "80 m" + "2" become parseable, and never treat a bare
+    # external ID as a bedroom count.
     joined = " ".join(lines)
     bedrooms = None
     bathrooms = None
@@ -39,7 +40,7 @@ def fixed_parse_numbers(lines: list[str], property_type: str):
     if m:
         bathrooms = float(m.group(1))
 
-    area_matches = re.findall(r"([0-9][0-9.,]*)\s*m(?:²|2|\^\{2\})\b", joined, re.I)
+    area_matches = re.findall(r"([0-9][0-9.,]*)\s*m\s*(?:²|2|\^\{2\})\b", joined, re.I)
     parsed_areas = []
     for raw in area_matches:
         try:
