@@ -1,0 +1,86 @@
+name: LISTIA Edge Security Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/managed-site-resolver/**'
+      - 'supabase/functions/listia-public-chat/**'
+      - 'supabase/functions/listia-contact-import/**'
+      - 'supabase/functions/listia-contact-import-chunk-1/**'
+      - 'supabase/migrations/*harden_public_site_resolver_v1.sql'
+      - '.github/workflows/listia-edge-security-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Validate Edge Function syntax
+        run: |
+          set -Eeuo pipefail
+          for f in \
+            supabase/functions/managed-site-resolver/index.ts \
+            supabase/functions/listia-public-chat/index.ts \
+            supabase/functions/listia-contact-import/index.ts \
+            supabase/functions/listia-contact-import-chunk-1/index.ts; do
+            node --experimental-strip-types --check "$f"
+          done
+
+      - name: Enforce public resolver least privilege
+        run: |
+          set -Eeuo pipefail
+          f=supabase/functions/managed-site-resolver/index.ts
+          grep -Fq 'SUPABASE_ANON_KEY' "$f"
+          grep -Fq 'resolve_listia_public_site' "$f"
+          grep -Fq 'MANAGED_HOST' "$f"
+          if grep -Eq 'SUPABASE_SERVICE_ROLE_KEY|x-listia-gateway-secret|siteverify|TURNSTILE_SECRET' "$f"; then
+            echo 'Managed-site resolver must not depend on service_role or faux Turnstile gateway authentication.'
+            exit 1
+          fi
+
+      - name: Enforce public site SQL projection
+        run: |
+          set -Eeuo pipefail
+          f=supabase/migrations/20260828211818_harden_public_site_resolver_v1.sql
+          grep -Fq "w.mode='listia_subdomain'" "$f"
+          grep -Fq "w.status='active'" "$f"
+          grep -Fq 'v_public_configuration := jsonb_build_object' "$f"
+          grep -Fq "'default_locale'" "$f"
+          grep -Fq "'enabled_locales'" "$f"
+          grep -Fq 'grant execute on function public.resolve_listia_public_site(text) to anon, service_role' "$f"
+          if grep -Eq "w.mode in \('connect_existing','buy_website'\)|'configuration',v_normalized" "$f"; then
+            echo 'External domains or unfiltered website configuration must not enter the public resolver.'
+            exit 1
+          fi
+
+      - name: Enforce retired import endpoints
+        run: |
+          set -Eeuo pipefail
+          for f in supabase/functions/listia-contact-import/index.ts supabase/functions/listia-contact-import-chunk-1/index.ts; do
+            grep -Fq 'endpoint_retired' "$f"
+            grep -Fq 'status: 410' "$f"
+            if grep -Eq 'SUPABASE_SERVICE_ROLE_KEY|x-listia-import-job|TOKEN=|ORG=|USER=' "$f"; then
+              echo "Retired import endpoint regained privileged import behavior: $f"
+              exit 1
+            fi
+          done
+
+      - name: Enforce public chat abuse controls
+        run: |
+          set -Eeuo pipefail
+          f=supabase/functions/listia-public-chat/index.ts
+          grep -Fq "if(!ALLOWED.has(origin))" "$f"
+          grep -Fq "forwarded.at(-1)" "$f"
+          grep -Fq 'MAX_BODY_BYTES = 32768' "$f"
+          grep -Fq 'private.public_chat_rate_limits' "$f"
+          grep -Fq "type.includes('application/json')" "$f"
