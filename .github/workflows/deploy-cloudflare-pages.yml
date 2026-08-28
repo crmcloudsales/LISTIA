@@ -56,6 +56,47 @@ jobs:
           test -f wrangler-listia-app.jsonc
           test ! -f public/_redirects
 
+      - name: Build protected production artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf dist-pwa public-source
+          cp -a public dist-pwa
+          find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) -delete
+          find dist-pwa -type f -name '.deploy-trigger-*' -delete
+          rm -f dist-pwa/APP_ICON_VERSION.txt
+
+          for file in dist-pwa/*.js; do
+            [[ -f "$file" ]] || continue
+            tmp="${file}.protected"
+            npx --yes terser@5 "$file" --compress passes=2,drop_console=false --mangle --comments false --output "$tmp"
+            mv "$tmp" "$file"
+          done
+
+          for file in dist-pwa/*.css; do
+            [[ -f "$file" ]] || continue
+            tmp="${file}.protected"
+            npx --yes csso-cli@4 "$file" --output "$tmp"
+            mv "$tmp" "$file"
+          done
+
+          printf '\n;Object.defineProperty(window,"LISTIA_BUILD_FINGERPRINT",{value:"%s",writable:false,configurable:false});\n' "${GITHUB_SHA}" >> dist-pwa/config.js
+
+          if find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) | grep -q .; then
+            echo 'Protected artifact still contains source/development files.'
+            exit 1
+          fi
+
+          node --check dist-pwa/config.js
+          node --check dist-pwa/app.js
+          node --check dist-pwa/listia-voice.js
+          node --check dist-pwa/assistant-intelligence.js
+          grep -Fq "LISTIA_BUILD_FINGERPRINT" dist-pwa/config.js
+
+          mv public public-source
+          mv dist-pwa public
+          echo "Protected artifact ready for ${GITHUB_SHA}"
+
       - name: Deploy isolated Workers Static Assets release
         id: worker_deploy
         shell: bash
@@ -95,8 +136,9 @@ jobs:
             root="$(curl -sS -L --max-time 20 -o /tmp/worker-root.html -w '%{http_code}' "${base}?lang=ja" || true)"
             voice="$(curl -sS -L --max-time 20 -o /tmp/worker-voice.js -w '%{http_code}' "${base%/}/listia-voice.js" || true)"
             terms="$(curl -sS -L --max-time 20 -o /tmp/worker-terms.html -w '%{http_code}' "${base%/}/terms.html" || true)"
-            if [[ "$root" == 200 && "$voice" == 200 && "$terms" == 200 ]] && grep -Fq 'LISTIA' /tmp/worker-root.html && grep -Fq 'ru-RU' /tmp/worker-voice.js && grep -Fq 'ja-JP' /tmp/worker-voice.js && grep -Fq 'Version 1.4' /tmp/worker-terms.html; then ok=true; break; fi
-            echo "Isolated Worker smoke test waiting (${attempt}/12): root=${root} voice=${voice} terms=${terms}"
+            config="$(curl -sS -L --max-time 20 -o /tmp/worker-config.js -w '%{http_code}' "${base%/}/config.js" || true)"
+            if [[ "$root" == 200 && "$voice" == 200 && "$terms" == 200 && "$config" == 200 ]] && grep -Fq 'LISTIA' /tmp/worker-root.html && grep -Fq 'ru-RU' /tmp/worker-voice.js && grep -Fq 'ja-JP' /tmp/worker-voice.js && grep -Fq 'Version 1.4' /tmp/worker-terms.html && grep -Fq 'LISTIA_BUILD_FINGERPRINT' /tmp/worker-config.js; then ok=true; break; fi
+            echo "Isolated Worker smoke test waiting (${attempt}/12): root=${root} voice=${voice} terms=${terms} config=${config}"
             sleep 5
           done
           [[ "$ok" == true ]] || { echo 'Isolated Worker failed smoke tests; production route was not changed.'; exit 1; }
@@ -149,10 +191,11 @@ jobs:
             root_ru="$(curl -sS -L --max-time 20 -o /tmp/pwa.html -w '%{http_code}' 'https://app.listiaapp.com/?lang=ru' || true)"
             ja="$(curl -sS -L --max-time 20 -o /tmp/ja.js -w '%{http_code}' 'https://app.listiaapp.com/japanese-locale.js' || true)"
             voice="$(curl -sS -L --max-time 20 -o /tmp/voice.js -w '%{http_code}' 'https://app.listiaapp.com/listia-voice.js' || true)"
+            config="$(curl -sS -L --max-time 20 -o /tmp/config.js -w '%{http_code}' 'https://app.listiaapp.com/config.js' || true)"
             terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
             privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
-            if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
-            echo "Production verification waiting (${attempt}/30): root=${root_ru} ja=${ja} voice=${voice} terms=${terms} privacy=${privacy}"
+            if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$config" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'LISTIA_BUILD_FINGERPRINT' /tmp/config.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
+            echo "Production verification waiting (${attempt}/30): root=${root_ru} ja=${ja} voice=${voice} config=${config} terms=${terms} privacy=${privacy}"
             sleep 5
           done
           [[ "$ok" == true ]]
@@ -181,8 +224,10 @@ jobs:
             echo "route_token_source=${{ steps.route.outputs.token_source }}"
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'voice_native_tts_11_languages=true'
-            echo 'russian_live=true'
-            echo 'japanese_live=true'
+            echo 'protected_artifact=true'
+            echo 'source_maps=false'
+            echo 'client_js_minified=true'
+            echo 'build_fingerprint=true'
             echo 'terms_version=1.4'
             echo 'privacy_version=1.3'
             echo 'free_property_limit=3'
