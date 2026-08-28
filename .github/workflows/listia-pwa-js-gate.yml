@@ -42,6 +42,7 @@ jobs:
             public/listing-workspace.js \
             public/listings-v2.js \
             public/website-status.js \
+            public/website-language-settings.js \
             public/website-provision-bridge.js \
             public/developments.js \
             public/development-property-bridge.js \
