@@ -41,13 +41,13 @@ jobs:
           set -Eeuo pipefail
           grep -Fq "LISTIA_EXTERNAL_DOMAINS_ENABLED" supabase/functions/website-provision/index.ts
           grep -Fq "external_domains_temporarily_unavailable" supabase/functions/website-provision/index.ts
-          grep -Fq "charge_created:false" supabase/functions/website-provision/index.ts
-          grep -Fq "listia_subdomain_available:true" supabase/functions/website-provision/index.ts
+          grep -Eq "charge_created:[[:space:]]*false" supabase/functions/website-provision/index.ts
+          grep -Eq "listia_subdomain_available:[[:space:]]*true" supabase/functions/website-provision/index.ts
       - name: Validate current Cloudflare capability proof
         shell: bash
         run: |
           set -Eeuo pipefail
           test -f CLOUDFLARE_SAAS_AUDIT.txt
           grep -Fq 'ready=false' CLOUDFLARE_SAAS_AUDIT.txt
-          grep -Fq 'code":1404' CLOUDFLARE_SAAS_AUDIT.txt
-          grep -Fq 'code":1456' CLOUDFLARE_SAAS_AUDIT.txt
+          grep -Fq 'code\":1404' CLOUDFLARE_SAAS_AUDIT.txt
+          grep -Fq 'code\":1456' CLOUDFLARE_SAAS_AUDIT.txt
