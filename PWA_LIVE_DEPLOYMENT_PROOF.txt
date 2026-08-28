@@ -1,6 +1,6 @@
 LISTIA PWA 11-LANGUAGE VOICE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-28T04:22:19Z
-source_commit=d521a687256ef7d541b63b37abb3eafaa18a2042
+verified_at_utc=2026-08-28T04:23:16Z
+source_commit=ab304277141c43ffe2bdedfc48c4a3cc68bef464
 source_worker=listia-app
 hosting=Cloudflare Workers Static Assets via Worker Route
 route=app.listiaapp.com/*
