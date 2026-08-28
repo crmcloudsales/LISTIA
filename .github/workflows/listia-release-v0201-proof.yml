@@ -1,0 +1,61 @@
+name: LISTIA v0.20.1 Release Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-release-v0201-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for PWA deployment convergence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base='https://app.listiaapp.com'
+          ok=false
+          for attempt in $(seq 1 36); do
+            config=$(curl -sS -L --max-time 20 "${base}/config.js?proof=${GITHUB_SHA}" || true)
+            sw=$(curl -sS -L --max-time 20 "${base}/sw.js?proof=${GITHUB_SHA}" || true)
+            listings=$(curl -sS -L --max-time 20 "${base}/listings-v2.js?proof=${GITHUB_SHA}" || true)
+            chat=$(curl -sS -L --max-time 20 "${base}/ai-chat.js?proof=${GITHUB_SHA}" || true)
+            control=$(curl -sS -L --max-time 20 "${base}/control-center.js?proof=${GITHUB_SHA}" || true)
+            complete=$(curl -sS -L --max-time 20 "${base}/property-complete.js?proof=${GITHUB_SHA}" || true)
+            auto=$(curl -sS -L --max-time 20 "${base}/property-processing-auto.js?proof=${GITHUB_SHA}" || true)
+            draft=$(curl -sS -L --max-time 20 "${base}/draft-actions.js?proof=${GITHUB_SHA}" || true)
+            voice=$(curl -sS -L --max-time 20 "${base}/listia-voice.js?proof=${GITHUB_SHA}" || true)
+            if grep -Fq '/listings-v2.js?v=3' <<<"$config" \
+              && grep -Fq '/ai-chat.js?v=1' <<<"$config" \
+              && grep -Fq '/control-center.js?v=1' <<<"$config" \
+              && grep -Fq '/property-complete.js?v=1' <<<"$config" \
+              && grep -Fq '/draft-actions.js?v=2' <<<"$config" \
+              && grep -Fq 'listia-pwa-v0.20.1' <<<"$sw" \
+              && grep -Fq 'organization_websites' <<<"$listings" \
+              && grep -Fq 'screen-ai-chat' <<<"$chat" \
+              && grep -Fq 'listiaControlLive' <<<"$control" \
+              && grep -Fq 'LISTIA_PROPERTY_COMPLETE' <<<"$complete" \
+              && grep -Fq 'property-processing-start' <<<"$auto" \
+              && grep -Fq 'property-publish' <<<"$draft" \
+              && grep -Fq 'u.rate=1.12' <<<"$voice"; then
+                ok=true
+                break
+            fi
+            echo "Waiting for LISTIA v0.20.1 production convergence (${attempt}/36)"
+            sleep 5
+          done
+          [[ "$ok" == true ]] || { echo 'LISTIA production did not converge to v0.20.1'; exit 1; }
+      - name: Verify public production surfaces
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for path in / /config.js /sw.js /listings-v2.js /ai-chat.js /control-center.js /property-complete.js /property-processing-auto.js /draft-actions.js /listia-voice.js; do
+            code=$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://app.listiaapp.com${path}")
+            test "$code" = 200
+          done
