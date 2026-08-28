@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          token="$CF_SECURITY_TOKEN"; [[ -n "$token" ]] || token="$CF_PRIMARY_TOKEN"
+          token="$CF_PRIMARY_TOKEN"; [[ -n "$token" ]] || token="$CF_SECURITY_TOKEN"
           [[ -n "$token" ]] || exit 2
           auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
 
