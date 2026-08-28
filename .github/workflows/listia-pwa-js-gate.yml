@@ -64,3 +64,15 @@ jobs:
             echo "Checking $f"
             node --check "$f"
           done
+      - name: Reject body-wide childList mutation observers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bad=0
+          while IFS= read -r -d '' f; do
+            if grep -q 'MutationObserver' "$f" && grep -q 'document.body' "$f" && grep -q 'childList:true' "$f"; then
+              echo "Unsafe body-wide childList MutationObserver detected: $f"
+              bad=1
+            fi
+          done < <(find public -type f -name '*.js' -print0)
+          test "$bad" -eq 0
