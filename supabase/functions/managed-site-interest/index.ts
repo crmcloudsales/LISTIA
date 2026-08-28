@@ -37,6 +37,8 @@ Deno.serve(async(req:Request)=>{
   if(!listingId||name.length<2||(!email&&!whatsapp))return json({error:'invalid_submission'},400)
   if(honeypot)return json({ok:true})
   const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}})
+  const {data:listing,error:lerr}=await admin.from('marketplace_listings').select('id,organization_id').eq('id',listingId).eq('visibility','public').eq('status','published').not('rights_confirmed_at','is',null).maybeSingle()
+  if(lerr||!listing?.organization_id)return json({error:'listing_not_available'},404)
   const {data,error}=await admin.rpc('submit_marketplace_interest',{
     p_listing_id:listingId,
     p_name:name,
@@ -47,5 +49,15 @@ Deno.serve(async(req:Request)=>{
     p_website:null
   })
   if(error){console.error('managed-site-interest submit failed',error.code);return json({error:'submission_failed'},502)}
+  const inquiryId=String(data??'')
+  if(inquiryId){
+    const eventId=`lead_submit:${inquiryId}`
+    const attribution=body?.attribution&&typeof body.attribution==='object'?body.attribution:{}
+    const clickIds:any={}
+    for(const k of ['fbclid','gclid','gbraid','wbraid','ttclid','li_fat_id','msclkid']){const v=clean(attribution[k],300);if(v)clickIds[k]=v}
+    const occurredAt=new Date().toISOString()
+    await admin.from('web_events').upsert({organization_id:listing.organization_id,website_host:host,event_name:'lead_submit',event_id:eventId,anonymous_id:clean(body.anonymous_id,120)||null,session_id:clean(body.session_id,120)||null,listing_id:listingId,page_url:clean(body.page_url,1200)||null,referrer:clean(body.referrer,1200)||null,source:clean(attribution.utm_source,180)||'listia_managed_site',medium:clean(attribution.utm_medium,180)||'website',campaign:clean(attribution.utm_campaign,240)||null,content:clean(attribution.utm_content,240)||null,term:clean(attribution.utm_term,240)||null,click_ids:clickIds,metadata:{inquiry_id:inquiryId},occurred_at:occurredAt},{onConflict:'organization_id,event_id',ignoreDuplicates:true})
+    await admin.from('attribution_touchpoints').upsert({organization_id:listing.organization_id,anonymous_id:clean(body.anonymous_id,120)||null,session_id:clean(body.session_id,120)||null,event_id:eventId,touch_type:'conversion',source:clean(attribution.utm_source,180)||'listia_managed_site',medium:clean(attribution.utm_medium,180)||'website',campaign:clean(attribution.utm_campaign,240)||null,content:clean(attribution.utm_content,240)||null,term:clean(attribution.utm_term,240)||null,click_ids:clickIds,landing_url:clean(body.page_url,1200)||null,referrer:clean(body.referrer,1200)||null,occurred_at:occurredAt},{onConflict:'organization_id,event_id,touch_type',ignoreDuplicates:true})
+  }
   return json({ok:true,result:data??null})
 })
