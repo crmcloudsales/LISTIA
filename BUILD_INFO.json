@@ -1,20 +1,129 @@
 {
-  "version": "0.9.5",
-  "status": "global_multilingual_office_dashboard_property_material_intake",
-  "languages": {"supported":["es","en","fr","it","pt-BR","de","ar-AE"],"automatic_detection":true,"manual_override":true,"query_override":"lang","preference_key":"listia_language","cookie_key":"listia_lang","fallback":"en","rtl":["ar-AE"],"profile_sync":true},
-  "supabase": {"auth_connected":true,"organizations_connected":true,"onboarding_state_connected":true,"integration_connections_connected":true,"google_oauth_start_active":true,"google_oauth_callback_active":true,"tokens_server_side_only":true},
-  "journey": ["1/5 Business identity","2/5 Plan intent","3/5 Connect Google","4/5 Discovery/import","5/5 Business DNA baseline"],
-  "google_initial_scopes": ["openid","email","profile","drive.file","calendar.app.created","calendar.events.freebusy"],
-  "security": ["OAuth authorization URL generated server-side","PKCE + one-time state + expiry","OAuth client secret stored in Edge Function Secrets","Per-user OAuth tokens stored server-side in Vault","No paid entitlement granted by plan selection"],
-  "fixed_runtime_cost_target": "US$0 during MVP where provider free tiers allow",
-  "office_v086": {"dashboard_cards":["Today appointments","New opportunities","Leads managed","Active properties"],"primary_action":"Give LISTIA property material","data_source":"live Supabase tenant-scoped tables"},
-  "property_intake_v086": {"experience":"material-first; no portal-style long form","accepted_inputs":["PDF","photos","video","price list","description","price","sale/rent","commission","location","postal code"],"storage":"private Supabase Storage bucket property-materials","max_file_bytes":52428800,"free_plan_limit":"3 non-archived properties enforced server-side by property-intake-start","backend":"property-intake-start Edge Function v1"},
-  "layout_refinement_v0861": {"scope":"top row only","affected_elements":["logo","language selector"],"mobile_behavior":"moves the top row slightly lower and gives it its own vertical slot","goal":"visually center logo and language selector between the upper safe area and the panel top without moving the form","form_changed":false},
-  "global_i18n_v090": {"scope":["authentication","recovery","onboarding","plans","Google connection","discovery","Business DNA","Office","properties","property intake","errors","PWA manifests"],"locale_aliases":{"pt":["pt-BR","pt-PT"],"ar":["ar-AE"],"de":["de-DE","de-AT","de-CH"]},"directionality":"document-level RTL for ar-AE; LTR for all other locales","fallback":"en"},
-  "commercial_v100": {"source":"commercial/index.html","host":"https://listiaapp.com","app_entry":"https://app.listiaapp.com","deployment":"versioned Cloudflare Worker with preview and rollback","seo":["localized canonical URLs","hreflang","robots.txt","sitemap.xml"],"languages":["es","en","fr","it","pt-BR","de","ar-AE"]},
-  "pwa_icon_v091": {"source":"public/listia-mark-transparent.webp","derivatives":["listia-isotipo-32-v2.png","listia-isotipo-180-v2.png","listia-isotipo-192-v2.png","listia-isotipo-512-v2.png"],"background":"transparent","manifest_purpose":"any","reason":"show the complete official purple LISTIA mark without the embedded black square"},
-  "pwa_install_v092": {"commercial_buttons":{"ios":"https://app.listiaapp.com/?install=ios","android":"https://app.listiaapp.com/?install=android","desktop":"https://app.listiaapp.com/?install=desktop"},"delivery":"one installable PWA from app.listiaapp.com","android_desktop":"native browser install prompt with browser-menu fallback","ios":"Safari Add to Home Screen flow","languages":["es","en","fr","it","pt-BR","de","ar-AE"],"store_packaging":"future; no false APK, IPA or desktop download links"},
-  "pwa_install_v093": {"fix":"versioned install CSS and script to prevent stale mixed releases","experience":"opaque focused install surface; application login is not visible behind it","required_user_action":"one explicit install confirmation enforced by the browser"},
-  "pwa_icon_v094": {"source":"unchanged official transparent purple LISTIA mark with light house","manifest_purposes":["any","maskable"],"fix":"prevent Android from adding the non-maskable white wrapper","cache_busting":"manifest and icon URLs versioned","brand_redrawn":false},
-  "pwa_icon_v095": {"source":"official LISTIA house shape extracted without redraw","android_maskable":"opaque edge-to-edge purple field with centered light house","other_platforms":"unchanged transparent official mark","fix":"eliminate launcher-generated white pixels around Android adaptive icon","cache_busting":"new maskable filenames plus manifest version 0.9.5"}
+  "version": "0.25.5",
+  "as_of": "2026-08-28",
+  "head_commit_verified": "4a7a978595edec052286711487b335447d960730",
+  "status": "production_active_post_v0_25_5_marketplace_safe_feed",
+  "source_of_truth": {
+    "repository": "crmcloudsales/LISTIA",
+    "branch": "main",
+    "supabase_project": "zvzafiarwerbuoaccnoz",
+    "rule": "Verify GitHub main, Supabase live state and production checks before claiming completion. Archived roadmap documents are historical context, not proof of current state."
+  },
+  "languages": {
+    "supported": ["es", "en", "fr", "it", "pt-BR", "de", "ar-AE", "ru", "he", "zh-CN", "ja"],
+    "automatic_detection": true,
+    "manual_override": true,
+    "query_override": "lang",
+    "preference_key": "listia_language",
+    "cookie_key": "listia_lang",
+    "fallback": "en",
+    "rtl": ["ar-AE", "he"],
+    "profile_sync": true
+  },
+  "production": {
+    "pwa": {
+      "active": true,
+      "host": "https://app.listiaapp.com",
+      "javascript_gate": true,
+      "anti_freeze_audit": true,
+      "risky_global_mutation_observers": 0,
+      "installable": true,
+      "minimum_small_text_px": 12
+    },
+    "commercial": {
+      "active": true,
+      "host": "https://listiaapp.com",
+      "app_entry": "https://app.listiaapp.com"
+    },
+    "marketplace": {
+      "active": true,
+      "safe_public_feed": true,
+      "public_source_provenance_hidden": true,
+      "saved_search_matching_scheduled": true,
+      "in_app_match_alerts": true,
+      "real_push_email_delivery": false
+    },
+    "properties": {
+      "material_first_intake": true,
+      "private_material_storage": true,
+      "ai_processing_pipeline": true,
+      "draft_approval": true,
+      "publish_pipeline": true,
+      "needs_info_status": true,
+      "free_plan_non_archived_limit": 3
+    },
+    "leads": {
+      "workspace": true,
+      "timeline": true,
+      "notes": true,
+      "tasks": true,
+      "assignment": true,
+      "stage_actions": true
+    },
+    "appointments": {
+      "actions": true,
+      "rescheduling": true
+    },
+    "managed_sites": {
+      "provisioning": true,
+      "interest_capture": true,
+      "supported_locales": 11,
+      "locale_prefixed_routes": true,
+      "html_lang": true,
+      "rtl": true,
+      "canonical": true,
+      "hreflang": true,
+      "multilingual_sitemap": true,
+      "robots": true
+    },
+    "attribution": {
+      "first_party_web_events": true,
+      "attribution_model": true,
+      "conversion_signal_queue": true,
+      "real_ad_platform_dispatch": false
+    },
+    "voice": {
+      "runtime": true,
+      "tts_edge_function": true,
+      "canonical_direction": "native-free-v2",
+      "physical_device_qa_complete": false
+    }
+  },
+  "supabase": {
+    "auth_connected": true,
+    "organizations_connected": true,
+    "onboarding_state_connected": true,
+    "integration_connections_connected": true,
+    "tokens_server_side_only": true,
+    "rls_enabled_on_public_tables": true,
+    "saved_search_cron": true,
+    "edge_functions_active": true
+  },
+  "pricing": {
+    "free_usd_month": 0,
+    "pro_usd_month": 97,
+    "premium_usd_month": 147,
+    "premium_extra_seat_usd_month": 47,
+    "free_active_property_limit": 3,
+    "custom_domain_connect_usd": 10,
+    "domain_purchase_markup_percent": 100
+  },
+  "security": {
+    "oauth_pkce_one_time_state": true,
+    "oauth_tokens_server_side": true,
+    "marketplace_safe_projection": true,
+    "repo_public": true,
+    "leaked_password_protection": false,
+    "final_pentest_complete": false
+  },
+  "remaining_critical": [
+    "Real push/email delivery for saved-search alerts",
+    "Custom-domain end-to-end provisioning, SSL, DNS recovery and external-domain Turnstile QA",
+    "Real Meta/Google/TikTok/LinkedIn conversion dispatch after account connections exist",
+    "Physical Android/iPhone/Desktop PWA and offline-recovery QA",
+    "Final RLS/CORS/Origin review and penetration testing",
+    "Enable leaked-password protection",
+    "Make repository private at final security closure"
+  ],
+  "completion_rule": "Do not declare LISTIA 100% complete until real-device end-to-end QA and the final security checklist pass."
 }
