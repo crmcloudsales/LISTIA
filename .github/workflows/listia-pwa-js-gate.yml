@@ -28,6 +28,7 @@ jobs:
           for f in \
             public/config.js \
             public/app.js \
+            public/sw.js \
             public/app-shell-v2.js \
             public/listia-voice.js \
             public/assistant-intelligence.js \
