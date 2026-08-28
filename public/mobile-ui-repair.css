@@ -1,0 +1,84 @@
+/* LISTIA mobile device QA repairs — 2026-08-28 */
+:root{--listia-mobile-line:rgba(255,255,255,.10);--listia-mobile-card:#10121a}
+/* Never render operational UI below the product readability floor. */
+body.listia-shell-v2 .main button,
+body.listia-shell-v2 .main input,
+body.listia-shell-v2 .main select,
+body.listia-shell-v2 .main textarea,
+body.listia-shell-v2 .main small,
+body.listia-shell-v2 .main span,
+body.listia-shell-v2 .main p{font-size:max(12px,1em)}
+
+/* Header: keep logo + Marketplace + language usable on narrow Android screens. */
+body.listia-shell-v2 .brandbar{display:flex!important;align-items:center!important;gap:8px!important;overflow:hidden!important;padding-inline:12px!important}
+body.listia-shell-v2 .brand-logo{width:min(132px,36vw)!important;max-width:132px!important;height:auto!important;flex:0 1 auto!important}
+body.listia-shell-v2 .brandbar .language-control{min-width:0!important;flex:0 1 112px!important;margin-left:0!important}
+body.listia-shell-v2 .brandbar .language-select{width:100%!important;min-width:0!important;height:44px!important;padding:0 30px 0 10px!important;font-size:13px!important;line-height:1!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+body.listia-shell-v2 .brandbar button{min-height:44px!important;white-space:nowrap!important;font-size:13px!important;padding-inline:12px!important;flex:0 1 auto!important}
+
+/* CONTROL */
+.listia-control-live-head{align-items:flex-start!important;min-width:0!important}
+.listia-control-live-head>div{min-width:0!important;flex:1 1 auto!important}
+.listia-control-live-head p{font-size:13px!important;line-height:1.35!important;max-width:100%!important}
+.listia-control-refresh{flex:0 0 auto!important;min-width:104px!important;max-width:118px!important;min-height:44px!important;padding:10px 12px!important;white-space:nowrap!important;word-break:keep-all!important;overflow-wrap:normal!important;text-align:center!important;line-height:1.1!important;font-size:13px!important}
+.listia-control-row-live{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:12px!important;min-width:0!important;padding:11px 0!important;font-size:13px!important}
+.listia-control-row-live span{min-width:0!important;line-height:1.3!important;overflow-wrap:anywhere!important}
+.listia-control-row-live strong{white-space:nowrap!important;font-size:13px!important}
+#listiaControlAttentionRows{display:grid!important;gap:0!important}
+.listia-attention-btn{appearance:none!important;-webkit-appearance:none!important;width:100%!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:12px!important;min-height:46px!important;padding:10px 0!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.07)!important;border-radius:0!important;background:transparent!important;color:#fff!important;text-align:left!important;box-shadow:none!important;font:inherit!important}
+.listia-attention-btn span{font-size:13px!important;line-height:1.3!important;color:#b6b8c2!important;min-width:0!important}
+.listia-attention-btn strong{font-size:13px!important;color:#fff!important;min-width:22px!important;text-align:right!important}
+
+/* LISTADOS / website card */
+#listingsV2{min-width:0!important}
+#listingsV2 button{font-family:inherit!important}
+#listingsV2 .listia-control-row-live{font-size:13px!important}
+#listiaDevelopments{margin-top:16px!important;padding:16px!important;border-radius:20px!important;background:linear-gradient(180deg,#10121a,#0c0e14)!important}
+#listiaDevelopments strong{font-size:15px!important}
+#listiaDevelopments p{font-size:13px!important;line-height:1.45!important}
+#listiaDevelopments #devNew,
+#listiaDevelopments [data-add-unit]{appearance:none!important;-webkit-appearance:none!important;border:1px solid rgba(155,111,255,.30)!important;background:rgba(124,60,255,.13)!important;color:#d6c7ff!important;border-radius:11px!important;min-height:40px!important;padding:9px 11px!important;font:800 12px/1.2 system-ui,sans-serif!important;white-space:nowrap!important;box-shadow:none!important}
+#listiaDevelopments #devRows article{border-radius:16px!important;padding:13px!important;background:#12141c!important}
+#listiaDevelopments #devRows article span,
+#listiaDevelopments #devRows article b{font-size:12px!important;line-height:1.35!important}
+
+/* ACCOUNT: prevent endless-looking loading cards and button wrapping. */
+.listia-account-v2{grid-template-rows:auto minmax(0,1fr)!important}
+.listia-account-body{padding-bottom:18px!important}
+.listia-account-card{padding:15px!important;border-radius:20px!important;margin-bottom:10px!important}
+.listia-account-card>strong{font-size:15px!important}
+.listia-account-card>span{font-size:13px!important;line-height:1.4!important}
+#listiaAccountLogout{min-height:48px!important;text-align:center!important;font-size:13px!important}
+
+/* AI CHAT: remove dead vertical space; messages grow from top and composer stays reachable. */
+#screen-ai-chat-v2 .listia-ai-chat,
+#screen-ai-chat-v2 .listia-chat-shell{min-height:0!important;height:100%!important}
+#screen-ai-chat-v2 .listia-chat-empty{min-height:180px!important;padding:30px 20px!important;display:grid!important;place-content:center!important}
+#screen-ai-chat-v2 .listia-chat-empty h2{font-size:20px!important;margin-bottom:8px!important}
+#screen-ai-chat-v2 .listia-chat-empty p{font-size:13px!important;line-height:1.5!important;max-width:34ch!important;margin-inline:auto!important}
+#screen-ai-chat-v2 .listia-chat-form{bottom:0!important;margin-top:auto!important}
+
+/* Voice feedback bubble: readable but never cover most of an action card. */
+#listiaVoiceStatus.listia-ambient-status{max-width:min(510px,74vw)!important;right:20px!important;left:auto!important;font-size:13px!important;line-height:1.4!important;padding:12px 14px!important;white-space:normal!important}
+
+@media(max-width:430px){
+  :root{--listia-top-h:70px}
+  body.listia-shell-v2 .main{padding-inline:10px!important}
+  body.listia-shell-v2 .brand-logo{width:min(118px,34vw)!important;max-width:118px!important}
+  body.listia-shell-v2 .brandbar{gap:6px!important;padding-inline:9px!important}
+  body.listia-shell-v2 .brandbar .language-control{flex-basis:98px!important}
+  body.listia-shell-v2 .brandbar .language-select{font-size:12px!important;padding-left:8px!important}
+  body.listia-shell-v2 .brandbar button{font-size:12px!important;padding-inline:9px!important}
+  .listia-control-live-head h1{font-size:25px!important}
+  .listia-control-refresh{min-width:98px!important;max-width:104px!important;font-size:12px!important}
+  .listia-control-metrics{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
+  .listia-control-metric{padding:9px 7px!important}
+  .listia-control-metric span{font-size:12px!important}
+  #listiaDevelopments>div:first-child{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:start!important}
+}
+@media(max-width:360px){
+  body.listia-shell-v2 .brand-logo{width:104px!important}
+  body.listia-shell-v2 .brandbar .language-control{flex-basis:86px!important}
+  body.listia-shell-v2 .brandbar button{padding-inline:8px!important}
+  .listia-control-live-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important}
+}
