@@ -1,0 +1,78 @@
+name: LISTIA Turnstile Provision
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-turnstile-provision.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_PRIMARY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WORKER_NAME: listia-managed-sites
+      WRANGLER_VERSION: '4.125.0'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Create or resolve LISTIA Turnstile widget
+        id: widget
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/challenges/widgets"
+          selected=''
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            http=$(curl -sS --max-time 30 -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' -o /tmp/widgets.json -w '%{http_code}' "$api" || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' /tmp/widgets.json >/dev/null || continue
+            selected="$source"; break
+          done
+          [[ -n "$selected" ]] || { echo 'No LISTIA token has Turnstile read permission'; exit 41; }
+          if [[ "$selected" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+          sitekey=$(jq -r '.result[] | select(.name == "LISTIA Managed Sites") | .sitekey' /tmp/widgets.json | head -n1)
+          secret=''
+          if [[ -z "$sitekey" || "$sitekey" == null ]]; then
+            payload=$(jq -nc '{name:"LISTIA Managed Sites",domains:["listiaapp.com"],mode:"managed",region:"world"}')
+            http=$(curl -sS --max-time 30 -X POST -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data "$payload" -o /tmp/widget-create.json -w '%{http_code}' "$api" || true)
+            [[ "$http" =~ ^2 ]] && jq -e '.success == true' /tmp/widget-create.json >/dev/null || { echo 'Turnstile widget creation blocked'; jq -c '{errors}' /tmp/widget-create.json | sed -E 's/"secret":"[^"]+"/"secret":"REDACTED"/g'; exit 42; }
+            sitekey=$(jq -r '.result.sitekey' /tmp/widget-create.json)
+            secret=$(jq -r '.result.secret' /tmp/widget-create.json)
+          else
+            http=$(curl -sS --max-time 30 -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' -o /tmp/widget-detail.json -w '%{http_code}' "$api/$sitekey" || true)
+            if [[ "$http" == 200 ]]; then secret=$(jq -r '.result.secret // empty' /tmp/widget-detail.json); fi
+            if [[ -z "$secret" ]]; then
+              http=$(curl -sS --max-time 30 -X POST -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data '{"invalidate_immediately":false}' -o /tmp/widget-rotate.json -w '%{http_code}' "$api/$sitekey/rotate_secret" || true)
+              [[ "$http" =~ ^2 ]] && jq -e '.success == true' /tmp/widget-rotate.json >/dev/null || { echo 'Could not obtain Turnstile secret safely'; exit 43; }
+              secret=$(jq -r '.result.secret' /tmp/widget-rotate.json)
+            fi
+          fi
+          [[ -n "$sitekey" && -n "$secret" ]] || { echo 'Turnstile keys unavailable'; exit 44; }
+          printf '%s' "$sitekey" > /tmp/sitekey
+          printf '%s' "$secret" > /tmp/secret
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
+          echo 'Turnstile widget ready for listiaapp.com and its subdomains.'
+      - name: Store widget keys as Worker secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "${{ steps.widget.outputs.token_source }}" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+          cat /tmp/sitekey | CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" npx --yes wrangler@${WRANGLER_VERSION} secret put TURNSTILE_SITE_KEY --name "$WORKER_NAME" >/tmp/sitekey-put.log 2>&1
+          cat /tmp/secret | CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" npx --yes wrangler@${WRANGLER_VERSION} secret put TURNSTILE_SECRET --name "$WORKER_NAME" >/tmp/secret-put.log 2>&1
+          echo 'Turnstile bindings stored on LISTIA managed-sites Worker.'
+      - name: Remove temporary key material
+        if: always()
+        shell: bash
+        run: rm -f /tmp/sitekey /tmp/secret /tmp/widget-create.json /tmp/widget-detail.json /tmp/widget-rotate.json
