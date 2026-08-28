@@ -1,0 +1,78 @@
+name: LISTIA Managed Sites
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sites-worker/**'
+      - '.github/workflows/listia-managed-sites.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      WORKER_NAME: listia-managed-sites
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Syntax check worker
+        run: node --check sites-worker/index.js
+      - name: Deploy managed-sites worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_DEPLOY_TOKEN }}
+        run: npx --yes wrangler@4 deploy sites-worker/index.js --name "$WORKER_NAME" --compatibility-date 2026-08-28
+      - name: Audit protected exact routes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
+          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
+          jq -e '.success == true' /tmp/routes.json >/dev/null
+          jq -e '.result[] | select(.pattern == "app.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected app route'; exit 41; }
+          jq -e '.result[] | select(.pattern == "www.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected www route; wildcard will NOT be installed'; exit 42; }
+      - name: Ensure wildcard proxied DNS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
+          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=%2A.listiaapp.com" "${auth[@]}" > /tmp/dns.json
+          count=$(jq '.result | length' /tmp/dns.json)
+          if [ "$count" -eq 0 ]; then
+            curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" \
+              --data '{"type":"CNAME","name":"*","content":"listiaapp.com","proxied":true,"ttl":1}' > /tmp/dns-create.json
+            jq -e '.success == true' /tmp/dns-create.json >/dev/null
+          fi
+      - name: Install or update wildcard Worker route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
+          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
+          route_id=$(jq -r '.result[] | select(.pattern == "*.listiaapp.com/*") | .id' /tmp/routes.json | head -n1)
+          payload=$(jq -nc --arg pattern '*.listiaapp.com/*' --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
+          if [ -n "$route_id" ] && [ "$route_id" != "null" ]; then
+            curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/route-write.json
+          else
+            curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" --data "$payload" > /tmp/route-write.json
+          fi
+          jq -e '.success == true' /tmp/route-write.json >/dev/null
+      - name: Smoke reserved hosts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          app_code=$(curl -sS -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/)
+          www_code=$(curl -sS -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/)
+          test "$app_code" = '200'
+          test "$www_code" = '200'
