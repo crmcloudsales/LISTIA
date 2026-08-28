@@ -1,0 +1,50 @@
+name: LISTIA Control Health Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'public/control-health.js'
+      - 'supabase/migrations/*listia_control_health*.sql'
+      - 'supabase/migrations/*website_read_through_rls*.sql'
+      - '.github/workflows/listia-control-health-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Validate browser wiring
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check public/control-health.js
+          node --check public/config.js
+          node --check public/sw.js
+          grep -Fq '/control-health.js?v=1' public/config.js
+          grep -Fq '/control-health.js?v=1' public/sw.js
+          grep -Fq 'get_listia_control_health' public/control-health.js
+          grep -Fq 'LISTIA_CONTROL_HEALTH' public/control-health.js
+      - name: Validate RLS-preserving RPC
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file='supabase/migrations/20260828163700_make_listia_control_health_security_invoker.sql'
+          test -f "$file"
+          grep -Eiq 'security[[:space:]]+invoker' "$file"
+          ! grep -Eiq 'security[[:space:]]+definer' "$file"
+          grep -Fq 'auth.uid()' "$file"
+          grep -Fq 'grant execute on function public.get_listia_control_health() to authenticated' "$file"
+          grant_file='supabase/migrations/20260828163720_allow_authenticated_website_read_through_rls.sql'
+          test -f "$grant_file"
+          grep -Fq 'grant select on table public.organization_websites to authenticated' "$grant_file"
