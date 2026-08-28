@@ -1,0 +1,32 @@
+name: LISTIA Cloudflare Rate Limit Audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-cloudflare-ratelimit-audit-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Read current rate limiting rules
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode 'name=listiaapp.com' --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          zone=$(jq -r '.result[0].id // empty' "$z")
+          [[ -n "$zone" ]] || exit 1
+          r=$(mktemp)
+          code=$(curl -sS -o "$r" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_ratelimit/entrypoint")
+          if [[ "$code" == 404 ]]; then echo 'NO_RATE_LIMIT_RULESET'; exit 0; fi
+          [[ "$code" == 200 ]] || { cat "$r"; exit 2; }
+          jq -r '.result.rules[]? | [.id,.description,.action,.enabled,.expression,(.ratelimit.requests_per_period|tostring),(.ratelimit.period|tostring),(.ratelimit.mitigation_timeout|tostring)] | @tsv' "$r"
