@@ -17,10 +17,11 @@ jobs:
     timeout-minutes: 10
     env:
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CF_DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_PRIMARY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-managed-sites
+      WRANGLER_VERSION: '4.125.0'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -28,26 +29,54 @@ jobs:
           node-version: '22'
       - name: Syntax check worker
         run: node --check sites-worker/index.js
-      - name: Deploy managed-sites worker
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ env.CF_DEPLOY_TOKEN }}
-        run: npx --yes wrangler@4 deploy sites-worker/index.js --name "$WORKER_NAME" --compatibility-date 2026-08-28
-      - name: Audit protected exact routes
+      - name: Deploy managed-sites worker with token fallback
+        id: worker_deploy
         shell: bash
         run: |
           set -Eeuo pipefail
-          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
-          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
-          jq -e '.success == true' /tmp/routes.json >/dev/null
+          selected=''
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            echo "Trying managed-sites Worker deployment with ${source} token"
+            if CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" \
+              npx --yes wrangler@${WRANGLER_VERSION} deploy sites-worker/index.js --name "$WORKER_NAME" --compatibility-date 2026-08-28 \
+              2>&1 | tee "/tmp/listia-managed-sites-${source}.log"; then
+              selected="$source"
+              break
+            fi
+          done
+          [[ -n "$selected" ]] || { echo 'MANAGED_SITES_WORKER_DEPLOY_BLOCKED: neither LISTIA Cloudflare token can deploy the Worker.'; exit 1; }
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
+      - name: Audit protected exact routes
+        id: routes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          selected=''
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/routes-${source}.json"
+            http=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' -o "$out" -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' "$out" >/dev/null || continue
+            selected="$source"
+            cp "$out" /tmp/routes.json
+            break
+          done
+          [[ -n "$selected" ]] || { echo 'No LISTIA token can read Worker routes'; exit 40; }
           jq -e '.result[] | select(.pattern == "app.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected app route'; exit 41; }
           jq -e '.result[] | select(.pattern == "www.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected www route; wildcard will NOT be installed'; exit 42; }
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
       - name: Ensure wildcard proxied DNS
         shell: bash
         run: |
           set -Eeuo pipefail
-          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
+          if [[ "${{ steps.routes.outputs.token_source }}" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
           curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=%2A.listiaapp.com" "${auth[@]}" > /tmp/dns.json
+          jq -e '.success == true' /tmp/dns.json >/dev/null
           count=$(jq '.result | length' /tmp/dns.json)
           if [ "$count" -eq 0 ]; then
             curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" \
@@ -58,7 +87,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          auth=(-H "Authorization: Bearer ${CF_SECURITY_TOKEN}" -H 'Content-Type: application/json')
+          if [[ "${{ steps.routes.outputs.token_source }}" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
           curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
           route_id=$(jq -r '.result[] | select(.pattern == "*.listiaapp.com/*") | .id' /tmp/routes.json | head -n1)
           payload=$(jq -nc --arg pattern '*.listiaapp.com/*' --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
@@ -72,7 +102,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          app_code=$(curl -sS -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/)
-          www_code=$(curl -sS -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/)
+          app_code=$(curl -sS -L -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/)
+          www_code=$(curl -sS -L -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/)
           test "$app_code" = '200'
           test "$www_code" = '200'
+          grep -Fq 'LISTIA' /tmp/app.html
