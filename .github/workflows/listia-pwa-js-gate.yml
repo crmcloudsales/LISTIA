@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'public/**/*.js'
+      - 'sites-worker/**/*.js'
       - '.github/workflows/listia-pwa-js-gate.yml'
   workflow_dispatch:
 
@@ -20,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-      - name: Check critical LISTIA browser modules
+      - name: Check critical LISTIA browser and Worker modules
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -36,13 +37,16 @@ jobs:
             public/listings-v2.js \
             public/property-processing-auto.js \
             public/property-status.js \
+            public/property-complete.js \
+            public/property-complete-integration.js \
             public/draft-actions.js \
             public/office-modules.js \
             public/contact-engine.js \
             public/marketplace.js \
             public/marketplace-assistant.js \
             public/billing.js \
-            public/billing-management.js; do
+            public/billing-management.js \
+            sites-worker/index.js; do
             echo "Checking $f"
             node --check "$f"
           done
