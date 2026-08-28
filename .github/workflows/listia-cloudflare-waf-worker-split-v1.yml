@@ -1,0 +1,84 @@
+name: LISTIA WAF Worker Split v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-cloudflare-waf-worker-split-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Move classic static probes behind LISTIA guard Worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode 'name=listiaapp.com' --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          zone=$(jq -r '.result[0].id // empty' "$z")
+          [[ -n "$zone" ]] || exit 1
+          r=$(mktemp)
+          curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_request_firewall_custom/entrypoint" > "$r"
+          ruleset=$(jq -r '.result.id // empty' "$r")
+          [[ -n "$ruleset" ]] || exit 2
+
+          patch_exact() {
+            local desc="$1" expr="$2" id payload out code
+            id=$(jq -r --arg d "$desc" '.result.rules[]? | select(.description==$d) | .id' "$r" | head -n1)
+            [[ -n "$id" ]] || { echo "Missing rule $desc"; exit 3; }
+            payload=$(jq -nc --arg d "$desc" --arg e "$expr" '{description:$d,expression:$e,action:"block",enabled:true}')
+            out=$(mktemp)
+            code=$(curl -sS -X PATCH -o "$out" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' --data "$payload" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/${ruleset}/rules/${id}")
+            [[ "$code" =~ ^20 ]] && jq -e '.success == true' "$out" >/dev/null || { jq '{success,errors}' "$out"; exit 4; }
+          }
+
+          # Classic prefix probes are now terminated by listia-guard Worker routes so the
+          # personalized 403 body can be returned. This WAF rule remains focused on
+          # secret/artifact file extensions that should never be publicly served.
+          rule1='(ends_with(lower(http.request.uri.path), "/composer.json") or ends_with(lower(http.request.uri.path), "/composer.lock") or ends_with(lower(http.request.uri.path), "/package-lock.json") or ends_with(lower(http.request.uri.path), "/yarn.lock") or ends_with(lower(http.request.uri.path), "/pnpm-lock.yaml") or ends_with(lower(http.request.uri.path), ".pem") or ends_with(lower(http.request.uri.path), ".key") or ends_with(lower(http.request.uri.path), ".p12") or ends_with(lower(http.request.uri.path), ".pfx") or ends_with(lower(http.request.uri.path), ".sql") or ends_with(lower(http.request.uri.path), ".bak") or ends_with(lower(http.request.uri.path), ".backup") or ends_with(lower(http.request.uri.path), ".old") or ends_with(lower(http.request.uri.path), ".orig") or ends_with(lower(http.request.uri.path), ".swp") or ends_with(lower(http.request.uri.path), ".map") or lower(http.request.uri.path) contains "/backups/" or lower(http.request.uri.path) contains "/dumps/")'
+
+          # Repurpose the second WAF slot for config/build artifacts that are not routed
+          # through the friendly hostile-probe Worker and should always hard-block.
+          rule2='(ends_with(lower(http.request.uri.path), "/dockerfile") or ends_with(lower(http.request.uri.path), "/docker-compose.yml") or ends_with(lower(http.request.uri.path), "/docker-compose.yaml") or ends_with(lower(http.request.uri.path), "/web.config") or ends_with(lower(http.request.uri.path), "/application.properties") or ends_with(lower(http.request.uri.path), "/application.yml") or ends_with(lower(http.request.uri.path), "/application.yaml") or ends_with(lower(http.request.uri.path), "/config.yml") or ends_with(lower(http.request.uri.path), "/config.yaml") or ends_with(lower(http.request.uri.path), "/gemfile") or ends_with(lower(http.request.uri.path), "/pipfile"))'
+
+          patch_exact 'LISTIA P3 1/5 - Sensitive files and secrets' "$rule1"
+          patch_exact 'LISTIA P3 2/5 - Unused technology probes' "$rule2"
+
+          echo '### LISTIA layered anti-piracy split' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Classic hacker prefixes: dedicated 403 guard Worker' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Sensitive extensions/config artifacts: WAF hard block' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Unsafe methods: WAF hard block' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Encoded traversal/system probes: WAF hard block' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Offensive scanner fingerprints: WAF hard block' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify personalized guard and WAF remain active
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected='JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️'
+          for i in $(seq 1 15); do
+            code=$(curl -sS -o /tmp/guard -w '%{http_code}' 'https://app.listiaapp.com/.env' || true)
+            body=$(cat /tmp/guard || true)
+            if [[ "$code" == 403 && "$body" == "$expected" ]]; then break; fi
+            [[ "$i" != 15 ]] || { echo "Guard did not converge: code=$code"; exit 10; }
+            sleep 2
+          done
+          normal=$(curl -sS -L -o /tmp/normal -w '%{http_code}' https://app.listiaapp.com/)
+          [[ "$normal" == 200 ]] || exit 11
+          waf=$(curl -sS -o /tmp/waf -w '%{http_code}' 'https://app.listiaapp.com/secrets.sql' || true)
+          [[ "$waf" == 403 ]] || { echo "Sensitive extension WAF missing: $waf"; exit 12; }
+          scanner=$(curl -sS -A 'sqlmap/1.9' -o /tmp/scanner -w '%{http_code}' 'https://listiaapp.com/' || true)
+          [[ "$scanner" == 403 ]] || { echo "Scanner WAF missing: $scanner"; exit 13; }
+          echo '- Personalized hostile route response: verified' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Sensitive-file WAF: verified' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Scanner WAF: verified' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Normal app traffic: verified' >> "$GITHUB_STEP_SUMMARY"
