@@ -1,14 +1,14 @@
 {
-  "version": "0.26.2",
+  "version": "0.26.3",
   "as_of": "2026-08-28",
-  "head_commit_verified": "45b71b0697032c53ae30a681071011ce2c04efc7",
-  "status": "production_active_v0_26_2_marketplace_native_push_notification_center",
+  "head_commit_verified": "828c679b2e93750c2b8706a492d9a635d5c9caa8",
+  "status": "production_active_v0_26_3_fail_closed_external_domains",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "production_source_commit": "45b71b0697032c53ae30a681071011ce2c04efc7",
-    "production_verified_at_utc": "2026-08-28T16:24:42Z",
+    "production_source_commit": "828c679b2e93750c2b8706a492d9a635d5c9caa8",
+    "production_verified_at_utc": "2026-08-28T16:33:23Z",
     "rule": "Verify GitHub main, Supabase live state and production checks before claiming completion. Archived roadmap documents are historical context, not proof of current state."
   },
   "languages": {
@@ -26,7 +26,7 @@
     "pwa": {
       "active": true,
       "host": "https://app.listiaapp.com",
-      "bootstrap_version": "0.26.2",
+      "bootstrap_version": "0.26.3",
       "javascript_gate": true,
       "protected_artifact": true,
       "build_fingerprint": true,
@@ -98,9 +98,15 @@
     },
     "managed_sites": {
       "listia_subdomain_provisioning": true,
-      "external_domain_selection": true,
+      "external_domain_selection": false,
+      "external_domain_customer_actions_guarded": true,
+      "external_domain_backend_fail_closed": true,
+      "external_domain_charge_blocked_until_ssl_ready": true,
       "external_domain_cloudflare_custom_hostname_provisioning": false,
       "external_domain_ssl_dns_recovery_qa": false,
+      "cloudflare_saas_readiness": false,
+      "cloudflare_saas_blocker": "cloudflare_ssl_for_saas_unavailable_codes_1404_1456",
+      "cloudflare_saas_audit_proof": "CLOUDFLARE_SAAS_AUDIT.txt",
       "interest_capture": true,
       "supported_locales": 11,
       "locale_prefixed_routes": true,
@@ -138,7 +144,8 @@
     "development_portfolio_uses_rls": true,
     "saved_search_cron": true,
     "push_dispatch_cron": true,
-    "edge_functions_active": true
+    "edge_functions_active": true,
+    "website_provision_function_version": 2
   },
   "pricing": {
     "free_usd_month": 0,
@@ -147,7 +154,9 @@
     "premium_extra_seat_usd_month": 47,
     "free_active_property_limit": 3,
     "custom_domain_connect_usd": 10,
-    "domain_purchase_markup_percent": 100
+    "custom_domain_connect_charge_enabled": false,
+    "domain_purchase_markup_percent": 100,
+    "domain_purchase_enabled": false
   },
   "security": {
     "oauth_pkce_one_time_state": true,
@@ -155,6 +164,7 @@
     "marketplace_safe_projection": true,
     "privileged_marketplace_feed_warnings_closed": true,
     "privileged_development_portfolio_warning_closed": true,
+    "domain_capability_gate": true,
     "repo_public": true,
     "leaked_password_protection": false,
     "final_pentest_complete": false
@@ -162,7 +172,7 @@
   "remaining_critical": [
     "Physical Web Push validation with a real opted-in browser subscription",
     "Configure and verify a real saved-search email delivery provider",
-    "Custom-domain Cloudflare Custom Hostnames provisioning, SSL, DNS recovery and external-domain Turnstile QA",
+    "Enable Cloudflare SSL for SaaS / Custom Hostnames capability, then complete automated external-domain provisioning, SSL, DNS recovery and per-domain Turnstile QA",
     "Real Meta/Google/TikTok/LinkedIn conversion dispatch after account connections exist",
     "Authenticated browser end-to-end confirmation of product telemetry ingest v3",
     "Physical Android/iPhone/Desktop PWA and offline-recovery QA",
