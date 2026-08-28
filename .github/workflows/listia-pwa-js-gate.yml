@@ -49,6 +49,7 @@ jobs:
             public/office-modules.js \
             public/contact-engine.js \
             public/marketplace.js \
+            public/marketplace-extra-locales.js \
             public/marketplace-assistant.js \
             public/marketplace-saved.js \
             public/marketplace-alerts.js \
