@@ -152,9 +152,10 @@ jobs:
             app_code=$(curl -sS -L --max-time 20 -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/ || true)
             www_code=$(curl -sS -L --max-time 20 -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/ || true)
             unknown_code=$(curl -sS -L --max-time 20 -o /tmp/unknown.txt -w '%{http_code}' https://listia-no-site-proof.listiaapp.com/ || true)
+            health_code=$(curl -sS -L --max-time 20 -o /tmp/unknown-health.json -w '%{http_code}' https://listia-no-site-proof.listiaapp.com/.well-known/listia-health || true)
             www_title=$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' /tmp/www.html | head -n1)
-            if [[ "$app_code" == 200 && "$www_code" == 200 && "$www_title" == 'Listia — AI for Real Estate' && "$unknown_code" == 404 ]]; then ok=true; break; fi
-            echo "Managed-sites convergence ${attempt}/18: app=${app_code} www=${www_code} title=${www_title:-none} unknown=${unknown_code}"
+            if [[ "$app_code" == 200 && "$www_code" == 200 && "$www_title" == 'Listia — AI for Real Estate' && "$unknown_code" == 404 && "$health_code" == 404 ]]; then ok=true; break; fi
+            echo "Managed-sites convergence ${attempt}/18: app=${app_code} www=${www_code} title=${www_title:-none} unknown=${unknown_code} unknown_health=${health_code}"
             sleep 5
           done
-          [[ "$ok" == true ]] || { echo 'Managed-sites wildcard smoke test failed'; exit 47; }
+          [[ "$ok" == true ]] || { echo 'Managed-sites wildcard/health smoke test failed'; exit 47; }
