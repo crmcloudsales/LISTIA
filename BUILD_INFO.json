@@ -1,14 +1,16 @@
 {
-  "version": "0.26.3",
+  "version": "0.26.6",
   "as_of": "2026-08-28",
-  "head_commit_verified": "828c679b2e93750c2b8706a492d9a635d5c9caa8",
-  "status": "production_active_v0_26_3_fail_closed_external_domains",
+  "head_commit_verified": "52a068859d8c2bead2e146440ad210c0651066a2",
+  "status": "production_active_v0_26_6_managed_subdomain_server_provisioning",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "production_source_commit": "828c679b2e93750c2b8706a492d9a635d5c9caa8",
-    "production_verified_at_utc": "2026-08-28T16:33:23Z",
+    "production_source_commit": "c3f85fa77a9ad8584cae207e9e1574bf616de0e1",
+    "production_verified_at_utc": "2026-08-28T17:01:39Z",
+    "deployment_proof_commit": "52a068859d8c2bead2e146440ad210c0651066a2",
+    "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
     "rule": "Verify GitHub main, Supabase live state and production checks before claiming completion. Archived roadmap documents are historical context, not proof of current state."
   },
   "languages": {
@@ -26,7 +28,7 @@
     "pwa": {
       "active": true,
       "host": "https://app.listiaapp.com",
-      "bootstrap_version": "0.26.3",
+      "bootstrap_version": "0.26.6",
       "javascript_gate": true,
       "protected_artifact": true,
       "build_fingerprint": true,
@@ -98,6 +100,16 @@
     },
     "managed_sites": {
       "listia_subdomain_provisioning": true,
+      "subdomain_creation_uses_server_provisioning": true,
+      "browser_direct_website_mutation_enabled": false,
+      "organization_websites_authenticated_grants": "select_only",
+      "managed_site_health_endpoint": true,
+      "managed_site_self_heal": true,
+      "managed_site_self_heal_external_domains": false,
+      "managed_subdomains_verified_count": 0,
+      "managed_site_positive_hostname_e2e_complete": false,
+      "managed_subdomain_health_gate": true,
+      "wildcard_worker_route_verified": true,
       "external_domain_selection": false,
       "external_domain_customer_actions_guarded": true,
       "external_domain_backend_fail_closed": true,
@@ -116,6 +128,11 @@
       "hreflang": true,
       "multilingual_sitemap": true,
       "robots": true
+    },
+    "control": {
+      "health_card": true,
+      "health_rpc_rls_preserving": true,
+      "control_health_gate": true
     },
     "attribution": {
       "first_party_web_events": true,
@@ -145,7 +162,7 @@
     "saved_search_cron": true,
     "push_dispatch_cron": true,
     "edge_functions_active": true,
-    "website_provision_function_version": 2
+    "website_provision_function_version": 3
   },
   "pricing": {
     "free_usd_month": 0,
@@ -165,11 +182,15 @@
     "privileged_marketplace_feed_warnings_closed": true,
     "privileged_development_portfolio_warning_closed": true,
     "domain_capability_gate": true,
+    "managed_subdomain_health_gate": true,
+    "control_health_gate": true,
+    "organization_websites_client_write_enabled": false,
     "repo_public": true,
     "leaked_password_protection": false,
     "final_pentest_complete": false
   },
   "remaining_critical": [
+    "Positive real managed-subdomain end-to-end validation after the first owner/admin creates an included *.listiaapp.com site",
     "Physical Web Push validation with a real opted-in browser subscription",
     "Configure and verify a real saved-search email delivery provider",
     "Enable Cloudflare SSL for SaaS / Custom Hostnames capability, then complete automated external-domain provisioning, SSL, DNS recovery and per-domain Turnstile QA",
