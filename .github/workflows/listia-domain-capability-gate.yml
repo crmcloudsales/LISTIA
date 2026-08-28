@@ -32,9 +32,15 @@ jobs:
           node --check public/config.js
           node --check public/sw.js
           grep -Fq 'EXTERNAL_CUSTOM_DOMAINS_ENABLED:false' public/config.js
-          grep -Fq '/external-domain-guard.js?v=1' public/config.js
-          grep -Fq '/external-domain-guard.js?v=1' public/sw.js
+          grep -Fq '/external-domain-guard.js?v=2' public/config.js
+          grep -Fq '/external-domain-guard.js?v=2' public/sw.js
           grep -Fq 'LISTIA_EXTERNAL_DOMAIN_GUARD' public/external-domain-guard.js
+          grep -Fq "listia:listings-refresh" public/external-domain-guard.js
+          grep -Fq "listia:website-provisioned" public/external-domain-guard.js
+          if grep -Eq 'childList[[:space:]]*:[[:space:]]*true' public/external-domain-guard.js; then
+            echo 'External-domain guard must not observe broad DOM child-list mutations.'
+            exit 1
+          fi
       - name: Validate server-side fail-closed behavior
         shell: bash
         run: |
