@@ -1,0 +1,4 @@
+alter table public.organization_websites drop constraint if exists organization_websites_status_check;
+alter table public.organization_websites add constraint organization_websites_status_check check (status = any (array['selected'::text,'pending'::text,'provisioning'::text,'active'::text,'failed'::text,'error'::text,'disconnected'::text]));
+alter table public.organization_websites drop constraint if exists organization_websites_subdomain_safe_check;
+alter table public.organization_websites add constraint organization_websites_subdomain_safe_check check ((mode <> 'listia_subdomain'::text) or ((subdomain is not null) and (subdomain ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text) and (lower(subdomain) <> all (array['app'::text,'www'::text,'api'::text,'admin'::text,'mail'::text,'smtp'::text,'ftp'::text,'marketplace'::text,'web'::text,'brain'::text,'ai'::text]))));
