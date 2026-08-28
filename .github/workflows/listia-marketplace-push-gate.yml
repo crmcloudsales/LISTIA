@@ -40,8 +40,8 @@ jobs:
           grep -Fq '/marketplace-push.js?v=1' public/config.js
           grep -Fq '/marketplace-notification-center.js?v=1' public/config.js
           grep -Fq 'MARKETPLACE_EMAIL_ENABLED:false' public/config.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.26.2"' public/config.js
-          grep -Fq 'listia-pwa-v0.26.2' public/sw.js
+          grep -Fq 'BOOTSTRAP_VERSION:"0.26.3"' public/config.js
+          grep -Fq 'listia-pwa-v0.26.3' public/sw.js
           grep -Fq '/marketplace-notification-center.js?v=1' public/sw.js
           grep -Fq 'addEventListener("push"' public/sw.js
           grep -Fq 'addEventListener("notificationclick"' public/sw.js
