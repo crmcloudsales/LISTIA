@@ -22,7 +22,7 @@ jobs:
       CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-ai
-      AI_HOST: ai.listiaapp.com
+      AI_HOST: brain.listiaapp.com
       WRANGLER_VERSION: '4.125.0'
     steps:
       - uses: actions/checkout@v6
@@ -48,7 +48,7 @@ jobs:
           done
           [[ -n "$selected" ]] || { echo 'LISTIA_AI_DEPLOY_BLOCKED'; exit 1; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
-      - name: Ensure proxied DNS for ai.listiaapp.com
+      - name: Ensure proxied DNS for brain.listiaapp.com
         id: dns
         shell: bash
         run: |
@@ -63,20 +63,20 @@ jobs:
             [[ "$http" == 200 ]] || continue
             jq -e '.success == true' "$out" >/dev/null || continue
             count=$(jq '.result|length' "$out")
-            if [[ "$count" -gt 1 ]]; then echo 'Ambiguous ai DNS records; refusing change'; exit 21; fi
+            if [[ "$count" -gt 1 ]]; then echo 'Ambiguous brain DNS records; refusing change'; exit 21; fi
             if [[ "$count" == 1 ]]; then
               id=$(jq -r '.result[0].id' "$out")
               type=$(jq -r '.result[0].type' "$out")
               content=$(jq -r '.result[0].content' "$out")
               proxied=$(jq -r '.result[0].proxied' "$out")
-              [[ "$type" == CNAME && "$content" == listiaapp.com ]] || { echo "ai DNS exists with unexpected target: ${type} ${content}"; exit 22; }
+              [[ "$type" == CNAME && "$content" == listiaapp.com ]] || { echo "brain DNS exists with unexpected target: ${type} ${content}"; exit 22; }
               if [[ "$proxied" != true ]]; then
-                payload=$(jq -nc '{type:"CNAME",name:"ai",content:"listiaapp.com",proxied:true,ttl:1}')
+                payload=$(jq -nc '{type:"CNAME",name:"brain",content:"listiaapp.com",proxied:true,ttl:1}')
                 curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${id}" "${auth[@]}" --data "$payload" > /tmp/dns-write.json
                 jq -e '.success == true' /tmp/dns-write.json >/dev/null
               fi
             else
-              payload=$(jq -nc '{type:"CNAME",name:"ai",content:"listiaapp.com",proxied:true,ttl:1}')
+              payload=$(jq -nc '{type:"CNAME",name:"brain",content:"listiaapp.com",proxied:true,ttl:1}')
               curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" --data "$payload" > /tmp/dns-write.json
               jq -e '.success == true' /tmp/dns-write.json >/dev/null
             fi
@@ -84,7 +84,7 @@ jobs:
           done
           [[ -n "$selected" ]] || { echo 'LISTIA_AI_DNS_BLOCKED'; exit 23; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
-      - name: Install exact ai.listiaapp.com route
+      - name: Install exact brain.listiaapp.com route
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -96,12 +96,12 @@ jobs:
             http=$(curl -sS --max-time 25 "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" -o /tmp/routes.json -w '%{http_code}' || true)
             [[ "$http" == 200 ]] || continue
             jq -e '.success == true' /tmp/routes.json >/dev/null || continue
-            route_id=$(jq -r '.result[] | select(.pattern == "ai.listiaapp.com/*") | .id' /tmp/routes.json | head -n1)
-            current_script=$(jq -r '.result[] | select(.pattern == "ai.listiaapp.com/*") | .script // ""' /tmp/routes.json | head -n1)
+            route_id=$(jq -r --arg pattern "${AI_HOST}/*" '.result[] | select(.pattern == $pattern) | .id' /tmp/routes.json | head -n1)
+            current_script=$(jq -r --arg pattern "${AI_HOST}/*" '.result[] | select(.pattern == $pattern) | .script // ""' /tmp/routes.json | head -n1)
             if [[ -n "$route_id" && "$route_id" != null && -n "$current_script" && "$current_script" != "$WORKER_NAME" ]]; then
-              echo "ai.listiaapp.com route belongs to ${current_script}; refusing overwrite"; exit 31
+              echo "${AI_HOST} route belongs to ${current_script}; refusing overwrite"; exit 31
             fi
-            payload=$(jq -nc --arg pattern 'ai.listiaapp.com/*' --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
+            payload=$(jq -nc --arg pattern "${AI_HOST}/*" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
             if [[ -n "$route_id" && "$route_id" != null ]]; then
               curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/write.json || continue
             else
@@ -117,8 +117,8 @@ jobs:
           set -Eeuo pipefail
           ok=false
           for attempt in $(seq 1 24); do
-            health=$(curl -sS -L --max-time 20 -o /tmp/health.json -w '%{http_code}' https://ai.listiaapp.com/health || true)
-            unauthorized=$(curl -sS -L --max-time 20 -o /tmp/unauth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"message":"hello"}' https://ai.listiaapp.com/ || true)
+            health=$(curl -sS -L --max-time 20 -o /tmp/health.json -w '%{http_code}' "https://${AI_HOST}/health" || true)
+            unauthorized=$(curl -sS -L --max-time 20 -o /tmp/unauth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"message":"hello"}' "https://${AI_HOST}/" || true)
             if [[ "$health" == 200 && "$unauthorized" == 401 ]] && jq -e '.service == "listia-ai"' /tmp/health.json >/dev/null 2>&1; then ok=true; break; fi
             echo "AI gateway convergence ${attempt}/24: health=${health} unauthorized=${unauthorized}"
             sleep 5
