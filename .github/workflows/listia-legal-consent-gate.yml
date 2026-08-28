@@ -50,7 +50,7 @@ jobs:
           grep -Fq 'on_auth_user_legal_acceptance' "$migration"
           grep -Fq 'revoke all on function private.record_signup_legal_acceptance() from public, anon, authenticated' "$migration"
 
-          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:\"[0-9.]+\"' public/config.js | head -1 | cut -d'\"' -f2)"
+          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:"[0-9.]+"' public/config.js | head -1 | cut -d'"' -f2)"
           sw_version="$(grep -Eo 'listia-pwa-v[0-9.]+' public/sw.js | head -1 | sed 's/listia-pwa-v//')"
           test -n "$cfg_version"
           test "$cfg_version" = "$sw_version"
