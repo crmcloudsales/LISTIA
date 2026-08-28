@@ -37,15 +37,19 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Validate source and build Worker
+      - name: Validate source and build protected Worker
         shell: bash
         run: |
           set -Eeuo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID}"
           test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}"
           python3 -m py_compile scripts/build-commercial-worker.py
-          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.source.mjs
+          node --check /tmp/listia-commercial-worker.source.mjs
+          npx --yes terser@5 /tmp/listia-commercial-worker.source.mjs --module --compress passes=2,drop_console=false --mangle --comments false --output /tmp/listia-commercial-worker.mjs
+          printf '\nconst __LISTIA_RELEASE_FINGERPRINT="%s";\n' "${GITHUB_SHA}" >> /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
+          rm -f /tmp/listia-commercial-worker.source.mjs
           test "$(grep -c '<option value=' commercial/index.html)" -eq 7
           grep -Fq 'https://listiaapp.com/marketplace' commercial/marketplace.html
           grep -Fq 'LISTIA busca por ti' commercial/marketplace.html
@@ -58,6 +62,7 @@ jobs:
           grep -Fq 'Version 1.3' public/privacy.html
           grep -Fq 'cloudco-logo-official.webp' commercial/cloudco.html
           grep -Fq 'cloudco-arrival' commercial/cloudco.html
+          grep -Fq '__LISTIA_RELEASE_FINGERPRINT' /tmp/listia-commercial-worker.mjs
 
       - name: Upload validated preview version
         id: upload
@@ -68,7 +73,7 @@ jobs:
           for candidate in primary security; do
             if [[ "${candidate}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
             [[ -n "${token}" ]] || continue
-            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-marketplace-${GITHUB_SHA:0:12}" --message "LISTIA commercial marketplace release ${GITHUB_SHA:0:12}" --preview-alias commercial-marketplace 2>&1 | tee /tmp/upload.log; then
+            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-marketplace-${GITHUB_SHA:0:12}" --message "LISTIA protected commercial release ${GITHUB_SHA:0:12}" --preview-alias commercial-marketplace 2>&1 | tee /tmp/upload.log; then
               selected="${candidate}"
               version="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/upload.log | tail -1)"
               preview="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' /tmp/upload.log | head -1 | sed 's/[),]$//' || true)"
@@ -110,7 +115,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           if [[ '${{ steps.upload.outputs.token_kind }}' == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
-          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA commercial marketplace release ${GITHUB_SHA:0:12}" --yes
+          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA protected commercial release ${GITHUB_SHA:0:12}" --yes
 
       - name: Verify live commercial site and marketplace
         shell: bash
@@ -154,6 +159,8 @@ jobs:
             echo 'marketplace_url=https://listiaapp.com/marketplace'
             echo 'marketplace_map=true'
             echo 'marketplace_in_sitemap=true'
+            echo 'commercial_worker_minified=true'
+            echo 'commercial_worker_fingerprinted=true'
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'terms_version=1.4'
             echo 'privacy_version=1.3'
@@ -161,5 +168,5 @@ jobs:
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
           git add COMMERCIAL_LIVE_DEPLOYMENT_PROOF.txt
-          git commit -m 'Record verified LISTIA marketplace deployment' || exit 0
+          git commit -m 'Record verified LISTIA protected commercial deployment' || exit 0
           git push origin main
