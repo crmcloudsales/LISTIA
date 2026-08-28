@@ -40,8 +40,12 @@ jobs:
           grep -Fq '/marketplace-push.js?v=1' public/config.js
           grep -Fq '/marketplace-notification-center.js?v=1' public/config.js
           grep -Fq 'MARKETPLACE_EMAIL_ENABLED:false' public/config.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.26.3"' public/config.js
-          grep -Fq 'listia-pwa-v0.26.3' public/sw.js
+          config_version=$(sed -n 's/.*BOOTSTRAP_VERSION:"\([0-9][0-9.]*\)".*/\1/p' public/config.js | head -1)
+          sw_version=$(sed -n 's/^const CACHE="listia-pwa-v\([0-9][0-9.]*\)";.*/\1/p' public/sw.js | head -1)
+          test -n "$config_version"
+          test -n "$sw_version"
+          test "$config_version" = "$sw_version"
+          echo "Validated LISTIA release version $config_version"
           grep -Fq '/marketplace-notification-center.js?v=1' public/sw.js
           grep -Fq 'addEventListener("push"' public/sw.js
           grep -Fq 'addEventListener("notificationclick"' public/sw.js
