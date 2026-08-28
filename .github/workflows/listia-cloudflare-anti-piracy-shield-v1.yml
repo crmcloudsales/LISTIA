@@ -18,85 +18,81 @@ jobs:
       CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ZONE_NAME: listiaapp.com
-      RULE_DESC: LISTIA Anti-Piracy Recon Shield v1
     steps:
-      - name: Apply anti-recon WAF rule
+      - name: Upgrade all five LISTIA WAF rules in place
         shell: bash
         run: |
           set -Eeuo pipefail
           [[ -n "${CF_TOKEN:-}" && -n "${CF_ACCOUNT_ID:-}" ]] || { echo 'Missing Cloudflare security credentials'; exit 1; }
 
-          zone_json=$(mktemp)
-          code=$(curl -sS --get -o "$zone_json" -w '%{http_code}' \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            --data-urlencode "name=${ZONE_NAME}" \
-            --data-urlencode "account.id=${CF_ACCOUNT_ID}" \
-            "https://api.cloudflare.com/client/v4/zones")
-          [[ "$code" == 200 ]] || { cat "$zone_json"; exit 2; }
-          ZONE_ID=$(jq -r '.result[0].id // empty' "$zone_json")
-          [[ -n "$ZONE_ID" ]] || { echo 'LISTIA zone not found'; exit 3; }
-
-          entry=$(mktemp)
-          code=$(curl -sS -o "$entry" -w '%{http_code}' \
-            -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint")
-
-          if [[ "$code" == 200 ]]; then
-            RULESET_ID=$(jq -r '.result.id // empty' "$entry")
-          else
-            create=$(mktemp)
-            payload=$(jq -nc '{name:"LISTIA custom firewall",description:"LISTIA zone custom firewall",kind:"zone",phase:"http_request_firewall_custom",rules:[]}')
-            ccode=$(curl -sS -X POST -o "$create" -w '%{http_code}' \
-              -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' \
-              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets")
-            [[ "$ccode" =~ ^20 ]] || { cat "$create"; exit 4; }
-            RULESET_ID=$(jq -r '.result.id // empty' "$create")
-          fi
-          [[ -n "$RULESET_ID" ]] || { echo 'No firewall ruleset id'; exit 5; }
-
-          expression='(http.request.method in {"TRACE" "CONNECT"} or http.request.uri.path contains "/.env" or http.request.uri.path contains "/.git" or http.request.uri.path contains "/wp-admin" or http.request.uri.path contains "/wp-login" or http.request.uri.path contains "/xmlrpc.php" or http.request.uri.path contains "/phpmyadmin" or http.request.uri.path contains "/phpMyAdmin" or http.request.uri.path contains "/server-status" or http.request.uri.path contains "/vendor/phpunit" or http.request.uri.path contains "/actuator" or http.request.uri.path contains "/cgi-bin/" or http.request.uri.path contains "/.aws" or http.request.uri.path contains "/.ssh" or http.request.uri.path contains "/config.php" or http.request.uri.path contains "/database.sql" or http.request.uri.path contains "/backup.sql" or http.request.uri.path contains "/id_rsa" or http.request.uri.path contains "/etc/passwd" or http.request.uri.path contains "../")'
-          message='JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️'
-          payload=$(jq -nc --arg d "$RULE_DESC" --arg e "$expression" --arg msg "$message" '{description:$d,expression:$e,action:"block",action_parameters:{response:{status_code:403,content:$msg,content_type:"text/plain"}},enabled:true}')
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" \
+            --data-urlencode "name=${ZONE_NAME}" --data-urlencode "account.id=${CF_ACCOUNT_ID}" \
+            'https://api.cloudflare.com/client/v4/zones' > "$z"
+          ZONE_ID=$(jq -r '.result[0].id // empty' "$z")
+          [[ -n "$ZONE_ID" ]] || { echo 'LISTIA zone not found'; exit 2; }
 
           current=$(mktemp)
           curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" \
-            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${RULESET_ID}" > "$current"
-          RULE_ID=$(jq -r --arg d "$RULE_DESC" '.result.rules[]? | select(.description==$d) | .id' "$current" | head -n1)
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint" > "$current"
+          RULESET_ID=$(jq -r '.result.id // empty' "$current")
+          [[ -n "$RULESET_ID" ]] || { echo 'LISTIA WAF ruleset not found'; exit 3; }
 
-          out=$(mktemp)
-          if [[ -n "$RULE_ID" ]]; then
-            wcode=$(curl -sS -X PATCH -o "$out" -w '%{http_code}' \
+          MESSAGE='JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️'
+
+          patch_rule() {
+            local desc="$1" extra="${2:-}"
+            local id expr combined payload out code
+            id=$(jq -r --arg d "$desc" '.result.rules[]? | select(.description==$d) | .id' "$current" | head -n1)
+            expr=$(jq -r --arg d "$desc" '.result.rules[]? | select(.description==$d) | .expression' "$current" | head -n1)
+            [[ -n "$id" && -n "$expr" ]] || { echo "Missing existing WAF rule: $desc"; exit 4; }
+            if [[ -n "$extra" ]]; then combined="(${expr} or ${extra})"; else combined="$expr"; fi
+            payload=$(jq -nc --arg d "$desc" --arg e "$combined" --arg msg "$MESSAGE" \
+              '{description:$d,expression:$e,action:"block",action_parameters:{response:{status_code:403,content:$msg,content_type:"text/plain"}},enabled:true}')
+            out=$(mktemp)
+            code=$(curl -sS -X PATCH -o "$out" -w '%{http_code}' \
               -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' \
-              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/${RULE_ID}")
-          else
-            wcode=$(curl -sS -X POST -o "$out" -w '%{http_code}' \
-              -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' \
-              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules")
-          fi
-          [[ "$wcode" =~ ^20 ]] && jq -e '.success == true' "$out" >/dev/null || { jq '{success,errors}' "$out"; exit 6; }
+              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/${id}")
+            [[ "$code" =~ ^20 ]] && jq -e '.success == true' "$out" >/dev/null || { echo "Patch failed: $desc HTTP $code"; jq '{success,errors}' "$out"; exit 5; }
+            echo "Protected: $desc"
+          }
+
+          patch_rule 'LISTIA P3 1/5 - Sensitive files and secrets' '(starts_with(lower(raw.http.request.uri.path), "/.aws") or starts_with(lower(raw.http.request.uri.path), "/.ssh") or ends_with(lower(raw.http.request.uri.path), "/id_rsa") or ends_with(lower(raw.http.request.uri.path), "/credentials"))'
+          patch_rule 'LISTIA P3 2/5 - Unused technology probes' '(starts_with(lower(http.request.uri.path), "/server-status") or starts_with(lower(http.request.uri.path), "/actuator") or starts_with(lower(http.request.uri.path), "/solr/") or starts_with(lower(http.request.uri.path), "/jenkins/") or lower(http.request.uri.path) contains "/manager/html")'
+          patch_rule 'LISTIA P3 3/5 - Unsafe HTTP methods' ''
+          patch_rule 'LISTIA P3 4/5 - Traversal and system file probes' '(lower(raw.http.request.uri.path) contains "%00" or lower(raw.http.request.uri.path) contains "%5c.." or lower(raw.http.request.uri.path) contains "..%5c")'
+          patch_rule 'LISTIA P3 5/5 - Offensive scanner user agents' '(lower(http.user_agent) contains "zgrab" or lower(http.user_agent) contains "gobuster" or lower(http.user_agent) contains "dirbuster" or lower(http.user_agent) contains "feroxbuster" or lower(http.user_agent) contains "ffuf" or lower(http.user_agent) contains "dirsearch" or lower(http.user_agent) contains "whatweb")'
 
           echo '### LISTIA Anti-Piracy Shield' >> "$GITHUB_STEP_SUMMARY"
-          echo '- WAF recon/exploit rule: enabled' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Custom hostile-response body: enabled' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Existing custom rules preserved' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Existing WAF slots preserved: 5/5' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Five malicious-traffic rules upgraded in place' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Custom 403 hostile-response enabled on all five rules' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify hostile probes are blocked without harming normal traffic
+      - name: Verify hostile probes and normal traffic
         shell: bash
         run: |
           set -Eeuo pipefail
+          expected='JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️'
           normal=$(curl -sS -L -o /tmp/normal -w '%{http_code}' https://app.listiaapp.com/)
           [[ "$normal" == 200 ]] || { echo "Normal app failed: $normal"; exit 10; }
 
-          for target in \
-            'https://app.listiaapp.com/.env' \
-            'https://listiaapp.com/.git/config' \
-            'https://www.listiaapp.com/wp-admin/' \
-            'https://brain.listiaapp.com/server-status'; do
-            code=$(curl -sS -o /tmp/probe -w '%{http_code}' "$target" || true)
+          verify_probe() {
+            local url="$1" ua="${2:-curl/8}"
+            local code body
+            code=$(curl -sS -A "$ua" -o /tmp/probe -w '%{http_code}' "$url" || true)
             body=$(cat /tmp/probe || true)
-            [[ "$code" == 403 ]] || { echo "Probe not blocked: $target => $code"; exit 11; }
-            [[ "$body" == 'JALIL ES TÚ PAPÁ, AYER HOY Y SIEMPRE SERÁ TÚ PAPÁ 😎✌️' ]] || { echo "Unexpected block body on $target"; exit 12; }
-          done
+            [[ "$code" == 403 ]] || { echo "Probe not blocked: $url => $code"; exit 11; }
+            [[ "$body" == "$expected" ]] || { echo "Unexpected custom response on $url"; exit 12; }
+          }
 
-          echo '- Hostile probe smoke tests: passed' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Normal app smoke test: passed' >> "$GITHUB_STEP_SUMMARY"
+          verify_probe 'https://app.listiaapp.com/.env'
+          verify_probe 'https://listiaapp.com/.git/config'
+          verify_probe 'https://www.listiaapp.com/wp-admin/'
+          verify_probe 'https://brain.listiaapp.com/server-status'
+          verify_probe 'https://listiaapp.com/' 'ffuf/2.1'
+
+          echo '- Normal LISTIA request: 200' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Sensitive-file probe: blocked' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Unused-technology probe: blocked' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Offensive scanner fingerprint: blocked' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Custom response text verified' >> "$GITHUB_STEP_SUMMARY"
