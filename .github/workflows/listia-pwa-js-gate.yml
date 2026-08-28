@@ -44,6 +44,7 @@ jobs:
             public/contact-engine.js \
             public/marketplace.js \
             public/marketplace-assistant.js \
+            public/marketplace-saved.js \
             public/billing.js \
             public/billing-management.js \
             sites-worker/index.js; do
