@@ -1,0 +1,12 @@
+LISTIA CLOUDFLARE FOR SAAS READINESS AUDIT
+verified_at_utc=2026-08-28T16:28:30Z
+ready=false
+token_source=none
+security.custom_hostnames_http=403
+security.custom_hostnames_errors=[{"code":10000,"message":"Authentication error"}]
+security.fallback_origin_http=403
+security.fallback_origin_errors=[{"code":10000,"message":"Authentication error"}]
+primary.custom_hostnames_http=403
+primary.custom_hostnames_errors=[{"code":1404,"message":"No quota has been allocated for this zone or for this account. If you're already a paid SSL for SaaS customer, please contact your Customer Success Manager for additional provisioning. If you're not yet enrolled, please fill out this form and someone from our sales team will contact you: https://www.cloudflare.com/plans/enterprise/contact/."}]
+primary.fallback_origin_http=401
+primary.fallback_origin_errors=[{"code":1456,"message":"Access to configure this resource has not been granted for this zone. This feature is available with SSL for SaaS."}]
