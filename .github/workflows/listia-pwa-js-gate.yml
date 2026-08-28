@@ -47,6 +47,7 @@ jobs:
             public/marketplace.js \
             public/marketplace-assistant.js \
             public/marketplace-saved.js \
+            public/marketplace-alerts.js \
             public/marketplace-auth-bridge.js \
             public/account-mode.js \
             public/billing.js \
