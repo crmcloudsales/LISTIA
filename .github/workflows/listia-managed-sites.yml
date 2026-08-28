@@ -21,14 +21,19 @@ jobs:
       CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-managed-sites
+      COMMERCIAL_WORKER: listia
       WRANGLER_VERSION: '4.125.0'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+
       - name: Syntax check worker
-        run: node --check sites-worker/index.js
+        run: |
+          node --check sites-worker/index.js
+          node --check sites-worker/router.js
+
       - name: Deploy managed-sites worker with token fallback
         id: worker_deploy
         shell: bash
@@ -40,7 +45,7 @@ jobs:
             [[ -n "$token" ]] || continue
             echo "Trying managed-sites Worker deployment with ${source} token"
             if CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID" \
-              npx --yes wrangler@${WRANGLER_VERSION} deploy sites-worker/index.js --name "$WORKER_NAME" --compatibility-date 2026-08-28 \
+              npx --yes wrangler@${WRANGLER_VERSION} deploy sites-worker/router.js --name "$WORKER_NAME" --compatibility-date 2026-08-28 \
               2>&1 | tee "/tmp/listia-managed-sites-${source}.log"; then
               selected="$source"
               break
@@ -48,7 +53,8 @@ jobs:
           done
           [[ -n "$selected" ]] || { echo 'MANAGED_SITES_WORKER_DEPLOY_BLOCKED: neither LISTIA Cloudflare token can deploy the Worker.'; exit 1; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
-      - name: Audit protected exact routes
+
+      - name: Verify protected LISTIA routing before wildcard
         id: routes
         shell: bash
         run: |
@@ -58,7 +64,7 @@ jobs:
             if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
             [[ -n "$token" ]] || continue
             out="/tmp/routes-${source}.json"
-            http=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' -o "$out" -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" || true)
+            http=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Accept: application/json' -o "$out" -w '%{http_code}' "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" || true)
             [[ "$http" == 200 ]] || continue
             jq -e '.success == true' "$out" >/dev/null || continue
             selected="$source"
@@ -66,44 +72,89 @@ jobs:
             break
           done
           [[ -n "$selected" ]] || { echo 'No LISTIA token can read Worker routes'; exit 40; }
-          jq -e '.result[] | select(.pattern == "app.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected app route'; exit 41; }
-          jq -e '.result[] | select(.pattern == "www.listiaapp.com/*")' /tmp/routes.json >/dev/null || { echo 'Missing protected www route; wildcard will NOT be installed'; exit 42; }
+          app_count=$(jq '[.result[] | select(.pattern == "app.listiaapp.com/*" and .script == "listia-app")] | length' /tmp/routes.json)
+          [[ "$app_count" == 1 ]] || { echo 'app.listiaapp.com is not protected by its exact listia-app route'; exit 41; }
+
+          domain_ok='false'
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/domains-${source}.json"
+            http=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Accept: application/json' -o "$out" -w '%{http_code}' "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/workers/domains" || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' "$out" >/dev/null || continue
+            www_count=$(jq --arg worker "$COMMERCIAL_WORKER" '[.result[] | select(.hostname == "www.listiaapp.com" and .service == $worker)] | length' "$out")
+            if [[ "$www_count" == 1 ]]; then domain_ok='true'; break; fi
+          done
+          [[ "$domain_ok" == true ]] || { echo 'www.listiaapp.com is not verified on the commercial LISTIA Worker custom domain'; exit 42; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
+
       - name: Ensure wildcard proxied DNS
         shell: bash
         run: |
           set -Eeuo pipefail
-          if [[ "${{ steps.routes.outputs.token_source }}" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
-          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
-          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=%2A.listiaapp.com" "${auth[@]}" > /tmp/dns.json
-          jq -e '.success == true' /tmp/dns.json >/dev/null
-          count=$(jq '.result | length' /tmp/dns.json)
-          if [ "$count" -eq 0 ]; then
-            curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" \
-              --data '{"type":"CNAME","name":"*","content":"listiaapp.com","proxied":true,"ttl":1}' > /tmp/dns-create.json
-            jq -e '.success == true' /tmp/dns-create.json >/dev/null
-          fi
+          written='false'
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+            http=$(curl -sS --max-time 25 "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=%2A.listiaapp.com" "${auth[@]}" -o /tmp/dns.json -w '%{http_code}' || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' /tmp/dns.json >/dev/null || continue
+            count=$(jq '.result | length' /tmp/dns.json)
+            if [[ "$count" == 0 ]]; then
+              curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" \
+                --data '{"type":"AAAA","name":"*","content":"100::","proxied":true,"ttl":1}' > /tmp/dns-create.json || continue
+              jq -e '.success == true' /tmp/dns-create.json >/dev/null || continue
+            else
+              bad=$(jq '[.result[] | select(.proxied != true)] | length' /tmp/dns.json)
+              [[ "$bad" == 0 ]] || { echo 'Existing wildcard DNS is not fully proxied; refusing unsafe overwrite'; exit 43; }
+            fi
+            written='true'; break
+          done
+          [[ "$written" == true ]] || { echo 'No LISTIA token can safely ensure wildcard DNS'; exit 44; }
+
       - name: Install or update wildcard Worker route
         shell: bash
         run: |
           set -Eeuo pipefail
-          if [[ "${{ steps.routes.outputs.token_source }}" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
-          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
-          curl -fsS "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" > /tmp/routes.json
-          route_id=$(jq -r '.result[] | select(.pattern == "*.listiaapp.com/*") | .id' /tmp/routes.json | head -n1)
-          payload=$(jq -nc --arg pattern '*.listiaapp.com/*' --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
-          if [ -n "$route_id" ] && [ "$route_id" != "null" ]; then
-            curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/route-write.json
-          else
-            curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" --data "$payload" > /tmp/route-write.json
-          fi
-          jq -e '.success == true' /tmp/route-write.json >/dev/null
-      - name: Smoke reserved hosts
+          written='false'
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+            http=$(curl -sS --max-time 25 "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" -o /tmp/routes.json -w '%{http_code}' || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' /tmp/routes.json >/dev/null || continue
+            route_id=$(jq -r '.result[] | select(.pattern == "*.listiaapp.com/*") | .id' /tmp/routes.json | head -n1)
+            current_script=$(jq -r '.result[] | select(.pattern == "*.listiaapp.com/*") | .script // ""' /tmp/routes.json | head -n1)
+            if [[ -n "$route_id" && "$route_id" != null && -n "$current_script" && "$current_script" != "$WORKER_NAME" ]]; then
+              echo "Wildcard route is owned by ${current_script}; refusing overwrite"
+              exit 45
+            fi
+            payload=$(jq -nc --arg pattern '*.listiaapp.com/*' --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
+            if [[ -n "$route_id" && "$route_id" != null ]]; then
+              curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes/${route_id}" "${auth[@]}" --data "$payload" > /tmp/route-write.json || continue
+            else
+              curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" "${auth[@]}" --data "$payload" > /tmp/route-write.json || continue
+            fi
+            jq -e '.success == true' /tmp/route-write.json >/dev/null || continue
+            written='true'; break
+          done
+          [[ "$written" == true ]] || { echo 'No LISTIA token can safely install wildcard Worker route'; exit 46; }
+
+      - name: Smoke protected hosts and wildcard behavior
         shell: bash
         run: |
           set -Eeuo pipefail
-          app_code=$(curl -sS -L -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/)
-          www_code=$(curl -sS -L -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/)
-          test "$app_code" = '200'
-          test "$www_code" = '200'
-          grep -Fq 'LISTIA' /tmp/app.html
+          ok=false
+          for attempt in $(seq 1 18); do
+            app_code=$(curl -sS -L --max-time 20 -o /tmp/app.html -w '%{http_code}' https://app.listiaapp.com/ || true)
+            www_code=$(curl -sS -L --max-time 20 -o /tmp/www.html -w '%{http_code}' https://www.listiaapp.com/ || true)
+            unknown_code=$(curl -sS -L --max-time 20 -o /tmp/unknown.txt -w '%{http_code}' https://listia-no-site-proof.listiaapp.com/ || true)
+            www_title=$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' /tmp/www.html | head -n1)
+            if [[ "$app_code" == 200 && "$www_code" == 200 && "$www_title" == 'Listia — AI for Real Estate' && "$unknown_code" == 404 ]]; then ok=true; break; fi
+            echo "Managed-sites convergence ${attempt}/18: app=${app_code} www=${www_code} title=${www_title:-none} unknown=${unknown_code}"
+            sleep 5
+          done
+          [[ "$ok" == true ]] || { echo 'Managed-sites wildcard smoke test failed'; exit 47; }
