@@ -21,6 +21,7 @@ window.LISTIA_CONFIG = {
     ["listiaContactEngineStyles", "/contact-engine.css?v=1"],
     ["listiaAppShellV2Styles", "/app-shell-v2.css?v=1"],
     ["listiaListingsV2Styles", "/listings-v2.css?v=3"],
+    ["listiaAiChatStyles", "/ai-chat.css?v=1"],
     ["listiaPwaPolishStyles", "/pwa-polish.css?v=1"],
     ["listiaPwaPolishHotfixStyles", "/pwa-polish-hotfix.css?v=2"],
     ["listiaPremiumShellStyles", "/premium-shell.css?v=1"],
@@ -59,6 +60,7 @@ window.LISTIA_CONFIG = {
     ["/listings-v2.js?v=3", "listiaListingsV2Loader"],
     ["/billing-management.js?v=1", "listiaBillingManagementLoader"],
     ["/assistant-intelligence.js?v=3", "listiaAssistantIntelligenceLoader"],
+    ["/ai-chat.js?v=1", "listiaAiChatLoader"],
     ["/onboarding-hardening.js?v=1", "listiaOnboardingHardeningLoader"],
     ["/premium-shell.js?v=2", "listiaPremiumShellLoader"]
   ];
