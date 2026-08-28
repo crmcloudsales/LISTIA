@@ -1,68 +1,15 @@
 (() => {
   'use strict';
-  const cfg=window.LISTIA_CONFIG||{};
-  const API_KEY=cfg.SUPABASE_PUBLISHABLE_KEY||cfg.SUPABASE_ANON_KEY||'';
-  const SESSION_KEY='listia_session';
-  const PENDING_KEY='listia_pending_account_mode';
-  let mode='guest';
-
+  const cfg=window.LISTIA_CONFIG||{},API_KEY=cfg.SUPABASE_PUBLISHABLE_KEY||cfg.SUPABASE_ANON_KEY||'',SESSION_KEY='listia_session',PENDING_KEY='listia_pending_account_mode';let mode='guest';
+  const COPY={es:{legend:'¿Cómo quieres usar LISTIA?',pro:'Trabajar con LISTIA',proSub:'Publicar propiedades y gestionar mi operación.',seeker:'Buscar propiedades',seekerSub:'Cuenta gratuita para siempre. Buscar, guardar y contactar inmobiliarios.',chat:'Escribe lo que buscas…',send:'Enviar'},en:{legend:'How do you want to use LISTIA?',pro:'Work with LISTIA',proSub:'Publish listings and manage my operation.',seeker:'Find properties',seekerSub:'Free forever account to search, save and contact real-estate professionals.',chat:'Tell me what you are looking for…',send:'Send'},fr:{legend:'Comment souhaitez-vous utiliser LISTIA ?',pro:'Travailler avec LISTIA',proSub:'Publier des biens et gérer mon activité.',seeker:'Rechercher des biens',seekerSub:'Compte gratuit à vie pour rechercher, enregistrer et contacter des professionnels.',chat:'Décrivez ce que vous cherchez…',send:'Envoyer'},it:{legend:'Come vuoi usare LISTIA?',pro:'Lavorare con LISTIA',proSub:'Pubblicare immobili e gestire la mia attività.',seeker:'Cercare immobili',seekerSub:'Account gratuito per sempre per cercare, salvare e contattare professionisti.',chat:'Scrivi cosa stai cercando…',send:'Invia'},'pt-BR':{legend:'Como você quer usar a LISTIA?',pro:'Trabalhar com a LISTIA',proSub:'Publicar imóveis e gerenciar minha operação.',seeker:'Buscar imóveis',seekerSub:'Conta gratuita para sempre para buscar, salvar e falar com profissionais.',chat:'Escreva o que você procura…',send:'Enviar'},de:{legend:'Wie möchtest du LISTIA nutzen?',pro:'Mit LISTIA arbeiten',proSub:'Immobilien veröffentlichen und meinen Betrieb verwalten.',seeker:'Immobilien suchen',seekerSub:'Dauerhaft kostenlos suchen, speichern und Immobilienprofis kontaktieren.',chat:'Was suchst du?…',send:'Senden'},'ar-AE':{legend:'كيف تريد استخدام LISTIA؟',pro:'العمل مع LISTIA',proSub:'نشر العقارات وإدارة عملي.',seeker:'البحث عن عقارات',seekerSub:'حساب مجاني دائماً للبحث والحفظ والتواصل مع المختصين.',chat:'اكتب ما تبحث عنه…',send:'إرسال'},ru:{legend:'Как вы хотите использовать LISTIA?',pro:'Работать с LISTIA',proSub:'Публиковать объекты и управлять работой.',seeker:'Искать недвижимость',seekerSub:'Бесплатный навсегда аккаунт для поиска, сохранения и связи с профессионалами.',chat:'Напишите, что вы ищете…',send:'Отправить'},he:{legend:'איך תרצו להשתמש ב-LISTIA?',pro:'לעבוד עם LISTIA',proSub:'לפרסם נכסים ולנהל את הפעילות שלי.',seeker:'לחפש נכסים',seekerSub:'חשבון חינמי לתמיד לחיפוש, שמירה ויצירת קשר עם אנשי נדל״ן.',chat:'מה אתם מחפשים?…',send:'שליחה'},'zh-CN':{legend:'你想如何使用 LISTIA？',pro:'使用 LISTIA 工作',proSub:'发布房源并管理我的业务。',seeker:'查找房产',seekerSub:'永久免费账户，可搜索、收藏并联系房地产专业人士。',chat:'告诉我你在找什么…',send:'发送'},ja:{legend:'LISTIAをどのように使いますか？',pro:'LISTIAで仕事をする',proSub:'物件を公開し、業務を管理します。',seeker:'物件を探す',seekerSub:'ずっと無料で検索・保存・不動産担当者への問い合わせができます。',chat:'探している条件を入力…',send:'送信'}};
+  const key=()=>{const s=String(window.LISTIA_I18N?.getLanguage?.()||document.documentElement.dataset.listiaLanguage||document.documentElement.lang||'en').toLowerCase();if(s.startsWith('pt'))return'pt-BR';if(s.startsWith('ar'))return'ar-AE';if(s.startsWith('zh'))return'zh-CN';if(s.startsWith('he'))return'he';if(s.startsWith('ja'))return'ja';if(s.startsWith('ru'))return'ru';if(s.startsWith('fr'))return'fr';if(s.startsWith('it'))return'it';if(s.startsWith('de'))return'de';if(s.startsWith('es'))return'es';return'en'},c=()=>COPY[key()]||COPY.en;
   const readSession=()=>{try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}};
-  async function api(path,{method='GET',token,body}={}){
-    const headers={apikey:API_KEY}; if(token)headers.Authorization=`Bearer ${token}`; if(body!==undefined)headers['Content-Type']='application/json';
-    const r=await fetch(`${cfg.SUPABASE_URL}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
-    if(!r.ok)return null; return r.status===204?{}:r.json().catch(()=>({}));
-  }
-  function setMode(next){
-    mode=next||'guest'; document.documentElement.dataset.listiaAccountMode=mode;
-    document.body?.classList.toggle('listia-professional',mode==='professional');
-    document.body?.classList.toggle('listia-seeker',mode==='seeker');
-    window.dispatchEvent(new CustomEvent('listia:accountmode',{detail:{mode}})); ensureChatMode();
-  }
-  function injectSignupChoice(){
-    const form=document.getElementById('signupForm'); if(!form||document.getElementById('listiaAccountModeChoice'))return;
-    const box=document.createElement('fieldset'); box.id='listiaAccountModeChoice'; box.className='account-mode-choice';
-    box.innerHTML=`<legend>¿Cómo quieres usar LISTIA?</legend>
-      <label class="account-mode-option selected"><input type="radio" name="listiaAccountMode" value="professional" checked><span><strong>Trabajar con LISTIA</strong><small>Publicar propiedades y gestionar mi operación.</small></span></label>
-      <label class="account-mode-option"><input type="radio" name="listiaAccountMode" value="seeker"><span><strong>Buscar propiedades</strong><small>Cuenta gratuita para siempre. Buscar, guardar y contactar inmobiliarios.</small></span></label>`;
-    const terms=document.getElementById('termsCheck')?.closest('label'); form.insertBefore(box,terms||form.lastElementChild);
-    const paint=()=>box.querySelectorAll('.account-mode-option').forEach(x=>x.classList.toggle('selected',x.querySelector('input')?.checked));
-    box.addEventListener('change',paint);
-    form.addEventListener('submit',()=>{const chosen=box.querySelector('input:checked')?.value||'professional';localStorage.setItem(PENDING_KEY,chosen)},{capture:true});
-  }
-  async function resolveMode(){
-    const session=readSession(); if(!session?.access_token){setMode('guest');return}
-    let user=session.user; if(!user?.id)user=await api('/auth/v1/user',{token:session.access_token}); if(!user?.id){setMode('guest');return}
-    const pending=localStorage.getItem(PENDING_KEY);
-    if(pending==='seeker'||pending==='professional'){
-      const updated=await api(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',token:session.access_token,body:{account_mode:pending}});
-      if(updated!==null)localStorage.removeItem(PENDING_KEY);
-    }
-    const rows=await api(`/rest/v1/profiles?select=account_mode&id=eq.${encodeURIComponent(user.id)}&limit=1`,{token:session.access_token});
-    const resolved=Array.isArray(rows)&&rows[0]?.account_mode?rows[0].account_mode:'professional'; setMode(resolved); if(resolved==='seeker')setTimeout(routeSeeker,80);
-  }
-  function routeSeeker(){
-    const active=document.querySelector('.screen.active'); if(!active)return;
-    if(['screen-login','screen-signup','screen-forgot','screen-reset','screen-marketplace','screen-marketplace-detail'].includes(active.id))return;
-    document.getElementById('marketplaceEntry')?.click();
-  }
-  function ensureChatMode(){
-    const panel=document.querySelector('.listia-voice-panel'); if(!panel)return;
-    const marketplaceActive=!!document.getElementById('screen-marketplace')?.classList.contains('active')||!!document.getElementById('screen-marketplace-detail')?.classList.contains('active');
-    const allowChat=mode==='seeker'||(mode==='guest'&&marketplaceActive);
-    panel.classList.toggle('voice-only',mode==='professional'); panel.classList.toggle('voice-chat',allowChat);
-    let form=panel.querySelector('.listia-chat-form');
-    if(allowChat&&!form){
-      form=document.createElement('form');form.className='listia-chat-form';form.innerHTML='<input class="listia-chat-input" type="text" maxlength="500" placeholder="Escribe lo que buscas…" aria-label="Escribe a LISTIA"><button type="submit">Enviar</button>';
-      panel.append(form);
-      form.addEventListener('submit',e=>{e.preventDefault();const input=form.querySelector('input');const text=input.value.trim();if(!text)return;const transcript=panel.querySelector('.listia-voice-transcript');if(transcript){const row=document.createElement('div');row.className='listia-voice-turn user';row.textContent=text;transcript.append(row);transcript.scrollTop=transcript.scrollHeight}input.value='';window.LISTIA_VOICE?.execute?.(text)});
-    } else if(form){form.hidden=!allowChat}
-  }
-  function boot(){
-    injectSignupChoice(); resolveMode();
-    const observer=new MutationObserver(()=>{injectSignupChoice();ensureChatMode();if(mode==='seeker')routeSeeker()});
-    observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
-    window.addEventListener('focus',resolveMode); window.addEventListener('storage',resolveMode);
-  }
-  window.LISTIA_ACCOUNT={getMode:()=>mode,refresh:resolveMode};
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  async function api(path,{method='GET',token,body}={}){const headers={apikey:API_KEY};if(token)headers.Authorization=`Bearer ${token}`;if(body!==undefined)headers['Content-Type']='application/json';const r=await fetch(`${cfg.SUPABASE_URL}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});if(!r.ok)return null;return r.status===204?{}:r.json().catch(()=>({}))}
+  function setMode(next){mode=next||'guest';document.documentElement.dataset.listiaAccountMode=mode;document.body?.classList.toggle('listia-professional',mode==='professional');document.body?.classList.toggle('listia-seeker',mode==='seeker');window.dispatchEvent(new CustomEvent('listia:accountmode',{detail:{mode}}));ensureChatMode()}
+  function injectSignupChoice(){const form=document.getElementById('signupForm');if(!form)return;let box=document.getElementById('listiaAccountModeChoice');const x=c();if(!box){box=document.createElement('fieldset');box.id='listiaAccountModeChoice';box.className='account-mode-choice';const terms=document.getElementById('termsCheck')?.closest('label');form.insertBefore(box,terms||form.lastElementChild);box.addEventListener('change',()=>box.querySelectorAll('.account-mode-option').forEach(v=>v.classList.toggle('selected',v.querySelector('input')?.checked)));form.addEventListener('submit',()=>{const chosen=box.querySelector('input:checked')?.value||'professional';localStorage.setItem(PENDING_KEY,chosen)},{capture:true})}const selected=box.querySelector('input:checked')?.value||'professional';box.innerHTML=`<legend>${x.legend}</legend><label class="account-mode-option ${selected==='professional'?'selected':''}"><input type="radio" name="listiaAccountMode" value="professional" ${selected==='professional'?'checked':''}><span><strong>${x.pro}</strong><small>${x.proSub}</small></span></label><label class="account-mode-option ${selected==='seeker'?'selected':''}"><input type="radio" name="listiaAccountMode" value="seeker" ${selected==='seeker'?'checked':''}><span><strong>${x.seeker}</strong><small>${x.seekerSub}</small></span></label>`}
+  async function resolveMode(){const session=readSession();if(!session?.access_token){setMode('guest');return}let user=session.user;if(!user?.id)user=await api('/auth/v1/user',{token:session.access_token});if(!user?.id){setMode('guest');return}const pending=localStorage.getItem(PENDING_KEY);if(pending==='seeker'||pending==='professional'){const updated=await api(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',token:session.access_token,body:{account_mode:pending}});if(updated!==null)localStorage.removeItem(PENDING_KEY)}const rows=await api(`/rest/v1/profiles?select=account_mode&id=eq.${encodeURIComponent(user.id)}&limit=1`,{token:session.access_token});const resolved=Array.isArray(rows)&&rows[0]?.account_mode?rows[0].account_mode:'professional';setMode(resolved);if(resolved==='seeker')setTimeout(routeSeeker,80)}
+  function routeSeeker(){const active=document.querySelector('.screen.active');if(!active)return;if(['screen-login','screen-signup','screen-forgot','screen-reset','screen-marketplace','screen-marketplace-detail'].includes(active.id))return;document.getElementById('marketplaceEntry')?.click()}
+  function ensureChatMode(){const panel=document.querySelector('.listia-voice-panel');if(!panel)return;const marketplaceActive=!!document.getElementById('screen-marketplace')?.classList.contains('active')||!!document.getElementById('screen-marketplace-detail')?.classList.contains('active');const allowChat=mode==='seeker'||(mode==='guest'&&marketplaceActive);panel.classList.toggle('voice-only',mode==='professional');panel.classList.toggle('voice-chat',allowChat);let form=panel.querySelector('.listia-chat-form');if(allowChat&&!form){form=document.createElement('form');form.className='listia-chat-form';form.innerHTML='<input class="listia-chat-input" type="text" maxlength="500"><button type="submit"></button>';panel.append(form);form.addEventListener('submit',e=>{e.preventDefault();const input=form.querySelector('input');const text=input.value.trim();if(!text)return;const transcript=panel.querySelector('.listia-voice-transcript');if(transcript){const row=document.createElement('div');row.className='listia-voice-turn user';row.textContent=text;transcript.append(row);transcript.scrollTop=transcript.scrollHeight}input.value='';window.LISTIA_VOICE?.execute?.(text)})}if(form){form.hidden=!allowChat;form.querySelector('input').placeholder=c().chat;form.querySelector('input').setAttribute('aria-label',c().chat);form.querySelector('button').textContent=c().send}}
+  function boot(){injectSignupChoice();resolveMode();const observer=new MutationObserver(()=>{injectSignupChoice();ensureChatMode();if(mode==='seeker')routeSeeker()});observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});window.addEventListener('focus',resolveMode);window.addEventListener('storage',resolveMode);window.addEventListener('listia:languagechange',()=>{injectSignupChoice();ensureChatMode()})}
+  window.LISTIA_ACCOUNT={getMode:()=>mode,refresh:resolveMode};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
