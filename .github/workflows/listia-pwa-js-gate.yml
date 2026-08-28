@@ -65,16 +65,18 @@ jobs:
             echo "Checking $f"
             node --check "$f"
           done
-      - name: Build freeze observer audit report
+      - name: Build precise freeze observer audit
         shell: bash
         run: |
           set -Eeuo pipefail
-          : > freeze-observers.txt
-          while IFS= read -r -d '' f; do
-            if grep -q 'MutationObserver' "$f" && grep -q 'document.body' "$f" && grep -q 'childList:true' "$f"; then
-              echo "$f" | tee -a freeze-observers.txt
-            fi
-          done < <(find public -type f -name '*.js' -print0)
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const out=[];
+          function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())walk(p);else if(e.isFile()&&p.endsWith('.js')){const s=fs.readFileSync(p,'utf8');const direct=/\.observe\s*\(\s*(?:document\.body|document\.documentElement)\s*,\s*\{[^}]{0,800}?childList\s*:\s*true/gs;const fallback=/\.observe\s*\(\s*[^,;]{0,180}\|\|\s*document\.body\s*,\s*\{[^}]{0,800}?childList\s*:\s*true/gs;if(direct.test(s)||fallback.test(s))out.push(p)}}}
+          walk('public');
+          fs.writeFileSync('freeze-observers.txt',out.join('\n')+(out.length?'\n':''));
+          for(const p of out)console.log('Unsafe global childList MutationObserver:',p);
+          NODE
       - name: Upload freeze observer audit
         uses: actions/upload-artifact@v4
         with:
@@ -82,7 +84,7 @@ jobs:
           path: freeze-observers.txt
           if-no-files-found: error
           retention-days: 1
-      - name: Reject body-wide childList mutation observers
+      - name: Reject global childList mutation observers
         shell: bash
         run: |
           set -Eeuo pipefail
