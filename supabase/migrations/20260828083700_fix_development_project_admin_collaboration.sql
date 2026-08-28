@@ -1,0 +1,7 @@
+drop policy if exists development_projects_admin_manage on public.development_projects;
+drop policy if exists development_projects_admin_insert on public.development_projects;
+drop policy if exists development_projects_admin_update on public.development_projects;
+drop policy if exists development_projects_admin_delete on public.development_projects;
+create policy development_projects_admin_insert on public.development_projects for insert to authenticated with check (created_by=auth.uid() and exists(select 1 from public.organization_members m where m.organization_id=development_projects.organization_id and m.user_id=auth.uid() and m.status='active' and m.role in ('owner','admin')));
+create policy development_projects_admin_update on public.development_projects for update to authenticated using (exists(select 1 from public.organization_members m where m.organization_id=development_projects.organization_id and m.user_id=auth.uid() and m.status='active' and m.role in ('owner','admin'))) with check (exists(select 1 from public.organization_members m where m.organization_id=development_projects.organization_id and m.user_id=auth.uid() and m.status='active' and m.role in ('owner','admin')));
+create policy development_projects_admin_delete on public.development_projects for delete to authenticated using (exists(select 1 from public.organization_members m where m.organization_id=development_projects.organization_id and m.user_id=auth.uid() and m.status='active' and m.role in ('owner','admin')));
