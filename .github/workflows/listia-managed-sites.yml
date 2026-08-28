@@ -1,3 +1,4 @@
+# Security redeploy marker: resolver secret forwarding removed 2026-08-28
 name: LISTIA Managed Sites
 
 on:
