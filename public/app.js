@@ -866,7 +866,14 @@ $("signupForm").addEventListener("submit", async e => {
       body: {
         email,
         password,
-        data: { full_name: name, locale: getLanguage() }
+        data: {
+  full_name: name,
+  locale: getLanguage(),
+  legal_terms_accepted: true,
+  terms_version: window.LISTIA_LEGAL?.termsVersion || "1.4.1",
+  privacy_version: window.LISTIA_LEGAL?.privacyVersion || "1.3",
+  legal_acceptance_source: window.LISTIA_LEGAL?.acceptanceSource || "pwa_signup_checkbox"
+}
       }
     });
 
