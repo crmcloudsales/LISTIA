@@ -1,0 +1,61 @@
+name: LISTIA legal consent signup patch v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-legal-consent-patch-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-signup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Add legal acceptance metadata to signup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('public/app.js')
+          text = path.read_text(encoding='utf-8')
+          old = 'data: { full_name: name, locale: getLanguage() }'
+          new = '''data: {
+            full_name: name,
+            locale: getLanguage(),
+            legal_terms_accepted: true,
+            terms_version: window.LISTIA_LEGAL?.termsVersion || "1.4.1",
+            privacy_version: window.LISTIA_LEGAL?.privacyVersion || "1.3",
+            legal_acceptance_source: window.LISTIA_LEGAL?.acceptanceSource || "pwa_signup_checkbox"
+          }'''
+          if new in text:
+              print('Legal acceptance metadata already present.')
+          elif old in text:
+              text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+              print('Patched signup legal acceptance metadata.')
+          else:
+              raise SystemExit('Expected signup metadata marker not found; refusing broad patch.')
+          PY
+          node --check public/app.js
+          grep -Fq 'legal_terms_accepted: true' public/app.js
+          grep -Fq 'terms_version: window.LISTIA_LEGAL?.termsVersion || "1.4.1"' public/app.js
+          grep -Fq 'privacy_version: window.LISTIA_LEGAL?.privacyVersion || "1.3"' public/app.js
+
+      - name: Commit signup patch
+        run: |
+          if git diff --quiet -- public/app.js; then
+            echo "No changes needed."
+            exit 0
+          fi
+          git config user.name "LISTIA DevOps"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/app.js
+          git commit -m "Record explicit LISTIA legal acceptance during signup"
+          git push origin main
