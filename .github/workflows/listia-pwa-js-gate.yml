@@ -1,0 +1,40 @@
+name: LISTIA PWA JavaScript Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**/*.js'
+      - '.github/workflows/listia-pwa-js-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Check critical LISTIA browser modules
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for f in \
+            public/config.js \
+            public/app.js \
+            public/app-shell-v2.js \
+            public/listia-voice.js \
+            public/assistant-intelligence.js \
+            public/listings-v2.js \
+            public/marketplace.js \
+            public/marketplace-assistant.js \
+            public/billing.js \
+            public/billing-management.js; do
+            echo "Checking $f"
+            node --check "$f"
+          done
