@@ -22,6 +22,7 @@ jobs:
       CF_SECURITY_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       CF_ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-ai
+      AI_HOST: ai.listiaapp.com
       WRANGLER_VERSION: '4.125.0'
     steps:
       - uses: actions/checkout@v6
@@ -46,6 +47,42 @@ jobs:
             fi
           done
           [[ -n "$selected" ]] || { echo 'LISTIA_AI_DEPLOY_BLOCKED'; exit 1; }
+          echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
+      - name: Ensure proxied DNS for ai.listiaapp.com
+        id: dns
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          selected=''
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="$CF_SECURITY_TOKEN"; else token="$CF_PRIMARY_TOKEN"; fi
+            [[ -n "$token" ]] || continue
+            auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+            out="/tmp/dns-${source}.json"
+            http=$(curl -sS --max-time 25 "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${AI_HOST}" "${auth[@]}" -o "$out" -w '%{http_code}' || true)
+            [[ "$http" == 200 ]] || continue
+            jq -e '.success == true' "$out" >/dev/null || continue
+            count=$(jq '.result|length' "$out")
+            if [[ "$count" -gt 1 ]]; then echo 'Ambiguous ai DNS records; refusing change'; exit 21; fi
+            if [[ "$count" == 1 ]]; then
+              id=$(jq -r '.result[0].id' "$out")
+              type=$(jq -r '.result[0].type' "$out")
+              content=$(jq -r '.result[0].content' "$out")
+              proxied=$(jq -r '.result[0].proxied' "$out")
+              [[ "$type" == CNAME && "$content" == listiaapp.com ]] || { echo "ai DNS exists with unexpected target: ${type} ${content}"; exit 22; }
+              if [[ "$proxied" != true ]]; then
+                payload=$(jq -nc '{type:"CNAME",name:"ai",content:"listiaapp.com",proxied:true,ttl:1}')
+                curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${id}" "${auth[@]}" --data "$payload" > /tmp/dns-write.json
+                jq -e '.success == true' /tmp/dns-write.json >/dev/null
+              fi
+            else
+              payload=$(jq -nc '{type:"CNAME",name:"ai",content:"listiaapp.com",proxied:true,ttl:1}')
+              curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" "${auth[@]}" --data "$payload" > /tmp/dns-write.json
+              jq -e '.success == true' /tmp/dns-write.json >/dev/null
+            fi
+            selected="$source"; break
+          done
+          [[ -n "$selected" ]] || { echo 'LISTIA_AI_DNS_BLOCKED'; exit 23; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
       - name: Install exact ai.listiaapp.com route
         shell: bash
@@ -79,11 +116,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           ok=false
-          for attempt in $(seq 1 18); do
+          for attempt in $(seq 1 24); do
             health=$(curl -sS -L --max-time 20 -o /tmp/health.json -w '%{http_code}' https://ai.listiaapp.com/health || true)
             unauthorized=$(curl -sS -L --max-time 20 -o /tmp/unauth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"message":"hello"}' https://ai.listiaapp.com/ || true)
             if [[ "$health" == 200 && "$unauthorized" == 401 ]] && jq -e '.service == "listia-ai"' /tmp/health.json >/dev/null 2>&1; then ok=true; break; fi
-            echo "AI gateway convergence ${attempt}/18: health=${health} unauthorized=${unauthorized}"
+            echo "AI gateway convergence ${attempt}/24: health=${health} unauthorized=${unauthorized}"
             sleep 5
           done
           [[ "$ok" == true ]] || { echo 'LISTIA_AI_SMOKE_FAILED'; exit 33; }
