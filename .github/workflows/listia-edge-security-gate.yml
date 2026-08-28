@@ -10,8 +10,10 @@ on:
       - 'supabase/functions/listia-contact-import/**'
       - 'supabase/functions/listia-contact-import-chunk-1/**'
       - 'supabase/functions/web-event-ingest/**'
+      - 'supabase/functions/pwa-web-event-ingest/**'
       - 'supabase/migrations/*harden_public_site_resolver_v1.sql'
       - 'supabase/migrations/*add_web_event_ingest_rate_limit_v1.sql'
+      - 'supabase/migrations/*add_pwa_product_event_rate_limit_v1.sql'
       - '.github/workflows/listia-edge-security-gate.yml'
   workflow_dispatch:
 
@@ -37,7 +39,8 @@ jobs:
             supabase/functions/listia-public-chat/index.ts \
             supabase/functions/listia-contact-import/index.ts \
             supabase/functions/listia-contact-import-chunk-1/index.ts \
-            supabase/functions/web-event-ingest/index.ts; do
+            supabase/functions/web-event-ingest/index.ts \
+            supabase/functions/pwa-web-event-ingest/index.ts; do
             node --experimental-strip-types --check "$f"
           done
 
@@ -120,3 +123,25 @@ jobs:
           grep -Fq 'create table if not exists private.web_event_rate_limits' "$m"
           grep -Fq 'revoke all on table private.web_event_rate_limits from public, anon, authenticated' "$m"
           grep -Fq 'grant execute on function private.consume_web_event_ingest_rate_limit(text,text) to service_role' "$m"
+
+      - name: Enforce authenticated PWA telemetry boundaries
+        run: |
+          set -Eeuo pipefail
+          f=supabase/functions/pwa-web-event-ingest/index.ts
+          m=supabase/migrations/20260828213145_add_pwa_product_event_rate_limit_v1.sql
+          grep -Fq "const ALLOWED_ORIGIN='https://app.listiaapp.com'" "$f"
+          grep -Fq "const RESERVED=new Set(['page_view','listing_view','lead_submit','appointment','qualified_lead','conversion'])" "$f"
+          grep -Fq 'origin!==ALLOWED_ORIGIN' "$f"
+          grep -Fq 'MAX_BODY_BYTES=65536' "$f"
+          grep -Fq 'order=created_at.asc&limit=1' "$f"
+          grep -Fq 'organization_id=eq.${encodeURIComponent(requestedOrg)}' "$f"
+          grep -Fq 'consume_pwa_product_event_rate_limit' "$f"
+          grep -Fq 'RESERVED.has(eventName)' "$f"
+          grep -Fq 'sameAppUrl(e?.page_url)' "$f"
+          if grep -Fq '/rest/v1/web_events' "$f"; then
+            echo 'Authenticated PWA telemetry must not write canonical conversion events.'
+            exit 1
+          fi
+          grep -Fq 'create table if not exists private.pwa_product_event_rate_limits' "$m"
+          grep -Fq 'revoke all on table private.pwa_product_event_rate_limits from public, anon, authenticated' "$m"
+          grep -Fq 'grant execute on function private.consume_pwa_product_event_rate_limit(uuid,uuid,integer) to service_role' "$m"
