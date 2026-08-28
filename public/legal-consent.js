@@ -57,6 +57,8 @@
     if (!target) return;
     const parts = copy[language()] || copy.en;
     target.id = 'signupLegalConsent';
+    target.dataset.termsVersion = TERMS_VERSION;
+    target.dataset.privacyVersion = PRIVACY_VERSION;
     target.removeAttribute('data-i18n');
     target.replaceChildren(
       document.createTextNode(parts[0]),
