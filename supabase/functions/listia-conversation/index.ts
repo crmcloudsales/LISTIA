@@ -25,7 +25,7 @@ Deno.serve(async(req:Request)=>{
   const [{data:org},{data:billing},{data:properties},{data:leads},{data:appointments}]=await Promise.all([
    admin.from('organizations').select('id,name,business_type,primary_market').eq('id',orgId).maybeSingle(),
    admin.from('organization_billing').select('plan_key,billing_status,access_state').eq('organization_id',orgId).maybeSingle(),
-   admin.from('properties').select('id,title,status,operation,price,currency,location_text').eq('organization_id',orgId).limit(20),
+   admin.from('properties').select('id,title,status,operation_type,price,currency,location_text').eq('organization_id',orgId).limit(20),
    admin.from('leads').select('id,status,created_at').eq('organization_id',orgId).order('created_at',{ascending:false}).limit(20),
    admin.from('appointments').select('id,status,start_at').eq('organization_id',orgId).order('start_at',{ascending:true}).limit(20)
   ])
