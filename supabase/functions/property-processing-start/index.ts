@@ -47,7 +47,7 @@ Deno.serve(async(req:Request)=>{
     const submitted={title:property.title||null,operation_type:property.operation_type||null,property_type:property.property_type||null,description:property.description||null,price:property.price??null,currency:property.currency||null,commission_text:property.commission_text||null,location_text:property.location_text||null,postal_code:property.postal_code||null}
     const missing:string[]=[];if(!property.operation_type)missing.push('operation_type');if(!property.property_type)missing.push('property_type');if(!property.location_text)missing.push('location_text');if(!property.description)missing.push('description');if(property.price===null||property.price===undefined)missing.push('price');if(!property.currency)missing.push('currency')
     const assetCount=assets.length,hasMaterial=Boolean(property.description||property.location_text||property.price!==null||assetCount>0),complete=hasMaterial&&missing.length===0
-    const nextStage=complete?'draft_ready':'needs_input',nextAction=complete?'review_draft':hasMaterial?'request_missing_fields':'request_more_material',now=new Date().toISOString()
+    const nextStage=complete?'draft_ready':'needs_input',nextAction=complete?'review_draft':hasMaterial?'request_missing_fields':'request_more_material',propertyStatus=!hasMaterial?'material_received':complete?'ready':'needs_info',now=new Date().toISOString()
     const manifest={schema_version:1,property_id:propertyId,organization_id:organizationId,effective_plan:effectivePlan,usage_markup_percent:Number(billing?.usage_markup_percent??30),source:property.source,locale:property.locale,submitted_fields:submitted,assets:assets.map((a:any)=>({id:a.id,asset_type:a.asset_type,original_name:a.original_name,mime_type:a.mime_type,size_bytes:a.size_bytes,storage_bucket:a.storage_bucket,storage_path:a.storage_path,metadata:a.metadata||{}})),prepared_at:now,processing_mode:'deterministic_fallback_no_invention'}
     const draftData={...submitted,assets:manifest.assets,provenance:{mode:'deterministic_fallback',generated_at:now,rule:'submitted_fields_only_no_invention'}}
     await sql.begin(async tx=>{
@@ -58,8 +58,8 @@ Deno.serve(async(req:Request)=>{
         values(${propertyId}::uuid,${organizationId}::uuid,${JSON.stringify(draftData)}::jsonb,${missing}::text[],'draft',1,now())
         on conflict(property_id) do update set draft_data=excluded.draft_data,missing_fields=excluded.missing_fields,status='draft',version=public.property_drafts.version+1,approved_at=null,updated_at=now()
         where public.property_drafts.status<>'approved'`
-      await tx`update public.properties set status=${hasMaterial?'processing':'material_received'},processing_state=coalesce(processing_state,'{}'::jsonb)||${JSON.stringify({stage:nextStage,asset_count:assetCount,missing_fields:missing,prepared_at:now,next_action:nextAction,processing_mode:'deterministic_fallback'})}::jsonb,updated_at=now() where id=${propertyId}::uuid and organization_id=${organizationId}::uuid`
+      await tx`update public.properties set status=${propertyStatus},processing_state=coalesce(processing_state,'{}'::jsonb)||${JSON.stringify({stage:nextStage,asset_count:assetCount,missing_fields:missing,prepared_at:now,next_action:nextAction,processing_mode:'deterministic_fallback'})}::jsonb,updated_at=now() where id=${propertyId}::uuid and organization_id=${organizationId}::uuid`
     })
-    return json(req,{ok:true,property_id:propertyId,stage:nextStage,asset_count:assetCount,missing_fields:missing,effective_plan:effectivePlan,next_action:nextAction,processing_mode:'deterministic_fallback'})
+    return json(req,{ok:true,property_id:propertyId,property_status:propertyStatus,stage:nextStage,asset_count:assetCount,missing_fields:missing,effective_plan:effectivePlan,next_action:nextAction,processing_mode:'deterministic_fallback'})
   }catch(error){console.error('property-processing-start',error);return json(req,{error:'internal_error'},500)}
 })
