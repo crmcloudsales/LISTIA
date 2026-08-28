@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   syntax:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
@@ -36,6 +36,7 @@ jobs:
             public/account-center.js \
             public/listing-workspace.js \
             public/listings-v2.js \
+            public/website-status.js \
             public/property-processing-auto.js \
             public/property-status.js \
             public/property-complete.js \
