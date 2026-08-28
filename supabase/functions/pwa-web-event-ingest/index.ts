@@ -59,7 +59,7 @@ Deno.serve(async(req:Request)=>{
     };
   }).filter(Boolean);
   if(!rows.length)return json({ok:true,accepted:0},200,origin);
-  const insert=await fetch(`${SUPABASE_URL}/rest/v1/web_events`,{method:'POST',headers:{...ah,'content-type':'application/json','prefer':'return=minimal'},body:JSON.stringify(rows)});
+  const insert=await fetch(`${SUPABASE_URL}/rest/v1/web_events`,{method:'POST',headers:{...ah,'content-type':'application/json','prefer':'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(rows)});
   if(!insert.ok)return json({error:'event_write_failed'},502,origin);
   return json({ok:true,accepted:rows.length},200,origin);
 });
