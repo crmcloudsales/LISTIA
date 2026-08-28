@@ -82,5 +82,5 @@ jobs:
           const a=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
           const b=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
           if(!a||!b||a[1]!==b[1]) throw new Error(`Version mismatch config=${a?.[1]} sw=${b?.[1]}`);
-          if(a[1]!=='0.26.6') throw new Error(`Expected 0.26.6, got ${a[1]}`);
+          if(a[1]!=='0.26.7') throw new Error(`Expected 0.26.7, got ${a[1]}`);
           NODE
