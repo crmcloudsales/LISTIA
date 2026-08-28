@@ -1,0 +1,78 @@
+name: LISTIA Sensitive Endpoint Rate Limit v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-cloudflare-sensitive-ratelimit-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ratelimit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      RULE_DESC: LISTIA Sensitive AI and Lead Endpoints v1
+    steps:
+      - name: Create or update consolidated rate limit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode 'name=listiaapp.com' --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          zone=$(jq -r '.result[0].id // empty' "$z")
+          [[ -n "$zone" ]] || exit 1
+
+          entry=$(mktemp)
+          code=$(curl -sS -o "$entry" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_ratelimit/entrypoint")
+          if [[ "$code" == 200 ]]; then
+            ruleset=$(jq -r '.result.id // empty' "$entry")
+          else
+            out=$(mktemp)
+            payload=$(jq -nc '{name:"LISTIA rate limiting",description:"LISTIA zone rate limiting",kind:"zone",phase:"http_ratelimit",rules:[]}')
+            ccode=$(curl -sS -X POST -o "$out" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' --data "$payload" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets")
+            [[ "$ccode" =~ ^20 ]] || { jq '{success,errors}' "$out"; exit 2; }
+            ruleset=$(jq -r '.result.id // empty' "$out")
+          fi
+          [[ -n "$ruleset" ]] || exit 3
+
+          expression='((http.host eq "brain.listiaapp.com" and http.request.method eq "POST") or (http.request.uri.path eq "/api/interest" and http.request.method eq "POST"))'
+          payload=$(jq -nc --arg d "$RULE_DESC" --arg e "$expression" '{description:$d,expression:$e,action:"block",ratelimit:{characteristics:["cf.colo.id","ip.src"],period:10,requests_per_period:10,mitigation_timeout:10},enabled:true}')
+
+          current=$(mktemp)
+          curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/${ruleset}" > "$current"
+          id=$(jq -r --arg d "$RULE_DESC" '.result.rules[]? | select(.description==$d) | .id' "$current" | head -n1)
+          out=$(mktemp)
+          if [[ -n "$id" ]]; then
+            wcode=$(curl -sS -X PATCH -o "$out" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' --data "$payload" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/${ruleset}/rules/${id}")
+          else
+            wcode=$(curl -sS -X POST -o "$out" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' --data "$payload" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/${ruleset}/rules")
+          fi
+          [[ "$wcode" =~ ^20 ]] && jq -e '.success == true' "$out" >/dev/null || { jq '{success,errors}' "$out"; exit 4; }
+
+          echo '### LISTIA sensitive endpoint rate limiting' >> "$GITHUB_STEP_SUMMARY"
+          echo '- AI gateway + managed lead POST endpoints covered by one rule' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Threshold: 10 requests / 10 seconds / IP+colo' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Mitigation: 10 seconds' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify rule exists without triggering customer-facing throttling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode 'name=listiaapp.com' --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          zone=$(jq -r '.result[0].id // empty' "$z")
+          r=$(mktemp)
+          curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_ratelimit/entrypoint" > "$r"
+          jq -e --arg d "$RULE_DESC" '.result.rules[]? | select(.description==$d and .enabled==true and .ratelimit.requests_per_period==10 and .ratelimit.period==10)' "$r" >/dev/null
+          for url in 'https://app.listiaapp.com/' 'https://listiaapp.com/'; do
+            code=$(curl -sS -L -o /tmp/normal -w '%{http_code}' "$url")
+            [[ "$code" == 200 ]] || exit 5
+          done
+          echo '- Configuration verification: passed' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Normal traffic smoke: passed' >> "$GITHUB_STEP_SUMMARY"
