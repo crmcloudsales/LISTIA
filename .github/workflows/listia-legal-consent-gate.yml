@@ -1,0 +1,57 @@
+name: LISTIA Legal Consent Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/app.js'
+      - 'public/legal-consent.js'
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'public/terms.html'
+      - 'public/privacy.html'
+      - 'supabase/migrations/*legal_acceptance*'
+      - '.github/workflows/listia-legal-consent-gate.yml'
+  workflow_dispatch:
+
+jobs:
+  legal-consent-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate legal consent chain
+        run: |
+          set -Eeuo pipefail
+          node --check public/app.js
+          node --check public/legal-consent.js
+          node --check public/config.js
+          node --check public/sw.js
+
+          grep -Fq "const TERMS_VERSION = '1.4.1'" public/legal-consent.js
+          grep -Fq "const PRIVACY_VERSION = '1.3'" public/legal-consent.js
+          grep -Fq "'/terms.html'" public/legal-consent.js
+          grep -Fq "'/privacy.html'" public/legal-consent.js
+          grep -Fq 'legal-consent.js?v=1' public/config.js
+          grep -Fq 'legal-consent.js?v=1' public/sw.js
+
+          grep -Fq 'legal_terms_accepted: true' public/app.js
+          grep -Fq 'terms_version: window.LISTIA_LEGAL?.termsVersion || "1.4.1"' public/app.js
+          grep -Fq 'privacy_version: window.LISTIA_LEGAL?.privacyVersion || "1.3"' public/app.js
+          grep -Fq 'legal_acceptance_source: window.LISTIA_LEGAL?.acceptanceSource || "pwa_signup_checkbox"' public/app.js
+
+          grep -Fq 'Version 1.4.1' public/terms.html
+          grep -Fq 'Independent advertisers, negotiations and third-party transactions' public/terms.html
+          grep -Fq 'Version 1.3' public/privacy.html
+
+          migration="$(ls -1 supabase/migrations/*legal_acceptance* | tail -1)"
+          grep -Fq 'alter table public.legal_acceptances enable row level security' "$migration"
+          grep -Fq 'grant select on public.legal_acceptances to authenticated' "$migration"
+          grep -Fq 'record_signup_legal_acceptance' "$migration"
+          grep -Fq 'on_auth_user_legal_acceptance' "$migration"
+          grep -Fq 'revoke all on function private.record_signup_legal_acceptance() from public, anon, authenticated' "$migration"
+
+          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:\"[0-9.]+\"' public/config.js | head -1 | cut -d'\"' -f2)"
+          sw_version="$(grep -Eo 'listia-pwa-v[0-9.]+' public/sw.js | head -1 | sed 's/listia-pwa-v//')"
+          test -n "$cfg_version"
+          test "$cfg_version" = "$sw_version"
+          echo "LISTIA legal consent chain OK — PWA v${cfg_version}, Terms 1.4.1, Privacy 1.3"
