@@ -1,0 +1,26 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import webpush from "npm:web-push@3.6.7";
+
+const U=Deno.env.get('SUPABASE_URL')||'';
+const S=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
+const VAPID_PUBLIC='BKPYpjPsZ-0gWqc5UQp3WpwU4Nqxt6u7OhMcktJp6jeDu0WRaCIKjb2qif90-DyQrvSqtrC_T55sCnqqPrT6LHc';
+const H=()=>({apikey:S,authorization:`Bearer ${S}`,'content-type':'application/json'});
+const COPY:any={es:{title:'LISTIA · Nueva propiedad',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} coincide con una búsqueda guardada.`},en:{title:'LISTIA · New property',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} matches a saved search.`},fr:{title:'LISTIA · Nouveau bien',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} correspond à une recherche enregistrée.`},it:{title:'LISTIA · Nuovo immobile',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} corrisponde a una ricerca salvata.`},'pt-BR':{title:'LISTIA · Novo imóvel',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} corresponde a uma busca salva.`},de:{title:'LISTIA · Neue Immobilie',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} passt zu einer gespeicherten Suche.`},'ar-AE':{title:'LISTIA · عقار جديد',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} يطابق بحثاً محفوظاً.`},ru:{title:'LISTIA · Новый объект',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} соответствует сохранённому поиску.`},he:{title:'LISTIA · נכס חדש',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} תואם לחיפוש שמור.`},'zh-CN':{title:'LISTIA · 新房源',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} 符合已保存的搜索。`},ja:{title:'LISTIA · 新しい物件',body:(n:string,l:string)=>`${n}${l?` · ${l}`:''} は保存した検索に一致します。`}};
+
+async function rpc(name:string,body:any={}){const r=await fetch(`${U}/rest/v1/rpc/${name}`,{method:'POST',headers:H(),body:JSON.stringify(body)});if(!r.ok)throw new Error(`${name}:${r.status}:${await r.text()}`);const t=await r.text();return t?JSON.parse(t):null}
+function hex(bytes:ArrayBuffer){return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+async function validSignature(ts:string,sig:string,secret:string){const n=Number(ts);if(!Number.isFinite(n)||Math.abs(Date.now()/1000-n)>180)return false;const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);const expected=hex(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(ts)));if(expected.length!==sig.length)return false;let diff=0;for(let i=0;i<expected.length;i++)diff|=expected.charCodeAt(i)^sig.charCodeAt(i);return diff===0}
+
+Deno.serve(async req=>{
+  if(req.method!=='POST')return new Response(JSON.stringify({error:'method_not_allowed'}),{status:405,headers:{'content-type':'application/json'}});
+  if(!U||!S)return new Response(JSON.stringify({error:'server_not_configured'}),{status:503,headers:{'content-type':'application/json'}});
+  const secret=String(await rpc('marketplace_push_dispatch_secret')||''),ts=req.headers.get('x-listia-ts')||'',sig=(req.headers.get('x-listia-signature')||'').toLowerCase();
+  if(!secret||!await validSignature(ts,sig,secret))return new Response(JSON.stringify({error:'unauthorized'}),{status:401,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  const vapidPrivate=String(await rpc('marketplace_push_vapid_private_key')||'');
+  if(!vapidPrivate)return new Response(JSON.stringify({error:'vapid_not_configured'}),{status:503,headers:{'content-type':'application/json'}});
+  webpush.setVapidDetails('mailto:security@listiaapp.com',VAPID_PUBLIC,vapidPrivate);
+  let limit=20;try{const b=await req.json();if(Number.isFinite(Number(b?.limit)))limit=Math.min(100,Math.max(1,Number(b.limit)))}catch{}
+  const alerts=await rpc('marketplace_push_claim',{p_limit:limit});let delivered=0,failed=0,expired=0;
+  for(const a of Array.isArray(alerts)?alerts:[]){const locale=COPY[a.locale]?a.locale:'es',x=COPY[locale],dead:string[]=[];let ok=0;const errors:string[]=[];const payload=JSON.stringify({title:x.title,body:x.body(String(a.listing_title||'LISTIA'),String(a.location_text||'')),url:String(a.url||'/?marketplace=1'),tag:`listia-marketplace-${a.listing_id||a.outbox_id}`,listing_id:a.listing_id||null,icon:'/listia-app-icon-192.png',badge:'/listia-app-icon-192.png'});for(const sub of Array.isArray(a.subscriptions)?a.subscriptions:[]){try{await webpush.sendNotification({endpoint:String(sub.endpoint),keys:{p256dh:String(sub.p256dh),auth:String(sub.auth)}},payload,{TTL:3600,urgency:'normal'} as any);ok++}catch(e:any){const code=Number(e?.statusCode||0);if(code===404||code===410){dead.push(String(sub.endpoint));expired++}else errors.push(String(e?.message||e).slice(0,300))}}const success=ok>0;await rpc('marketplace_push_complete',{p_outbox_id:a.outbox_id,p_success:success,p_error:success?null:(errors.join('; ')||'no_delivery'),p_deactivate_endpoints:dead});if(success)delivered++;else failed++}
+  return new Response(JSON.stringify({ok:true,claimed:Array.isArray(alerts)?alerts.length:0,delivered,failed,expired_subscriptions:expired}),{status:200,headers:{'content-type':'application/json','cache-control':'no-store'}});
+});
