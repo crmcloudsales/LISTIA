@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/crawl-quintana-roo-properties.py'
+      - 'scripts/crawl-quintana-roo-properties-parallel.py'
       - '.github/workflows/listia-qroo-inventory-crawl.yml'
   workflow_dispatch:
 
@@ -37,8 +38,8 @@ jobs:
           QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
           QROO_CRAWL_OUT: data/qroo-crawl
           QROO_CHUNK_SIZE: '1500'
-          QROO_CRAWL_SLEEP: '0.12'
-        run: python scripts/crawl-quintana-roo-properties.py
+          QROO_WORKERS: '14'
+        run: python scripts/crawl-quintana-roo-properties-parallel.py
 
       - name: Validate snapshot
         shell: bash
