@@ -33,6 +33,7 @@ jobs:
             public/assistant-intelligence.js \
             public/ai-chat.js \
             public/control-center.js \
+            public/control-attention.js \
             public/account-center.js \
             public/listing-workspace.js \
             public/listings-v2.js \
