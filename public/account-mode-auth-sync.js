@@ -1,0 +1,10 @@
+(()=>{'use strict';
+const CFG=window.LISTIA_CONFIG||{},KEY=CFG.SUPABASE_PUBLISHABLE_KEY||CFG.SUPABASE_ANON_KEY||'',SESSION='listia_session',PENDING='listia_pending_account_mode';
+function session(){try{return JSON.parse(localStorage.getItem(SESSION)||'null')}catch{return null}}
+function selected(){const v=document.querySelector('#listiaAccountModeChoice input:checked')?.value||localStorage.getItem(PENDING)||'';return v==='seeker'?'seeker':v==='professional'?'professional':''}
+async function persist(mode){const s=session();if(!s?.access_token||!s?.user?.id||!mode)return false;const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(s.user.id)}`,{method:'PATCH',headers:{apikey:KEY,Authorization:`Bearer ${s.access_token}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({account_mode:mode}),cache:'no-store'});if(!r.ok)return false;localStorage.removeItem(PENDING);await window.LISTIA_ACCOUNT?.refresh?.();if(mode==='seeker')setTimeout(()=>{const entry=document.getElementById('marketplaceEntry');if(entry)entry.click();else{window.LISTIA_APP_SHELL?.showScreen?.('screen-marketplace');window.LISTIA_MARKETPLACE?.reload?.()}},80);return true}
+function awaitSession(mode){let tries=0;const tick=async()=>{if(await persist(mode).catch(()=>false))return;if(++tries<50)setTimeout(tick,120)};setTimeout(tick,20)}
+function arm(form){if(!form||form.dataset.listiaAccountModeAuthSync==='1')return;form.dataset.listiaAccountModeAuthSync='1';form.addEventListener('submit',()=>{const mode=selected();if(mode){localStorage.setItem(PENDING,mode);awaitSession(mode)}},{capture:true})}
+function boot(){arm(document.getElementById('signupForm'));arm(document.getElementById('loginForm'));const pending=localStorage.getItem(PENDING);if(pending==='seeker'||pending==='professional')awaitSession(pending)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
