@@ -33,14 +33,15 @@ jobs:
       - name: Install crawler dependencies
         run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
 
-      - name: Crawl all public Quintana Roo result pages
+      - name: Crawl public Quintana Roo result pages
         id: qroo_crawl
         shell: bash
         env:
           QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
           QROO_CRAWL_OUT: data/qroo-crawl
           QROO_CHUNK_SIZE: '1500'
-          QROO_WORKERS: '6'
+          QROO_WORKERS: '2'
+          QROO_MAX_PAGES: '1'
         run: |
           set +e
           mkdir -p data/qroo-crawl
@@ -48,7 +49,7 @@ jobs:
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           echo "Crawler exit code: $code"
-          tail -n 80 data/qroo-crawl/crawl.log || true
+          cat data/qroo-crawl/crawl.log || true
           exit 0
 
       - name: Upload crawl diagnostics
@@ -71,7 +72,7 @@ jobs:
           from pathlib import Path
           m=json.loads(Path('data/qroo-crawl/manifest.json').read_text())
           print(m)
-          assert m['unique_listings'] > 0
+          assert m['unique_listings'] >= 10
           assert m['chunks']
           PY
 
