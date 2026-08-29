@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -17,9 +18,9 @@ ROOTS = [
     ("rent", "https://properties.iadmexico.mx/en-renta"),
 ]
 OUT_DIR = Path(os.getenv("IAD_OUT", "data/iad-mexico"))
-MAX_PAGES = int(os.getenv("IAD_MAX_PAGES", "1"))
-DETAILS = os.getenv("IAD_FETCH_DETAILS", "0") == "1"
-WORKERS = max(2, min(int(os.getenv("IAD_WORKERS", "6")), 12))
+MAX_PAGES = int(os.getenv("IAD_MAX_PAGES", "0"))
+DETAILS = os.getenv("IAD_FETCH_DETAILS", "1") == "1"
+WORKERS = max(2, min(int(os.getenv("IAD_WORKERS", "8")), 12))
 CHUNK_SIZE = int(os.getenv("IAD_CHUNK_SIZE", "250"))
 
 
@@ -38,7 +39,7 @@ def fetch(url: str, attempts: int = 4) -> str:
             last = RuntimeError(f"HTTP {r.status_code}, bytes={len(r.content)}")
         except Exception as exc:
             last = exc
-        time.sleep(1.5 * (n + 1))
+        time.sleep(1.2 * (n + 1))
     raise RuntimeError(f"unable to fetch {url}: {last}")
 
 
@@ -86,9 +87,8 @@ def nearest_card(img):
 def parse_float(raw: str | None) -> float | None:
     if not raw:
         return None
-    raw = raw.replace(",", "").strip()
     try:
-        return float(raw)
+        return float(raw.replace(",", "").strip())
     except Exception:
         return None
 
@@ -109,10 +109,12 @@ def parse_alt_metrics(alt: str):
         m = re.search(pattern, alt, re.I)
         return parse_float(m.group(1)) if m else None
 
-    bedrooms = grab(r"con\s+([\d.,]+)\s+rec[aá]maras?")
-    bathrooms = grab(r"con\s+([\d.,]+)\s+baños?")
-    area = grab(r"con\s+([\d.,]+)\s+m2\s+de\s+construcci[oó]n")
-    return ptype, bedrooms, bathrooms, area
+    return (
+        ptype,
+        grab(r"con\s+([\d.,]+)\s+rec[aá]maras?"),
+        grab(r"con\s+([\d.,]+)\s+baños?"),
+        grab(r"con\s+([\d.,]+)\s+m2\s+de\s+construcci[oó]n"),
+    )
 
 
 def best_title(card, alt: str) -> str:
@@ -125,11 +127,10 @@ def best_title(card, alt: str) -> str:
             continue
         if re.fullmatch(r"(?:Venta|Renta|Casa|Depto\.?|Departamento|Terreno|Local|Oficina|Ver más)", t, re.I):
             continue
-        if any(x in t for x in ("Recamara", "Recámaras", "Sanitario", "Construcción", "Terreno")):
+        if any(x in t for x in ("Recamara", "Recámaras", "Sanitario", "Construcción")):
             continue
         candidates.append(t)
     if candidates:
-        # Marketing titles tend to be longer than category labels but shorter than whole-card text.
         return max(candidates, key=lambda x: min(len(x), 140))[:300]
     return re.sub(r"^NEX-\d+\s*-\s*", "", alt).strip()[:300] or "Propiedad"
 
@@ -214,6 +215,10 @@ def parse_card(img, operation: str, base_url: str):
         "cover_image_url": cover,
         "gallery": [cover] if cover else [],
         "page_url": base_url,
+        "city": None,
+        "state_region": None,
+        "country_code": "MX",
+        "location_text": None,
     }
 
 
@@ -229,15 +234,69 @@ def parse_page(html: str, operation: str, base_url: str):
     return list(rows.values()), soup
 
 
-def detail_images(url: str) -> list[str]:
+def total_rows_from_page(soup: BeautifulSoup) -> int | None:
+    text = clean(" ".join(soup.stripped_strings))
+    patterns = [
+        r"tiene\s+([\d,]+)\s+Inmuebles",
+        r"([\d,]+)\s+Inmuebles\s+en\s+(?:venta|renta)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.I)
+        if m:
+            return int(m.group(1).replace(",", ""))
+    return None
+
+
+def choose_page_pattern(root: str, first_ids: set[str]) -> str | None:
+    for pattern in (f"{root}?page={{}}", f"{root}?pagina={{}}", f"{root}?p={{}}"):
+        try:
+            html = fetch(pattern.format(2))
+            rows, _ = parse_page(html, "sale" if "en-venta" in root else "rent", pattern.format(2))
+            ids = {r["nex_id"] for r in rows}
+            if ids and ids != first_ids:
+                return pattern
+        except Exception:
+            pass
+    return None
+
+
+def parse_jsonld_locations(soup: BeautifulSoup):
+    city = state = location = None
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = tag.string or tag.get_text()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for obj in items:
+            if not isinstance(obj, dict):
+                continue
+            address = obj.get("address")
+            if isinstance(address, dict):
+                city = city or address.get("addressLocality")
+                state = state or address.get("addressRegion")
+                parts = [address.get("streetAddress"), city, state, address.get("postalCode")]
+                location = location or ", ".join(str(x) for x in parts if x)
+    return city, state, location
+
+
+def enrich_detail(row: dict) -> dict:
+    url = row.get("detail_url")
     if not url:
-        return []
+        return row
     try:
         html = fetch(url)
     except Exception:
-        return []
+        return row
     soup = BeautifulSoup(html, "html.parser")
+
     imgs = []
+    og = soup.find("meta", attrs={"property": "og:image"})
+    if og and og.get("content"):
+        imgs.append(abs_url(url, str(og.get("content"))))
     for img in soup.find_all("img"):
         u = img_url(img, url)
         if not u:
@@ -245,60 +304,59 @@ def detail_images(url: str) -> list[str]:
         low = u.lower()
         if any(x in low for x in ("logo", "icon", "avatar", "favicon")):
             continue
-        if "/properties/" not in low and "/property/" not in low:
+        if f"/properties/{row['external_id']}/" not in low:
             continue
         if u not in imgs:
             imgs.append(u)
-    return imgs[:30]
+    imgs = [x for x in imgs if x][:30]
+    if imgs:
+        row["gallery"] = imgs
+        row["cover_image_url"] = imgs[0]
 
+    desc = None
+    meta_desc = soup.find("meta", attrs={"name": "description"})
+    if meta_desc and meta_desc.get("content"):
+        desc = clean(str(meta_desc.get("content")))
+    if desc and len(desc) >= 20:
+        row["description"] = desc[:4000]
 
-def discover_page_urls(soup: BeautifulSoup, root: str) -> list[str]:
-    urls = {root}
-    root_path = urlparse(root).path.rstrip("/")
-    for a in soup.find_all("a", href=True):
-        href = abs_url(root, str(a.get("href")))
-        if not href:
-            continue
-        p = urlparse(href)
-        if p.netloc != urlparse(root).netloc:
-            continue
-        if not p.path.rstrip("/").startswith(root_path):
-            continue
-        q = parse_qs(p.query)
-        nums = []
-        for k in ("page", "pagina", "p"):
-            for v in q.get(k, []):
-                if str(v).isdigit():
-                    nums.append(int(v))
-        if nums:
-            urls.add(href)
-    return sorted(urls)
+    city, state, location = parse_jsonld_locations(soup)
+    row["city"] = row.get("city") or city
+    row["state_region"] = row.get("state_region") or state
+    row["location_text"] = row.get("location_text") or location
+    return row
 
 
 def crawl_root(operation: str, root: str):
     first = fetch(root)
     first_rows, soup = parse_page(first, operation, root)
-    urls = discover_page_urls(soup, root)
-    if len(urls) <= 1:
-        urls = [root]
-        probes = [f"{root}?page={{}}", f"{root}?pagina={{}}", f"{root}?p={{}}"]
-        sample_ids = {r["nex_id"] for r in first_rows}
-        chosen = None
-        for pattern in probes:
-            try:
-                html = fetch(pattern.format(2))
-                rows, _ = parse_page(html, operation, root)
-                ids = {r["nex_id"] for r in rows}
-                if ids and ids != sample_ids:
-                    chosen = pattern
-                    break
-            except Exception:
-                pass
-        if chosen:
-            limit = MAX_PAGES if MAX_PAGES > 0 else 250
-            urls = [root] + [chosen.format(i) for i in range(2, limit + 1)]
+    first_ids = {r["nex_id"] for r in first_rows}
+    total = total_rows_from_page(soup)
+    per_page = max(1, len(first_rows))
+    total_pages = math.ceil(total / per_page) if total else 1
     if MAX_PAGES > 0:
-        urls = urls[:MAX_PAGES]
+        total_pages = min(total_pages, MAX_PAGES)
+
+    pattern = choose_page_pattern(root, first_ids) if total_pages > 1 else None
+    urls = [root]
+    if pattern:
+        urls += [pattern.format(i) for i in range(2, total_pages + 1)]
+    else:
+        # Fallback to any explicit pagination links rendered on page 1.
+        seen = set(urls)
+        root_path = urlparse(root).path.rstrip("/")
+        for a in soup.find_all("a", href=True):
+            href = abs_url(root, str(a.get("href")))
+            if not href or href in seen:
+                continue
+            p = urlparse(href)
+            if p.netloc == urlparse(root).netloc and p.path.rstrip("/").startswith(root_path):
+                q = parse_qs(p.query)
+                if any(str(v).isdigit() for k in ("page", "pagina", "p") for v in q.get(k, [])):
+                    urls.append(href)
+                    seen.add(href)
+        if MAX_PAGES > 0:
+            urls = urls[:MAX_PAGES]
 
     by_id = {r["nex_id"]: r for r in first_rows}
     failures = []
@@ -314,7 +372,7 @@ def crawl_root(operation: str, root: str):
                         by_id[r["nex_id"]] = r
                 except Exception as exc:
                     failures.append({"url": u, "error": str(exc)})
-    return list(by_id.values()), failures, urls
+    return list(by_id.values()), failures, {"pages": len(urls), "total_reported": total, "per_page": per_page}
 
 
 def main() -> int:
@@ -324,26 +382,26 @@ def main() -> int:
     all_rows = {}
     failures = []
     summary = []
+
     for operation, root in ROOTS:
-        rows, errs, urls = crawl_root(operation, root)
+        rows, errs, meta = crawl_root(operation, root)
         for r in rows:
             all_rows[r["nex_id"]] = r
         failures.extend(errs)
-        summary.append({"operation": operation, "root": root, "pages": len(urls), "rows": len(rows)})
+        summary.append({"operation": operation, "root": root, "rows": len(rows), **meta})
 
     rows = sorted(all_rows.values(), key=lambda r: int(r["external_id"]))
     if DETAILS and rows:
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            futs = {pool.submit(detail_images, r.get("detail_url")): r for r in rows if r.get("detail_url")}
+            futs = {pool.submit(enrich_detail, dict(r)): idx for idx, r in enumerate(rows)}
+            enriched = [None] * len(rows)
             for fut in as_completed(futs):
-                row = futs[fut]
+                idx = futs[fut]
                 try:
-                    imgs = fut.result()
+                    enriched[idx] = fut.result()
                 except Exception:
-                    imgs = []
-                if imgs:
-                    row["gallery"] = imgs
-                    row["cover_image_url"] = imgs[0]
+                    enriched[idx] = rows[idx]
+            rows = [r if r is not None else rows[i] for i, r in enumerate(enriched)]
 
     chunks = []
     for i in range(0, len(rows), CHUNK_SIZE):
@@ -351,6 +409,7 @@ def main() -> int:
         name = f"chunk-{i // CHUNK_SIZE + 1:04d}.json"
         (OUT_DIR / name).write_text(json.dumps(part, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         chunks.append({"file": name, "count": len(part)})
+
     manifest = {
         "source": "iad-mexico-neximo",
         "rows": len(rows),
