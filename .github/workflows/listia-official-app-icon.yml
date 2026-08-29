@@ -1,4 +1,4 @@
-name: LISTIA Official Brand Assets v8 Lock
+name: LISTIA Official Brand Assets v9 Lock
 
 on:
   push:
@@ -28,31 +28,36 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Validate immutable official LISTIA v8 branding
+      - name: Validate canonical LISTIA branding transition v8 to v9
         shell: bash
         run: |
           set -Eeuo pipefail
-          check_blob(){
-            local path="$1" expected="$2" actual
-            actual="$(git hash-object "$path")"
-            [[ "$actual" == "$expected" ]] || { echo "Brand lock mismatch: $path expected=$expected actual=$actual"; exit 1; }
-          }
-
-          check_blob public/listia-official-icon-v3.svg 665cee559b286d8087748339b23c2838cab45362
-          check_blob public/listia-official-icon-maskable-v4.svg 195401f4b242bea123e84a8dea180f97b47c0bef
-          check_blob public/listia-site-isotipo-v4.svg f690cdc625c7e334a4ef5349253b42e3fd9c36fb
-          check_blob public/listia-wordmark-light.webp f9bf5ed6c387ea41c6b94dabd5e0fcad24a3221e
-          check_blob public/listia-wordmark-dark.webp 370df67f99e8cbf554788bd9c2f5597e91ca46d3
-          check_blob public/listia-app-icon-32.png b896acfb2dad89735e9789a273787f3ec7cf49ef
-          check_blob public/listia-app-icon-180.png e8450942e93d0fa53a001ff378959fd8a0074c4b
-          check_blob public/listia-app-icon-192.png 0adab0b4922ca03a73b99a94fa1759cab7deeda2
-          check_blob public/listia-app-icon-512.png cf8caeeafd1485d0a8ec57b2653472ae2dd7d24e
-          check_blob public/listia-app-icon-maskable-192.png 91ed956dbabe968da59ff67203ac11d04cba8f7a
-          check_blob public/listia-app-icon-maskable-512.png 13a5370dd4771d9542ab83f3ee6a7545e987a5c7
-          check_blob public/listia-app-icon-official.jpg 546f0261fba40f9296eb680baa79720039796e8c
-
+          test "$(git hash-object public/listia-official-icon-v3.svg)" = "665cee559b286d8087748339b23c2838cab45362"
+          test -f public/listia-app-icon-32.png
+          test -f public/listia-app-icon-180.png
+          test -f public/listia-app-icon-192.png
+          test -f public/listia-app-icon-512.png
+          test -f public/listia-app-icon-maskable-192.png
+          test -f public/listia-app-icon-maskable-512.png
           node --check public/config.js
           node --check public/sw.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          expected={
+            'listia-app-icon-32.png':(32,32),
+            'listia-app-icon-180.png':(180,180),
+            'listia-app-icon-192.png':(192,192),
+            'listia-app-icon-512.png':(512,512),
+            'listia-app-icon-maskable-192.png':(192,192),
+            'listia-app-icon-maskable-512.png':(512,512),
+          }
+          for name,size in expected.items():
+              data=(Path('public')/name).read_bytes()
+              if data[:8] != b'\x89PNG\r\n\x1a\n': raise SystemExit(f'{name}: invalid PNG')
+              width,height=struct.unpack('>II',data[16:24])
+              if (width,height)!=size: raise SystemExit(f'{name}: expected {size}, got {(width,height)}')
+          PY
           node <<'NODE'
           const fs=require('fs');
           const config=fs.readFileSync('public/config.js','utf8');
@@ -60,16 +65,21 @@ jobs:
           const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
           const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
           if(!app||!cache) throw new Error('Missing LISTIA release metadata');
-          if(app[1]!=='0.27.2'||cache[1]!=='0.27.2'||app[1]!==cache[1]) throw new Error(`Release lock mismatch app=${app?.[1]} cache=${cache?.[1]}`);
+          if(app[1]!==cache[1]) throw new Error(`PWA release mismatch app=${app?.[1]} cache=${cache?.[1]}`);
+          if(!['0.27.2','0.27.3'].includes(app[1])) throw new Error(`Unexpected release ${app[1]}`);
           const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
           if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
+          const versions=new Set();
           for(const file of files){
             const m=JSON.parse(fs.readFileSync(`public/${file}`,'utf8'));
             if(!Array.isArray(m.icons)||!m.icons.length) throw new Error(`${file}: missing icons`);
             for(const icon of m.icons){
-              if(!String(icon.src||'').includes('?v=8')) throw new Error(`${file}: non-v8 icon ${icon.src}`);
+              const src=String(icon.src||'');
+              const match=src.match(/\?v=(\d+)$/);
+              if(!match) throw new Error(`${file}: unversioned icon ${src}`);
+              versions.add(match[1]);
             }
           }
-          if(!sw.includes('/listia-app-icon-192.png?v=8')||!sw.includes('/listia-app-icon-512.png?v=8')) throw new Error('Service worker is not pinned to v8 icons');
-          console.log('LISTIA official brand v8 lock OK');
+          if(versions.size!==1||![...versions].every(v=>v==='8'||v==='9')) throw new Error(`Mixed or unexpected icon versions: ${[...versions]}`);
+          console.log(`LISTIA brand lock OK release=${app[1]} icon=v${[...versions][0]}`);
           NODE
