@@ -1,20 +1,20 @@
 {
   "version": "0.27.2",
   "as_of": "2026-08-29",
-  "head_commit_verified": "06a688d8d43e483f94fbe976f99dc49d4b812393",
-  "status": "production_active_v0_27_2_pwa_cloudco_nvidia_property_ai",
+  "head_commit_verified": "327b5ecba10027249d05e8a3496fdb82dae2fbcc",
+  "status": "production_active_v0_27_2_pwa_cloudco_nvidia_conversion_runtime",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "06a688d8d43e483f94fbe976f99dc49d4b812393",
-    "main_observed_at_utc": "2026-08-29T13:19:45Z",
+    "main_observed_commit": "327b5ecba10027249d05e8a3496fdb82dae2fbcc",
+    "main_observed_at_utc": "2026-08-29T14:08:07Z",
     "production_source_commit": "901fbc5976906a2badc451283f5f3bb4060f564b",
     "production_verified_at_utc": "2026-08-29T13:05:16Z",
     "deployment_proof_commit": "36126c4a6e8a1e81476a48b51225f537396c750a",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
-    "backend_last_verified_migration": "20260829131750_enable_property_ai_dispatch_cron",
-    "backend_migration_source_commit": "c1cf480ee18fa053d8293d4bf59e461fa17ee32d",
+    "backend_last_verified_migration": "20260829140716_index_conversion_delivery_connection_fk",
+    "backend_migration_source_commit": "e0c9876593c7880dd3e8440a1564460744d4ffb8",
     "rule": "Production frontend commit, current GitHub main and backend migration state are tracked separately. The BUILD_INFO commit itself can be newer than main_observed_commit because it records the immediately preceding verified state. Verify GitHub main, Supabase live state and production checks before claiming completion."
   },
   "languages": {
@@ -198,7 +198,24 @@
       "authenticated_browser_e2e_after_v5_complete": false,
       "attribution_model": true,
       "conversion_signal_queue": true,
-      "real_ad_platform_dispatch": false
+      "real_ad_platform_dispatch": false,
+      "real_ad_platform_dispatch_runtime": true,
+      "real_ad_platform_delivery_verified": false,
+      "conversion_dispatch_worker_version": 2,
+      "conversion_dispatch_cron": true,
+      "conversion_dispatch_schedule": "* * * * *",
+      "conversion_dispatch_batch_max": 25,
+      "conversion_dispatch_empty_queue_short_circuit": true,
+      "conversion_dispatch_server_side_tokens": true,
+      "conversion_dispatch_consent_gate": true,
+      "conversion_dispatch_lead_quality_gate": true,
+      "conversion_dispatch_fail_closed_without_connection": true,
+      "conversion_dispatch_per_platform_delivery_state": true,
+      "conversion_dispatch_retry_backoff": true,
+      "meta_capi_adapter": true,
+      "google_data_manager_api_adapter": true,
+      "tiktok_events_api_adapter": true,
+      "linkedin_conversions_api_adapter": true
     },
     "voice": {
       "runtime": true,
@@ -225,10 +242,13 @@
     "push_dispatch_cron": true,
     "edge_functions_active": true,
     "website_provision_function_version": 3,
-    "last_verified_migration": "20260829131750_enable_property_ai_dispatch_cron",
+    "last_verified_migration": "20260829140716_index_conversion_delivery_connection_fk",
     "property_ai_runtime": "nvidia:cloudco",
     "property_ai_gateway_server_side_only": true,
-    "property_ai_dispatch_cron": true
+    "property_ai_dispatch_cron": true,
+    "conversion_dispatch_worker_version": 2,
+    "conversion_dispatch_cron": true,
+    "conversion_dispatch_private_delivery_state": true
   },
   "pricing": {
     "free_usd_month": 0,
