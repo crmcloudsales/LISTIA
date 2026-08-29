@@ -1,82 +1,27 @@
 name: LISTIA Quintana Roo Image-First Crawl
 
+# SECURITY HOLD (2026-08-29):
+# The previous workflow committed raw crawl snapshots to a public repository.
+# Production ingest also depended on raw.githubusercontent.com, so silently
+# changing storage would break the pipeline. Keep this workflow non-writing and
+# blocked until a private server-to-server ingest path is deployed.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/crawl-qroo-image-first.py'
-      - '.github/workflows/listia-qroo-image-first-crawl.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: listia-qroo-image-first-crawl
   cancel-in-progress: true
 
 jobs:
-  crawl:
+  security-hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install crawler dependencies
-        run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
-
-      - name: Crawl Quintana Roo with mandatory images
-        id: qroo_crawl
-        shell: bash
-        env:
-          QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
-          QROO_CRAWL_OUT: data/qroo-crawl
-          QROO_CHUNK_SIZE: '1500'
-          QROO_WORKERS: '10'
-        run: |
-          set +e
-          mkdir -p data/qroo-crawl
-          python scripts/crawl-qroo-image-first.py > data/qroo-crawl/crawl.log 2>&1
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          tail -n 100 data/qroo-crawl/crawl.log || true
-          exit 0
-
-      - name: Validate image-first snapshot
+      - name: Block public crawl snapshot publication
         shell: bash
         run: |
-          set -Eeuo pipefail
-          test "${{ steps.qroo_crawl.outputs.exit_code }}" = "0"
-          test -s data/qroo-crawl/manifest.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          m=json.loads(Path('data/qroo-crawl/manifest.json').read_text())
-          print(m)
-          assert m.get('image_required') is True
-          assert m['unique_listings'] >= 1000
-          assert len(m['chunks']) >= 1
-          for chunk in m['chunks']:
-              rows=json.loads((Path('data/qroo-crawl')/chunk['file']).read_text())
-              assert all(r.get('cover_image_url') for r in rows)
-              assert all(r.get('gallery') for r in rows)
-          PY
-
-      - name: Commit image-first inventory snapshot
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rm -f data/qroo-crawl/crawl.log
-          git config user.name 'LISTIA Inventory Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add data/qroo-crawl
-          git commit -m 'Refresh Quintana Roo image-first inventory snapshot' || exit 0
-          git pull --rebase origin main
-          git push origin main
+          echo "Q.Roo crawl is intentionally blocked: raw inventory snapshots must not be committed to a public repository."
+          echo "Deploy the private server-to-server ingest path before re-enabling this workflow."
+          exit 1
