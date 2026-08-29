@@ -1,0 +1,40 @@
+name: LISTIA Marketplace Firewall Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-marketplace-firewall-smoke.yml'
+      - 'listia-app-worker/**'
+      - 'public/marketplace-interest-gateway.js'
+      - 'wrangler-listia-app.jsonc'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify production firewall API routes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          config_body=$(mktemp)
+          config_code=$(curl -sS --max-time 20 -o "$config_body" -w '%{http_code}' 'https://app.listiaapp.com/api/security/turnstile-config')
+          [[ "$config_code" == 200 ]] || { echo "Turnstile config HTTP ${config_code}"; cat "$config_body"; exit 1; }
+          jq -e '.sitekey | type == "string" and length > 10' "$config_body" >/dev/null
+
+          interest_body=$(mktemp)
+          interest_code=$(curl -sS --max-time 20 -o "$interest_body" -w '%{http_code}' 'https://app.listiaapp.com/api/interest')
+          [[ "$interest_code" == 405 ]] || { echo "Interest GET HTTP ${interest_code}"; cat "$interest_body"; exit 2; }
+          jq -e '.error == "method_not_allowed"' "$interest_body" >/dev/null
+
+          post_body=$(mktemp)
+          post_code=$(curl -sS --max-time 20 -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' --data '{}' -o "$post_body" -w '%{http_code}' 'https://app.listiaapp.com/api/interest')
+          [[ "$post_code" == 403 ]] || { echo "Cross-origin POST HTTP ${post_code}"; cat "$post_body"; exit 3; }
+          jq -e '.error == "origin_not_allowed"' "$post_body" >/dev/null
+
+          echo 'Marketplace firewall production smoke: PASS'
