@@ -38,9 +38,9 @@ jobs:
           data=json.loads(path.read_text(encoding='utf-8'))
           observed=os.environ['OBSERVED_COMMIT']
           now=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
-          production_source='0e4497c0a97b58f68e8db3e66a2aed98b3107196'
-          production_verified='2026-08-29T14:43:03Z'
-          deployment_proof='44d27c6ee20d220f52b000921b637d09162f7e6e'
+          production_source='6ccbd99fdd3ca59cfc34831d77e0e7106456a151'
+          production_verified='2026-08-29T14:48:46Z'
+          deployment_proof='09acdcbb42c97788f813c7d2f6c72f6b62209fcb'
           migration='20260829140851_add_google_oauth_capability_state'
           migration_source='60b910b3289dd7e03b5cf541341cf081a0548213'
 
@@ -96,6 +96,8 @@ jobs:
           attr['conversion_dispatch_retry_backoff']=True
           attr['meta_capi_adapter']=True
           attr['meta_capi_config_endpoint']=True
+          attr['meta_capi_config_function_version']=2
+          attr['meta_capi_setup_ui']=True
           attr['meta_capi_connection_verified']=False
           attr['meta_capi_delivery_verified']=False
           attr['google_data_manager_api_adapter']=True
@@ -116,6 +118,7 @@ jobs:
           supa['conversion_dispatch_private_delivery_state']=True
           supa['google_oauth_incremental_capabilities']=True
           supa['meta_capi_config_function']=True
+          supa['meta_capi_config_function_version']=2
 
           path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
@@ -128,7 +131,7 @@ jobs:
           d=json.load(open('BUILD_INFO.json',encoding='utf-8'))
           assert d['version']=='0.27.2'
           assert d['production']['pwa']['bootstrap_version']=='0.27.2'
-          assert d['production']['pwa']['source_commit']=='0e4497c0a97b58f68e8db3e66a2aed98b3107196'
+          assert d['production']['pwa']['source_commit']=='6ccbd99fdd3ca59cfc34831d77e0e7106456a151'
           assert d['production']['properties']['ai_transport']=='cloudco_gateway'
           assert d['production']['properties']['property_ai_worker_version']==3
           assert d['production']['attribution']['conversion_dispatch_worker_version']==2
@@ -139,6 +142,8 @@ jobs:
           assert d['production']['attribution']['google_ads_incremental_oauth'] is True
           assert d['production']['attribution']['google_ads_setup_ui'] is True
           assert d['production']['attribution']['meta_capi_config_endpoint'] is True
+          assert d['production']['attribution']['meta_capi_setup_ui'] is True
+          assert d['production']['attribution']['meta_capi_config_function_version']==2
           assert d['production']['attribution']['meta_capi_connection_verified'] is False
           assert d['supabase']['last_verified_migration']=='20260829140851_add_google_oauth_capability_state'
           print('BUILD_INFO normalization OK')
