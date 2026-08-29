@@ -1,0 +1,50 @@
+name: LISTIA Marketplace Interest Fix V6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix-marketplace-interest-v6.py'
+      - '.github/workflows/listia-marketplace-interest-fix-v6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-marketplace-interest-fix-v6
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply single-click lead fix
+        run: python3 scripts/fix-marketplace-interest-v6.py
+      - name: Validate JavaScript and RPC contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check public/marketplace.js
+          node --check public/marketplace-feed-enhancements.js
+          grep -Fq "body:JSON.stringify({p_listing_id:x.id,p_locale:locale()})" public/marketplace.js
+          ! grep -Fq "p_contact_email" public/marketplace.js
+          ! grep -Fq "window.LISTIA_MARKETPLACE_SELECTED=r;captureInterest(r);" public/marketplace-feed-enhancements.js
+      - name: Commit final interest flow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/marketplace.js public/marketplace-feed-enhancements.js
+          git commit -m 'fix: make Me interesa one click one routed lead' || exit 0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
