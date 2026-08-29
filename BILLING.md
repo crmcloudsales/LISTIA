@@ -19,9 +19,9 @@ FREE supports up to **3 non-archived properties**. A fourth property requires up
 A customer buys a **Gestión**, not a raw provider call.
 
 Current ordinary plan markup targets on real provider/accepted-output cost are:
-- FREE: **50%**
-- PRO: **25%**
-- PREMIUM: **12.5%**
+- FREE: **30%**
+- PRO: **20%**
+- PREMIUM: **10%**
 
 These are active target economics. For variable routes, effective markup can flex inside the applicable safety bounds so LISTIA can preserve simple pricing, quality and profitability. The ordinary safety band remains 5%-50% unless a specific Gestión has a different canonical rule.
 
@@ -66,11 +66,11 @@ LISTIA's preferred suggestion pool is `.com`, `.com.mx`, `.mx`, `.net`, `.us`, `
 ## Benchmark-guarded media economics
 The following v2 figures are **engineering estimates based on published model/render throughput and current compute pricing, not yet measured LISTIA production benchmarks**:
 
-| Gestión / route | Reference internal accepted-output cost <=10s | FREE +50% | PRO +25% | PREMIUM +12.5% |
+| Gestión / route | Reference internal accepted-output cost <=10s | FREE +30% | PRO +20% | PREMIUM +10% |
 |---|---:|---:|---:|---:|
-| HyperFrames/FFmpeg exact-source composition | US$0.005 | US$0.0075 | US$0.00625 | US$0.005625 |
-| MuseTalk 1.5 lip-sync | US$0.025 | US$0.0375 | US$0.03125 | US$0.028125 |
-| EchoMimicV2 avatar-from-photo | US$0.16 | US$0.24 | US$0.20 | US$0.18 |
+| HyperFrames/FFmpeg exact-source composition | US$0.005 | US$0.0065 | US$0.006 | US$0.0055 |
+| MuseTalk 1.5 lip-sync | US$0.025 | US$0.0325 | US$0.030 | US$0.0275 |
+| EchoMimicV2 avatar-from-photo | US$0.16 | US$0.208 | US$0.192 | US$0.176 |
 
 These rows remain `benchmark_guarded`. Automated paid release is blocked until LISTIA runs real test clips, records compute/cold-start/retry/Quality-Gate cost, and confirms accepted-output quality and margin. HyperFrames is preferred when source fidelity must remain deterministic; MuseTalk is the economical lip-sync route; EchoMimicV2 is a fallback when a canonical advisor video is unavailable.
 
@@ -107,10 +107,30 @@ Server function: `billing-checkout-create`
 
 The PWA module is `public/billing.js`.
 
+## Billing portal
+Server function: `billing-portal-create`
+
+- Requires a valid JWT and active `owner` or `admin` membership.
+- Uses the server-side Stripe customer stored for the organization.
+- Is rate limited per user and organization.
+- Returns only a short-lived Stripe Billing Portal URL.
+
+## Premium seat changes
+Server function: `billing-premium-seats-update`
+
+- Requires a valid JWT and active `owner` or `admin` membership.
+- Only applies to an effective Premium subscription.
+- Extra seats cost US$47/month each.
+- Repeated identical requests are treated as no-op when Stripe already has the requested quantity.
+- Update requests are rate limited and use a deterministic Stripe idempotency key.
+- Seat changes use `proration_behavior=always_invoice` so LISTIA attempts to invoice the remaining-cycle proration immediately while preserving the original billing-cycle anchor.
+- A failed mid-cycle proration remains a payment warning; a failed recurring renewal blocks access according to the lifecycle policy.
+- Final entitlement state is confirmed by the Stripe webhook rather than trusted from the browser response.
+
 ## Webhook
 Server function: `billing-stripe-webhook`
 
-Webhook processing validates Stripe's HMAC signature before applying billing state and stores event IDs for idempotency. A database normalization trigger enforces the canonical 50% / 25% / 12.5% `usage_markup_percent` whenever `organization_billing` is inserted or its plan changes, so stale provider-integration code cannot silently restore the old markup values.
+Webhook processing validates Stripe's HMAC signature before applying billing state and stores event IDs for idempotency. A database normalization trigger and constraint enforce the canonical **30% / 20% / 10%** `usage_markup_percent` for FREE / PRO / PREMIUM whenever `organization_billing` changes, so stale provider-integration code cannot silently restore obsolete markup values.
 
 Entitlement rules:
 - Active/trialing paid subscription -> paid plan active.
@@ -118,6 +138,7 @@ Entitlement rules:
 - Failed recurring renewal (`subscription_cycle`) -> `payment_blocked`.
 - Successful invoice -> clears payment restriction for a paid plan.
 - Canceled/incomplete/expired subscription -> effective plan returns to FREE.
+- Eligible paid subscription invoices can create affiliate commission records idempotently when an active referral exists.
 
 ## Taxes
 Stripe automatic tax is deliberately OFF. Do not enable automatic tax until LISTIA has confirmed the legal entity, tax registrations and jurisdictions in which it is registered to collect tax. Where taxes or mandatory government charges legally apply to a Gestión, the user-facing quote must handle them transparently as required by law.
