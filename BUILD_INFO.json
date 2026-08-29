@@ -1,39 +1,54 @@
 {
-  "version": "0.27.1",
+  "version": "0.27.2",
   "as_of": "2026-08-29",
-  "head_commit_verified": "f43dbc38692984b4f1822f753e581768d081e1db",
-  "status": "production_active_v0_27_1_pwa_backend_privacy_hardened",
+  "head_commit_verified": "06a688d8d43e483f94fbe976f99dc49d4b812393",
+  "status": "production_active_v0_27_2_pwa_cloudco_nvidia_property_ai",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "f43dbc38692984b4f1822f753e581768d081e1db",
-    "main_observed_at_utc": "2026-08-29T10:38:33Z",
-    "production_source_commit": "6e6f5180c53b705b3048fc3158a3489d08e456c7",
-    "production_verified_at_utc": "2026-08-29T10:07:35Z",
-    "deployment_proof_commit": "b38a73c60a3fe5dd58f3e640758f61d506fc739b",
+    "main_observed_commit": "06a688d8d43e483f94fbe976f99dc49d4b812393",
+    "main_observed_at_utc": "2026-08-29T13:19:45Z",
+    "production_source_commit": "901fbc5976906a2badc451283f5f3bb4060f564b",
+    "production_verified_at_utc": "2026-08-29T13:05:16Z",
+    "deployment_proof_commit": "36126c4a6e8a1e81476a48b51225f537396c750a",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
-    "backend_last_verified_migration": "20260829103757_sanitize_marketplace_public_descriptions_at_write",
-    "backend_migration_source_commit": "f43dbc38692984b4f1822f753e581768d081e1db",
+    "backend_last_verified_migration": "20260829131750_enable_property_ai_dispatch_cron",
+    "backend_migration_source_commit": "c1cf480ee18fa053d8293d4bf59e461fa17ee32d",
     "rule": "Production frontend commit, current GitHub main and backend migration state are tracked separately. The BUILD_INFO commit itself can be newer than main_observed_commit because it records the immediately preceding verified state. Verify GitHub main, Supabase live state and production checks before claiming completion."
   },
   "languages": {
-    "supported": ["es", "en", "fr", "it", "pt-BR", "de", "ar-AE", "ru", "he", "zh-CN", "ja"],
+    "supported": [
+      "es",
+      "en",
+      "fr",
+      "it",
+      "pt-BR",
+      "de",
+      "ar-AE",
+      "ru",
+      "he",
+      "zh-CN",
+      "ja"
+    ],
     "automatic_detection": true,
     "manual_override": true,
     "query_override": "lang",
     "preference_key": "listia_language",
     "cookie_key": "listia_lang",
     "fallback": "en",
-    "rtl": ["ar-AE", "he"],
+    "rtl": [
+      "ar-AE",
+      "he"
+    ],
     "profile_sync": true
   },
   "production": {
     "pwa": {
       "active": true,
       "host": "https://app.listiaapp.com",
-      "bootstrap_version": "0.27.1",
-      "source_commit": "6e6f5180c53b705b3048fc3158a3489d08e456c7",
+      "bootstrap_version": "0.27.2",
+      "source_commit": "901fbc5976906a2badc451283f5f3bb4060f564b",
       "source_worker": "listia-app",
       "route": "app.listiaapp.com/*",
       "javascript_gate": true,
@@ -109,7 +124,17 @@
       "publish_pipeline": true,
       "needs_info_status": true,
       "free_plan_non_archived_limit": 3,
-      "published_without_image_verified": 0
+      "published_without_image_verified": 0,
+      "ai_provider": "nvidia",
+      "ai_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "ai_transport": "cloudco_gateway",
+      "ai_runtime_health": "healthy",
+      "property_ai_worker_version": 3,
+      "property_ai_dispatch_cron": true,
+      "property_ai_dispatch_schedule": "* * * * *",
+      "property_ai_dispatch_batch_max": 3,
+      "property_ai_empty_queue_short_circuit": true,
+      "property_ai_controlled_e2e_verified": true
     },
     "leads": {
       "workspace": true,
@@ -200,7 +225,10 @@
     "push_dispatch_cron": true,
     "edge_functions_active": true,
     "website_provision_function_version": 3,
-    "last_verified_migration": "20260829103757_sanitize_marketplace_public_descriptions_at_write"
+    "last_verified_migration": "20260829131750_enable_property_ai_dispatch_cron",
+    "property_ai_runtime": "nvidia:cloudco",
+    "property_ai_gateway_server_side_only": true,
+    "property_ai_dispatch_cron": true
   },
   "pricing": {
     "free_usd_month": 0,
