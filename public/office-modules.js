@@ -31,15 +31,17 @@
     const r=await fetch(`${cfg.SUPABASE_URL}${path}`,{headers:{apikey:API_KEY,Authorization:`Bearer ${token}`},cache:'no-store'});
     if(!r.ok) return null; return r.json().catch(()=>null);
   }
-  async function context(){
-    const session=readSession(); if(!session?.access_token) return null;
-    let userId=session.user?.id||null; if(!userId){const u=await get('/auth/v1/user',session.access_token);userId=u?.id||null}
-    if(!userId)return null;
-    const m=await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`,session.access_token);
-    const organizationId=Array.isArray(m)?m[0]?.organization_id:null; return organizationId?{token:session.access_token,organizationId}:null;
-  }
+async function context(){
+  const session=readSession(); if(!session?.access_token) return null;
+  const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;
+  if(active?.organization_id)return{token:session.access_token,organizationId:active.organization_id};
+  let userId=session.user?.id||null; if(!userId){const u=await get('/auth/v1/user',session.access_token);userId=u?.id||null}
+  if(!userId)return null;
+  const m=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`,session.access_token);
+  const organizationId=Array.isArray(m)?m[0]?.organization_id:null; return organizationId?{token:session.access_token,organizationId}:null;
+}
 
-  function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id)); window.scrollTo({top:0,behavior:'instant'}); }
+function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id)); window.scrollTo({top:0,behavior:'instant'}); }
 
   function ensureStyles(){
     if(document.getElementById('listiaOfficeModuleStyles'))return;
