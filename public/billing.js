@@ -140,7 +140,9 @@
     const session = readSession();
     if (!session?.access_token) throw new Error('session_required');
     const user = await request('/auth/v1/user', { token: session.access_token });
-    const memberships = await request(`/rest/v1/organization_members?select=organization_id,role,status&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`, { token: session.access_token });
+    const active = window.LISTIA_WORKSPACE?.getActiveWorkspace ? await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true }).catch(() => null) : null;
+    if (active?.organization_id) return { token: session.access_token, user, organizationId: active.organization_id, role: active.role || 'member' };
+    const memberships = await request(`/rest/v1/organization_members?select=organization_id,role,status,created_at&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`, { token: session.access_token });
     const member = Array.isArray(memberships) ? memberships[0] : null;
     if (!member?.organization_id) throw new Error('organization_required');
     return { token: session.access_token, user, organizationId: member.organization_id, role: member.role };

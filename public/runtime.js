@@ -49,8 +49,12 @@
       userId = user?.id || null;
     }
     if (!userId) return null;
-    const memberships = await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`, session.access_token);
-    const organizationId = Array.isArray(memberships) ? memberships[0]?.organization_id : null;
+    const active = window.LISTIA_WORKSPACE?.getActiveWorkspace ? await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true }).catch(() => null) : null;
+    let organizationId = active?.organization_id || null;
+    if (!organizationId) {
+      const memberships = await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`, session.access_token);
+      organizationId = Array.isArray(memberships) ? memberships[0]?.organization_id : null;
+    }
     if (!organizationId) return null;
     const rows = await get(`/rest/v1/organization_billing?select=plan_key,billing_status,access_state,usage_markup_percent&organization_id=eq.${encodeURIComponent(organizationId)}&limit=1`, session.access_token);
     return Array.isArray(rows) ? rows[0] || null : null;
