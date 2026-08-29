@@ -3,11 +3,8 @@ name: LISTIA Quintana Roo Image-First Crawl
 # Raw crawl snapshots are ephemeral runner data only. They must never be committed
 # to GitHub or uploaded as public artifacts. Authentication to LISTIA uses GitHub
 # Actions OIDC; no Supabase API key is stored in this repository/workflow.
+# Manual-only until larger state runs are deliberately promoted after QA.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/listia-qroo-image-first-crawl.yml"
   workflow_dispatch:
     inputs:
       max_pages:
@@ -49,11 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
-            pages="1"
-          else
-            pages="${{ inputs.max_pages }}"
-          fi
+          pages="${{ inputs.max_pages }}"
           if ! [[ "${pages}" =~ ^[0-9]+$ ]] || (( pages > 1000 )); then
             echo "Invalid max_pages=${pages}" >&2
             exit 2
