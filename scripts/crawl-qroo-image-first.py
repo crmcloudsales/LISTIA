@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LISTIA image-first crawl trigger: 2026-08-29
 from __future__ import annotations
 
 import importlib.util
