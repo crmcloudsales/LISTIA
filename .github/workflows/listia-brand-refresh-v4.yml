@@ -7,6 +7,7 @@ on:
       - 'public/listia-official-icon-v3.svg'
       - 'public/listia-official-icon-maskable-v4.svg'
       - 'public/listia-site-isotipo-v4.svg'
+      - 'public/lead-notifications.js'
       - 'commercial/listia-official-icon-v3.svg'
       - '.github/workflows/listia-brand-refresh-v4.yml'
   workflow_dispatch:
@@ -80,12 +81,14 @@ jobs:
           s=re.sub(r'<link href="/listia-app-icon-180\.png\?v=\d+" rel="apple-touch-icon" sizes="180x180"/>','<link href="/listia-app-icon-180.png?v=5" rel="apple-touch-icon" sizes="180x180"/>',s)
           s=re.sub(r'<link href="/listia-app-icon-32\.png\?v=\d+" rel="icon" sizes="32x32" type="image/png"/>','<link href="/listia-app-icon-32.png?v=5" rel="icon" sizes="32x32" type="image/png"/>',s)
           s=s.replace('/manifest-en.webmanifest?v=0.9.5','/manifest-en.webmanifest?v=0.9.6')
+          if '/lead-notifications.js' not in s:
+              s=s.replace('<script src="/app.js', '<script src="/lead-notifications.js?v=1"></script>\n<script src="/app.js',1)
           p.write_text(s,encoding='utf-8')
 
           sw=root/'sw.js'
           if sw.exists():
               s=sw.read_text(encoding='utf-8')
-              s=re.sub(r'const CACHE="listia-pwa-v[^"]+";','const CACHE="listia-pwa-v0.10.0";',s)
+              s=re.sub(r'const CACHE="listia-pwa-v[^"]+";','const CACHE="listia-pwa-v0.10.1";',s)
               s=re.sub(r'/listia-app-icon-(32|180|192|512)\.png\?v=\d+',r'/listia-app-icon-\1.png?v=5',s)
               s=re.sub(r'/listia-app-icon-maskable-(192|512)\.png\?v=\d+',r'/listia-app-icon-maskable-\1.png?v=5',s)
               sw.write_text(s,encoding='utf-8')
@@ -93,6 +96,7 @@ jobs:
           assert manifests, 'No manifests found'
           assert 'short_name": "Listia"' in (root/'manifest-en.webmanifest').read_text(encoding='utf-8')
           assert '<title>Listia</title>' in p.read_text(encoding='utf-8')
+          assert '/lead-notifications.js' in p.read_text(encoding='utf-8')
           PY
 
       - name: Commit generated official brand assets
@@ -102,7 +106,7 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add public
           git diff --cached --quiet && exit 0
-          git commit -m 'feat: refresh official Listia app icon, favicon, isotype and label'
+          git commit -m 'feat: refresh Listia brand assets and realtime lead notifications'
           for attempt in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0
             sleep $((attempt*2))
