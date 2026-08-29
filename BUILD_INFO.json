@@ -1,17 +1,17 @@
 {
   "version": "0.27.2",
   "as_of": "2026-08-29",
-  "head_commit_verified": "228f4b3eb68d03a636377bd508f06319303048a9",
+  "head_commit_verified": "e38332e9a04aabe59397b345c3c538e0abf14f4f",
   "status": "production_active_v0_27_2_pwa_cloudco_nvidia_conversion_runtime",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "228f4b3eb68d03a636377bd508f06319303048a9",
-    "main_observed_at_utc": "2026-08-29T14:44:23Z",
-    "production_source_commit": "0e4497c0a97b58f68e8db3e66a2aed98b3107196",
-    "production_verified_at_utc": "2026-08-29T14:43:03Z",
-    "deployment_proof_commit": "44d27c6ee20d220f52b000921b637d09162f7e6e",
+    "main_observed_commit": "e38332e9a04aabe59397b345c3c538e0abf14f4f",
+    "main_observed_at_utc": "2026-08-29T14:50:10Z",
+    "production_source_commit": "6ccbd99fdd3ca59cfc34831d77e0e7106456a151",
+    "production_verified_at_utc": "2026-08-29T14:48:46Z",
+    "deployment_proof_commit": "09acdcbb42c97788f813c7d2f6c72f6b62209fcb",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
     "backend_last_verified_migration": "20260829140851_add_google_oauth_capability_state",
     "backend_migration_source_commit": "60b910b3289dd7e03b5cf541341cf081a0548213",
@@ -48,7 +48,7 @@
       "active": true,
       "host": "https://app.listiaapp.com",
       "bootstrap_version": "0.27.2",
-      "source_commit": "0e4497c0a97b58f68e8db3e66a2aed98b3107196",
+      "source_commit": "6ccbd99fdd3ca59cfc34831d77e0e7106456a151",
       "source_worker": "listia-app",
       "route": "app.listiaapp.com/*",
       "javascript_gate": true,
@@ -222,7 +222,9 @@
       "google_ads_incremental_oauth": true,
       "google_ads_config_endpoint": true,
       "google_ads_setup_ui": true,
-      "google_ads_real_delivery_verified": false
+      "google_ads_real_delivery_verified": false,
+      "meta_capi_config_function_version": 2,
+      "meta_capi_setup_ui": true
     },
     "voice": {
       "runtime": true,
@@ -257,7 +259,8 @@
     "conversion_dispatch_cron": true,
     "conversion_dispatch_private_delivery_state": true,
     "google_oauth_incremental_capabilities": true,
-    "meta_capi_config_function": true
+    "meta_capi_config_function": true,
+    "meta_capi_config_function_version": 2
   },
   "pricing": {
     "free_usd_month": 0,
