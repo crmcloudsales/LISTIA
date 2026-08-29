@@ -1,0 +1,34 @@
+name: LISTIA workspace lookup audit v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-workspace-lookup-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Capture unordered workspace lookups
+        run: |
+          set -Eeuo pipefail
+          grep -R -n -F 'status=eq.active&limit=1' public --include='*.js' > WORKSPACE_LOOKUP_AUDIT.txt || true
+          if [[ ! -s WORKSPACE_LOOKUP_AUDIT.txt ]]; then
+            echo 'none' > WORKSPACE_LOOKUP_AUDIT.txt
+          fi
+      - name: Persist audit result
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add WORKSPACE_LOOKUP_AUDIT.txt
+          git commit -m 'Record LISTIA unordered workspace lookup audit' || exit 0
+          git push origin main
