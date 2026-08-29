@@ -1,106 +1,75 @@
-name: LISTIA Official Brand Assets v8
+name: LISTIA Official Brand Assets v8 Lock
 
 on:
   push:
     branches: [main]
     paths:
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'public/index.html'
+      - 'public/manifest*.webmanifest'
+      - 'public/listia-app-icon-*.png'
+      - 'public/listia-app-icon-official.jpg'
       - 'public/listia-official-icon-v3.svg'
       - 'public/listia-official-icon-maskable-v4.svg'
       - 'public/listia-site-isotipo-v4.svg'
-      - 'public/listia-wordmark-light.webp'
-      - 'public/listia-wordmark-dark.webp'
+      - 'public/listia-wordmark-*.webp'
+      - 'public/listia-logo-transparent.webp'
+      - 'public/listia-mark-transparent.webp'
       - '.github/workflows/listia-official-app-icon.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: listia-official-brand-assets-v8
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  build-brand-assets:
+  validate-brand-lock:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Sync current main
+      - name: Validate immutable official LISTIA v8 branding
+        shell: bash
         run: |
           set -Eeuo pipefail
-          git fetch origin main
-          git reset --hard origin/main
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - name: Install renderer
-        run: python -m pip install --disable-pip-version-check pillow cairosvg
-      - name: Build official derivatives
-        run: |
-          set -Eeuo pipefail
-          python <<'PY'
-          from pathlib import Path
-          from io import BytesIO
-          from PIL import Image
-          import cairosvg
+          check_blob(){
+            local path="$1" expected="$2" actual
+            actual="$(git hash-object "$path")"
+            [[ "$actual" == "$expected" ]] || { echo "Brand lock mismatch: $path expected=$expected actual=$actual"; exit 1; }
+          }
 
-          root=Path('public')
-          def render(svg_path,size):
-              data=cairosvg.svg2png(url=str(svg_path),output_width=size,output_height=size)
-              return Image.open(BytesIO(data)).convert('RGBA')
-          def png(img,path): img.save(path,format='PNG',optimize=True)
+          check_blob public/listia-official-icon-v3.svg 665cee559b286d8087748339b23c2838cab45362
+          check_blob public/listia-official-icon-maskable-v4.svg 195401f4b242bea123e84a8dea180f97b47c0bef
+          check_blob public/listia-site-isotipo-v4.svg f690cdc625c7e334a4ef5349253b42e3fd9c36fb
+          check_blob public/listia-wordmark-light.webp f9bf5ed6c387ea41c6b94dabd5e0fcad24a3221e
+          check_blob public/listia-wordmark-dark.webp 370df67f99e8cbf554788bd9c2f5597e91ca46d3
+          check_blob public/listia-app-icon-32.png b896acfb2dad89735e9789a273787f3ec7cf49ef
+          check_blob public/listia-app-icon-180.png e8450942e93d0fa53a001ff378959fd8a0074c4b
+          check_blob public/listia-app-icon-192.png 0adab0b4922ca03a73b99a94fa1759cab7deeda2
+          check_blob public/listia-app-icon-512.png cf8caeeafd1485d0a8ec57b2653472ae2dd7d24e
+          check_blob public/listia-app-icon-maskable-192.png 91ed956dbabe968da59ff67203ac11d04cba8f7a
+          check_blob public/listia-app-icon-maskable-512.png 13a5370dd4771d9542ab83f3ee6a7545e987a5c7
+          check_blob public/listia-app-icon-official.jpg 546f0261fba40f9296eb680baa79720039796e8c
 
-          app_svg=root/'listia-official-icon-v3.svg'
-          mask_svg=root/'listia-official-icon-maskable-v4.svg'
-          iso_svg=root/'listia-site-isotipo-v4.svg'
-
-          for size in (32,180,192,512):
-              png(render(app_svg,size),root/f'listia-app-icon-{size}.png')
-          for size in (192,512):
-              png(render(mask_svg,size),root/f'listia-app-icon-maskable-{size}.png')
-          render(app_svg,1024).convert('RGB').save(root/'listia-app-icon-official.jpg',quality=95,optimize=True)
-
-          iso1024=render(iso_svg,1024)
-          png(iso1024,root/'listia-isotipo-official-v4.png')
-          for size,name in ((32,'listia-isotipo-32-v2.png'),(180,'listia-isotipo-180-v2.png'),(192,'listia-isotipo-192-v2.png'),(512,'listia-isotipo-512-v2.png')):
-              png(render(iso_svg,size),root/name)
-          png(render(iso_svg,192),root/'listia-isotipo-maskable-192-v3.png')
-          png(render(iso_svg,512),root/'listia-isotipo-maskable-512-v3.png')
-
-          mark=render(iso_svg,512)
-          mark.save(root/'listia-mark-transparent.webp',format='WEBP',lossless=True,method=6)
-          wm=Image.open(root/'listia-wordmark-light.webp').convert('RGBA')
-          target_h=180
-          wm=wm.resize((round(wm.width*target_h/wm.height),target_h),Image.Resampling.LANCZOS)
-          iso=render(iso_svg,260)
-          pad,gap=20,28
-          canvas=Image.new('RGBA',(pad+iso.width+gap+wm.width+pad,max(iso.height,wm.height)+2*pad),(0,0,0,0))
-          canvas.alpha_composite(iso,(pad,(canvas.height-iso.height)//2))
-          canvas.alpha_composite(wm,(pad+iso.width+gap,(canvas.height-wm.height)//2))
-          canvas.save(root/'listia-logo-transparent.webp',format='WEBP',lossless=True,method=6)
-          PY
-      - name: Validate generated scope
-        run: |
-          set -Eeuo pipefail
-          changed="$(git diff --name-only)"
-          printf '%s\n' "$changed"
-          if printf '%s\n' "$changed" | grep -E '(^|/)marketplace' >/dev/null; then
-            echo 'Brand build must never modify Marketplace files.'
-            exit 1
-          fi
-          node -e "JSON.parse(require('fs').readFileSync('public/manifest.webmanifest','utf8'))"
-      - name: Commit derivatives
-        run: |
-          set -Eeuo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png \
-            public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png public/listia-app-icon-official.jpg \
-            public/listia-isotipo-official-v4.png public/listia-isotipo-32-v2.png public/listia-isotipo-180-v2.png public/listia-isotipo-192-v2.png public/listia-isotipo-512-v2.png \
-            public/listia-isotipo-maskable-192-v3.png public/listia-isotipo-maskable-512-v3.png public/listia-mark-transparent.webp public/listia-logo-transparent.webp
-          if git diff --cached --quiet; then echo 'Brand derivatives already current.'; exit 0; fi
-          git commit -m 'Build LISTIA official brand assets v8'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          node --check public/config.js
+          node --check public/sw.js
+          node <<'NODE'
+          const fs=require('fs');
+          const config=fs.readFileSync('public/config.js','utf8');
+          const sw=fs.readFileSync('public/sw.js','utf8');
+          const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
+          const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
+          if(!app||!cache) throw new Error('Missing LISTIA release metadata');
+          if(app[1]!=='0.27.2'||cache[1]!=='0.27.2'||app[1]!==cache[1]) throw new Error(`Release lock mismatch app=${app?.[1]} cache=${cache?.[1]}`);
+          const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
+          if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
+          for(const file of files){
+            const m=JSON.parse(fs.readFileSync(`public/${file}`,'utf8'));
+            if(!Array.isArray(m.icons)||!m.icons.length) throw new Error(`${file}: missing icons`);
+            for(const icon of m.icons){
+              if(!String(icon.src||'').includes('?v=8')) throw new Error(`${file}: non-v8 icon ${icon.src}`);
+            }
+          }
+          if(!sw.includes('/listia-app-icon-192.png?v=8')||!sw.includes('/listia-app-icon-512.png?v=8')) throw new Error('Service worker is not pinned to v8 icons');
+          console.log('LISTIA official brand v8 lock OK');
+          NODE
