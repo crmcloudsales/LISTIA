@@ -1,0 +1,83 @@
+name: LISTIA Google Ads UI wire v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-google-ads-ui-wire-v1.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-google-ads-ui-wire-v1
+  cancel-in-progress: false
+
+jobs:
+  wire-and-retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Wire Google Ads module into PWA
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='<script defer="" src="/app.js"></script>'
+          tag='<script defer="" src="/google-ads-connect.js?v=1"></script>'
+          if tag not in s:
+              if s.count(marker)!=1:
+                  raise SystemExit(f'Expected exactly one app.js script marker, found {s.count(marker)}')
+              s=s.replace(marker,marker+'\n'+tag,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+          node --check public/google-ads-connect.js
+          grep -Fq '<script defer="" src="/google-ads-connect.js?v=1"></script>' public/index.html
+
+      - name: Retire this one-shot workflow
+        shell: bash
+        run: |
+          cat > .github/workflows/listia-google-ads-ui-wire-v1.yml <<'YAML'
+          name: Retired - LISTIA Google Ads UI wire v1
+
+          on:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            retired:
+              runs-on: ubuntu-latest
+              steps:
+                - name: Retirement notice
+                  run: echo 'Retired - google-ads-connect.js is wired into public/index.html. This workflow must not mutate main.'
+          YAML
+
+      - name: Commit atomically
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          changed="$(git diff --name-only | sort)"
+          printf '%s\n' "$changed"
+          test "$changed" = $'.github/workflows/listia-google-ads-ui-wire-v1.yml\npublic/index.html' || {
+            echo 'Unexpected files changed; refusing commit.' >&2
+            exit 1
+          }
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html .github/workflows/listia-google-ads-ui-wire-v1.yml
+          git commit -m 'Wire Google Ads conversion setup into LISTIA PWA'
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
