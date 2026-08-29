@@ -1,0 +1,5 @@
+LISTIA Brand v7
+App/PWA icon source: user-supplied square purple gradient with smaller white house; preserve full source without cropping.
+Visible site/PWA isotipo source: user-supplied speech-bubble/house mark.
+Installed product name: Listia.
+Marketplace CTA: Me interesa only.
