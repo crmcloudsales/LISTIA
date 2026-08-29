@@ -28,7 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      QROO_CRAWL_OUT: ${{ runner.temp }}/qroo-crawl
       QROO_WORKERS: "6"
       QROO_CRAWL_SLEEP: "0.20"
       QROO_INGEST_BATCH_SIZE: "200"
@@ -46,14 +45,11 @@ jobs:
       - name: Install crawler dependencies
         run: python -m pip install --disable-pip-version-check beautifulsoup4 curl_cffi
 
-      - name: Resolve safe crawl size
+      - name: Resolve safe crawl size and ephemeral storage
         shell: bash
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
-            # The workflow-file deployment itself performs one controlled page as
-            # the positive OIDC/Edge smoke test. Larger runs remain manual until
-            # this path is verified in production.
             pages="1"
           else
             pages="${{ inputs.max_pages }}"
@@ -63,6 +59,7 @@ jobs:
             exit 2
           fi
           echo "QROO_MAX_PAGES=${pages}" >> "${GITHUB_ENV}"
+          echo "QROO_CRAWL_OUT=${RUNNER_TEMP}/qroo-crawl" >> "${GITHUB_ENV}"
 
       - name: Crawl image-first inventory to ephemeral runner storage
         run: python scripts/crawl-qroo-image-first.py
