@@ -40,7 +40,7 @@
     const email=u.email||p.email||null,phone=u.phone||p.whatsapp||p.phone||null;
     if(button){button.disabled=true;button.dataset.originalText=button.textContent||'';button.textContent=locale()==='es'?'Enviando…':'Sending…'}
     try{
-      const r=await fetch(`${cfg.SUPABASE_URL}/rest/v1/rpc/submit_marketplace_interest_click`,{method:'POST',headers:{apikey:API_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({p_listing_id:x.id,p_contact_email:email,p_contact_phone:phone,p_source:'marketplace_me_interesa',p_consent_basis:'marketplace_interest_click'})});
+      const r=await fetch(`${cfg.SUPABASE_URL}/rest/v1/rpc/submit_marketplace_interest_click`,{method:'POST',headers:{apikey:API_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({p_listing_id:x.id,p_locale:locale()})});
       if(r.status===401){localStorage.removeItem('listia_session');window.ListiaSeeker?.openAuth?.({listingId:x.id});return false}
       if(!r.ok)throw new Error(`HTTP ${r.status}`);
       sessionStorage.setItem(once,'1');localStorage.removeItem('listia_pending_interest');
