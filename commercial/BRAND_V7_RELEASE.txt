@@ -1,5 +1,7 @@
-Listia commercial brand v7
-- Visible brand isotipo: listia-site-isotipo-v4.svg
-- Favicon: official Listia app icon
+Listia commercial brand v9 routing repair
+- Visible brand lockup: listia-site-isotipo-v4.svg
+- Wordmark assets: listia-wordmark-light.webp / listia-wordmark-dark.webp
+- Favicon route: listia-app-icon-32.png
 - Brand casing: Listia
-Deployment trigger: 2026-08-29
+- Worker routes repaired and validated
+Deployment trigger: 2026-08-29T21:27Z
