@@ -28,7 +28,9 @@ OUT_DIR = Path(os.getenv("QROO_CRAWL_OUT", "data/qroo-crawl"))
 CHUNK_SIZE = int(os.getenv("QROO_CHUNK_SIZE", "1500"))
 MAX_PAGES = int(os.getenv("QROO_MAX_PAGES", "0"))
 WORKERS = max(2, min(int(os.getenv("QROO_WORKERS", "14")), 24))
-DETAIL_FALLBACK = os.getenv("QROO_DETAIL_IMAGE_FALLBACK", "1").strip().lower() not in {"0", "false", "off", "no"}
+# Fail closed: detail-page recovery is prepared but has not passed a live workflow smoke test.
+# It must be explicitly enabled by the controlled workflow when QA is being performed.
+DETAIL_FALLBACK = os.getenv("QROO_DETAIL_IMAGE_FALLBACK", "0").strip().lower() not in {"0", "false", "off", "no"}
 MAX_DETAIL_IMAGES = max(1, min(int(os.getenv("QROO_MAX_DETAIL_IMAGES", "12")), 24))
 
 BAD_IMAGE = re.compile(
