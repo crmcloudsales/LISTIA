@@ -32,14 +32,14 @@ jobs:
       - name: Install dependencies
         run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
 
-      - name: Crawl iad Mexico test page
+      - name: Crawl full iad Mexico inventory
         id: iad_crawl
         shell: bash
         env:
           IAD_OUT: data/iad-mexico
-          IAD_MAX_PAGES: '1'
-          IAD_FETCH_DETAILS: '0'
-          IAD_WORKERS: '4'
+          IAD_MAX_PAGES: '0'
+          IAD_FETCH_DETAILS: '1'
+          IAD_WORKERS: '8'
           IAD_CHUNK_SIZE: '250'
         run: |
           set +e
@@ -47,7 +47,8 @@ jobs:
           python scripts/crawl-iad-mexico.py > data/iad-mexico/crawl.log 2>&1
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          cat data/iad-mexico/crawl.log || true
+          echo "Crawler exit code: $code"
+          tail -n 120 data/iad-mexico/crawl.log || true
           exit 0
 
       - name: Validate snapshot
@@ -61,8 +62,9 @@ jobs:
           from pathlib import Path
           m=json.loads(Path('data/iad-mexico/manifest.json').read_text())
           print(m)
-          assert m['rows'] >= 20
-          assert m['chunks']
+          assert m['rows'] >= 1500
+          assert len(m['chunks']) >= 6
+          assert len(m['failures']) <= 20
           PY
 
       - name: Commit snapshot
@@ -73,6 +75,6 @@ jobs:
           git config user.name 'LISTIA Inventory Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add data/iad-mexico
-          git commit -m 'Refresh iad Mexico inventory snapshot' || exit 0
+          git commit -m 'Refresh full iad Mexico inventory snapshot' || exit 0
           git pull --rebase origin main
           git push origin main
