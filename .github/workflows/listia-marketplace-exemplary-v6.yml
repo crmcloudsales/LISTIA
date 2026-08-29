@@ -1,0 +1,98 @@
+name: Apply LISTIA Marketplace Exemplary V6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apply-marketplace-exemplary-v6.py'
+      - '.github/workflows/listia-marketplace-exemplary-v6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-marketplace-exemplary-v6
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply marketplace and brand patch
+        run: python3 scripts/apply-marketplace-exemplary-v6.py
+
+      - name: Rebuild visible isotipo assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --quiet cairosvg pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          import cairosvg
+          from PIL import Image
+          svg=Path('public/listia-site-isotipo-v4.svg')
+          png=Path('/tmp/listia-site-isotipo-v6.png')
+          cairosvg.svg2png(bytestring=svg.read_bytes(),write_to=str(png),output_width=768,output_height=768)
+          im=Image.open(png).convert('RGBA')
+          im.save('public/listia-isotipo-official-v4.png','PNG',optimize=True)
+          im.save('public/listia-logo-transparent.webp','WEBP',lossless=True,method=6)
+          im.save('public/listia-mark-transparent.webp','WEBP',lossless=True,method=6)
+          PY
+
+      - name: Ensure app icon is never adaptive-cropped
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          src=Path('public/listia-app-icon-official.jpg')
+          im=Image.open(src).convert('RGB')
+          # Direct resize only: no center crop, no maskable safe-zone zoom.
+          for size in (32,180,192,512):
+              im.resize((size,size),Image.Resampling.LANCZOS).save(f'public/listia-app-icon-{size}.png','PNG',optimize=True)
+          PY
+
+      - name: Validate release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check public/marketplace.js
+          grep -Fq "marketplace-interest-button" public/marketplace.js
+          ! grep -Fq "acts.append(view,interest)" public/marketplace.js
+          grep -Fq "submit_marketplace_interest_click" public/marketplace.js
+          grep -Fq "openstreetmap.org/export/embed.html" public/marketplace.js
+          grep -Fq "font-size:14px!important" public/marketplace.css
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifests=list(Path('public').glob('manifest*.webmanifest'))
+          assert len(manifests)>=12
+          for p in manifests:
+              d=json.loads(p.read_text())
+              assert d['name']=='Listia' and d['short_name']=='Listia'
+              assert all(i.get('purpose')=='any' for i in d['icons'])
+          print('validated',len(manifests),'manifests')
+          PY
+
+      - name: Commit v6 release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public commercial
+          git commit -m 'feat: exemplary marketplace CTA lead routing gallery map and Listia brand v6' || exit 0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
