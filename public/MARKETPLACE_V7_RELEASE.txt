@@ -1,7 +1,10 @@
 Listia Marketplace v7
 - Larger Venta/Renta badge
 - Single Me interesa CTA
-- CTA opens detail and creates/routs lead
+- CTA opens detail and creates/routes lead
 - Listia installed name
-- non-maskable official app icon
-- official site isotipo visible across PWA/commercial
+- non-maskable official app icon (preserves smaller house / no Android zoom crop)
+- official speech-bubble/house isotipo visible across PWA/commercial
+- smart lead routing: listing owner -> listing organization -> postal code -> neighborhood -> city -> state
+- discovery profile and new-lead notification
+Deployment trigger: 2026-08-29
