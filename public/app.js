@@ -239,11 +239,26 @@ async function getCurrentUser(session) {
 }
 
 async function getUserOrganization(session, userId) {
-  const memberPath = `/rest/v1/organization_members?select=organization_id,role,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`;
-  const memberships = await api(memberPath, { accessToken: session.access_token });
-  const membership = Array.isArray(memberships) ? memberships[0] : null;
-  if (!membership?.organization_id) return null;
+  let membership = null;
 
+  if (window.LISTIA_WORKSPACE?.getActiveWorkspace) {
+    try {
+      const active = await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true });
+      if (active?.organization_id) {
+        membership = { organization_id: active.organization_id, role: active.role || "member" };
+      }
+    } catch (error) {
+      console.warn("LISTIA canonical workspace unavailable; using deterministic membership fallback", error);
+    }
+  }
+
+  if (!membership?.organization_id) {
+    const memberPath = `/rest/v1/organization_members?select=organization_id,role,status,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`;
+    const memberships = await api(memberPath, { accessToken: session.access_token });
+    membership = Array.isArray(memberships) ? memberships[0] : null;
+  }
+
+  if (!membership?.organization_id) return null;
   const orgPath = `/rest/v1/organizations?select=id,name,business_type,primary_market,onboarding_completed&id=eq.${encodeURIComponent(membership.organization_id)}&limit=1`;
   const organizations = await api(orgPath, { accessToken: session.access_token });
   const org = Array.isArray(organizations) ? organizations[0] : null;
