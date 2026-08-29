@@ -1,6 +1,7 @@
 (() => {
   'use strict';
 
+  const CLIENT_VERSION = '1.0.0';
   const CFG = window.LISTIA_CONFIG || {};
   const API_KEY = CFG.SUPABASE_PUBLISHABLE_KEY || CFG.SUPABASE_ANON_KEY || '';
   const SESSION_KEY = 'listia_session';
@@ -82,6 +83,7 @@
   });
 
   window.LISTIA_WORKSPACE = Object.freeze({
+    version: CLIENT_VERSION,
     getContext,
     getActiveWorkspace,
     setActiveWorkspace,
