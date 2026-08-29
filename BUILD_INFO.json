@@ -1,17 +1,17 @@
 {
   "version": "0.27.2",
   "as_of": "2026-08-29",
-  "head_commit_verified": "e38332e9a04aabe59397b345c3c538e0abf14f4f",
+  "head_commit_verified": "b40d5203e1ad48091e7d99093bbbef8b4877d001",
   "status": "production_active_v0_27_2_pwa_cloudco_nvidia_conversion_runtime",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "e38332e9a04aabe59397b345c3c538e0abf14f4f",
-    "main_observed_at_utc": "2026-08-29T14:50:10Z",
-    "production_source_commit": "6ccbd99fdd3ca59cfc34831d77e0e7106456a151",
-    "production_verified_at_utc": "2026-08-29T14:48:46Z",
-    "deployment_proof_commit": "09acdcbb42c97788f813c7d2f6c72f6b62209fcb",
+    "main_observed_commit": "b40d5203e1ad48091e7d99093bbbef8b4877d001",
+    "main_observed_at_utc": "2026-08-29T15:04:49Z",
+    "production_source_commit": "21b28090583fbe49313326954a2c224dc0559bf4",
+    "production_verified_at_utc": "2026-08-29T15:03:28Z",
+    "deployment_proof_commit": "0dd98aaae68a237c61baea3e9421f7e255851e98",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
     "backend_last_verified_migration": "20260829140851_add_google_oauth_capability_state",
     "backend_migration_source_commit": "60b910b3289dd7e03b5cf541341cf081a0548213",
@@ -48,7 +48,7 @@
       "active": true,
       "host": "https://app.listiaapp.com",
       "bootstrap_version": "0.27.2",
-      "source_commit": "6ccbd99fdd3ca59cfc34831d77e0e7106456a151",
+      "source_commit": "21b28090583fbe49313326954a2c224dc0559bf4",
       "source_worker": "listia-app",
       "route": "app.listiaapp.com/*",
       "javascript_gate": true,
@@ -224,7 +224,17 @@
       "google_ads_setup_ui": true,
       "google_ads_real_delivery_verified": false,
       "meta_capi_config_function_version": 2,
-      "meta_capi_setup_ui": true
+      "meta_capi_setup_ui": true,
+      "conversion_integrations_status_endpoint": true,
+      "conversion_signal_health_ui": true,
+      "tiktok_events_config_endpoint": true,
+      "tiktok_events_setup_ui": true,
+      "tiktok_connection_verified": false,
+      "tiktok_delivery_verified": false,
+      "linkedin_conversions_config_endpoint": true,
+      "linkedin_conversions_setup_ui": true,
+      "linkedin_connection_verified": false,
+      "linkedin_delivery_verified": false
     },
     "voice": {
       "runtime": true,
@@ -260,7 +270,10 @@
     "conversion_dispatch_private_delivery_state": true,
     "google_oauth_incremental_capabilities": true,
     "meta_capi_config_function": true,
-    "meta_capi_config_function_version": 2
+    "meta_capi_config_function_version": 2,
+    "conversion_integrations_status_function": true,
+    "tiktok_events_config_function": true,
+    "linkedin_conversions_config_function": true
   },
   "pricing": {
     "free_usd_month": 0,
