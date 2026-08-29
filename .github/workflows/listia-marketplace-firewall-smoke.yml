@@ -32,9 +32,23 @@ jobs:
           [[ "$interest_code" == 405 ]] || { echo "Interest GET HTTP ${interest_code}"; cat "$interest_body"; exit 2; }
           jq -e '.error == "method_not_allowed"' "$interest_body" >/dev/null
 
-          post_body=$(mktemp)
-          post_code=$(curl -sS --max-time 20 -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' --data '{}' -o "$post_body" -w '%{http_code}' 'https://app.listiaapp.com/api/interest')
-          [[ "$post_code" == 403 ]] || { echo "Cross-origin POST HTTP ${post_code}"; cat "$post_body"; exit 3; }
-          jq -e '.error == "origin_not_allowed"' "$post_body" >/dev/null
+          cross_body=$(mktemp)
+          cross_code=$(curl -sS --max-time 20 -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' --data '{}' -o "$cross_body" -w '%{http_code}' 'https://app.listiaapp.com/api/interest')
+          [[ "$cross_code" == 403 ]] || { echo "Cross-origin POST HTTP ${cross_code}"; cat "$cross_body"; exit 3; }
+          jq -e '.error == "origin_not_allowed"' "$cross_body" >/dev/null
+
+          human_body=$(mktemp)
+          human_code=$(curl -sS --max-time 20 -X POST \
+            -H 'Origin: https://app.listiaapp.com' \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Authorization: Bearer synthetic-smoke-token' \
+            -H 'apikey: synthetic-smoke-key' \
+            -H 'Content-Type: application/json' \
+            --data '{"mode":"click","p_listing_id":"00000000-0000-0000-0000-000000000000"}' \
+            -o "$human_body" -w '%{http_code}' 'https://app.listiaapp.com/api/interest')
+          [[ "$human_code" == 403 ]] || { echo "Missing Turnstile HTTP ${human_code}"; cat "$human_body"; exit 4; }
+          jq -e '.error == "missing_human_verification"' "$human_body" >/dev/null
 
           echo 'Marketplace firewall production smoke: PASS'
+          echo 'Cross-origin lead attempts: BLOCKED'
+          echo 'Lead attempts without Turnstile: BLOCKED'
