@@ -1,20 +1,20 @@
 {
   "version": "0.27.1",
   "as_of": "2026-08-29",
-  "head_commit_verified": "59ac7313458d29280a6aff220202e1cc07955daf",
-  "status": "production_active_v0_27_1_pwa_backend_media_hardened",
+  "head_commit_verified": "f43dbc38692984b4f1822f753e581768d081e1db",
+  "status": "production_active_v0_27_1_pwa_backend_privacy_hardened",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "59ac7313458d29280a6aff220202e1cc07955daf",
-    "main_observed_at_utc": "2026-08-29T10:31:49Z",
+    "main_observed_commit": "f43dbc38692984b4f1822f753e581768d081e1db",
+    "main_observed_at_utc": "2026-08-29T10:38:33Z",
     "production_source_commit": "6e6f5180c53b705b3048fc3158a3489d08e456c7",
     "production_verified_at_utc": "2026-08-29T10:07:35Z",
     "deployment_proof_commit": "b38a73c60a3fe5dd58f3e640758f61d506fc739b",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
-    "backend_last_verified_migration": "20260829103124_reject_marketplace_placeholder_images",
-    "backend_migration_source_commit": "59ac7313458d29280a6aff220202e1cc07955daf",
+    "backend_last_verified_migration": "20260829103757_sanitize_marketplace_public_descriptions_at_write",
+    "backend_migration_source_commit": "f43dbc38692984b4f1822f753e581768d081e1db",
     "rule": "Production frontend commit, current GitHub main and backend migration state are tracked separately. The BUILD_INFO commit itself can be newer than main_observed_commit because it records the immediately preceding verified state. Verify GitHub main, Supabase live state and production checks before claiming completion."
   },
   "languages": {
@@ -63,6 +63,11 @@
       "raw_crawl_snapshot_provenance_private": false,
       "published_public_verified": 2894,
       "published_public_without_valid_image_verified": 0,
+      "public_descriptions_audited": 2894,
+      "public_description_urls_verified": 0,
+      "public_description_provenance_cues_verified": 0,
+      "public_search_raw_description_enabled": false,
+      "public_description_write_sanitizer_active": true,
       "quintana_roo_published_public_verified": 561,
       "quintana_roo_without_valid_image_verified": 0,
       "generic_placeholder_guard_active": true,
@@ -128,6 +133,9 @@
       "managed_site_self_heal_external_domains": false,
       "managed_subdomains_verified_count": 0,
       "managed_site_positive_hostname_e2e_complete": false,
+      "managed_subdomain_public_projection_sanitized": true,
+      "managed_subdomain_raw_features_exposed": false,
+      "managed_subdomain_valid_image_filter": true,
       "managed_subdomain_health_gate": true,
       "wildcard_worker_route_verified": true,
       "unknown_hostname_root_returns_404": true,
@@ -186,12 +194,13 @@
     "marketplace_public_feed_sanitized_security_definer_projection": true,
     "raw_marketplace_member_rls_only": true,
     "marketplace_placeholder_validation_active": true,
+    "marketplace_public_description_sanitizer_active": true,
     "development_portfolio_uses_rls": true,
     "saved_search_cron": true,
     "push_dispatch_cron": true,
     "edge_functions_active": true,
     "website_provision_function_version": 3,
-    "last_verified_migration": "20260829103124_reject_marketplace_placeholder_images"
+    "last_verified_migration": "20260829103757_sanitize_marketplace_public_descriptions_at_write"
   },
   "pricing": {
     "free_usd_month": 0,
@@ -211,6 +220,9 @@
     "raw_marketplace_global_public_policy": false,
     "private_image_enforcement_client_execute_revoked": true,
     "marketplace_placeholder_guard": true,
+    "marketplace_public_description_write_sanitizer": true,
+    "marketplace_public_search_provenance_side_channel": false,
+    "managed_site_public_projection_sanitized": true,
     "security_advisor_rechecked_at_utc": "2026-08-29T10:33:26Z",
     "security_definer_public_rpc_review_complete": false,
     "domain_capability_gate": true,
@@ -228,6 +240,7 @@
     "Replace the current invalid Quintana Roo state-wide snapshot with a corrected crawl that rejects generic placeholders and ingests through a private server-to-server channel; do not ingest the existing 41,529-row snapshot wholesale",
     "After private Q.Roo ingest is live, stop relying on raw.githubusercontent.com and remove the exposed crawl snapshots with a controlled rollback plan",
     "Protect GitHub main with compatible required checks after auditing workflows that can write to main",
+    "Complete the remaining SECURITY DEFINER/RLS/CORS/Origin review; the public Marketplace feeds and managed-site resolver are intentional sanitized SECURITY DEFINER projections",
     "Positive real managed-subdomain end-to-end validation after the first owner/admin creates an included *.listiaapp.com site",
     "Physical Web Push validation with a real opted-in browser subscription",
     "Configure and verify a real saved-search email delivery provider",
@@ -235,9 +248,9 @@
     "Real Meta/Google/TikTok/LinkedIn conversion dispatch after account connections exist",
     "Authenticated browser end-to-end confirmation of product telemetry ingest v5",
     "Physical Android/iPhone/Desktop PWA, voice and offline-recovery QA",
-    "Final SECURITY DEFINER/RLS/CORS/Origin review and penetration testing",
     "Enable Supabase leaked-password protection",
-    "Make repository private after Q.Roo ingestion no longer depends on public raw.githubusercontent.com URLs"
+    "Make repository private after Q.Roo ingestion no longer depends on public raw.githubusercontent.com URLs",
+    "Final penetration testing"
   ],
   "completion_rule": "Do not declare LISTIA 100% complete until real-device end-to-end QA and the final security checklist pass."
 }
