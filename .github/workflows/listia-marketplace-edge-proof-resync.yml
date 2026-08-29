@@ -1,0 +1,45 @@
+name: LISTIA Marketplace Edge Proof Resync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-marketplace-edge-proof-resync.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      WORKER_NAME: listia-app
+      WRANGLER_VERSION: '4.125.0'
+    steps:
+      - name: Generate and install new private Worker proof
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          proof="$(openssl rand -hex 32)"
+          echo "::add-mask::${proof}"
+          hash="$(printf '%s' "$proof" | sha256sum | awk '{print $1}')"
+          installed=false
+          for source in security primary; do
+            if [[ "$source" == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
+            [[ -n "$token" ]] || continue
+            if printf '%s' "$proof" | CLOUDFLARE_API_TOKEN="$token" CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" npx --yes wrangler@${WRANGLER_VERSION} secret put MARKETPLACE_EDGE_PROOF --name "$WORKER_NAME" >/tmp/edge-proof-${source}.log 2>&1; then
+              installed=true
+              echo "Cloudflare Worker edge proof rotated with ${source} token."
+              break
+            fi
+          done
+          [[ "$installed" == true ]] || { echo 'Unable to rotate LISTIA Worker edge proof.'; exit 1; }
+          echo "EDGE_PROOF_SHA256=${hash}"
+          echo "### LISTIA Marketplace Edge Proof" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Raw proof: never persisted or printed' >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA-256: ${hash}" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Worker secret: rotated successfully' >> "$GITHUB_STEP_SUMMARY"
