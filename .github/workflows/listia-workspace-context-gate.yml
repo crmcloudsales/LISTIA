@@ -29,7 +29,7 @@ jobs:
           )
           for file in "${files[@]}"; do node --check "$file"; done
 
-      - name: Validate PWA workspace consumers
+      - name: Validate workspace core and selector
         run: |
           set -Eeuo pipefail
           grep -Fq "rpc('get_my_workspace_context')" public/workspace-context.js
@@ -38,13 +38,30 @@ jobs:
           grep -Fq 'workspaces.length<2' public/workspace-selector.js
           grep -Fq 'api.setActiveWorkspace(next)' public/workspace-selector.js
           grep -Fq 'location.reload()' public/workspace-selector.js
-          consumers=(
-            public/app.js public/account-center.js public/billing-management.js public/office-modules.js
-            public/listings-v2.js public/control-center.js public/lead-workspace.js public/website-status.js
-            public/website-language-settings.js public/managed-site-health.js public/developments.js
-            public/development-property-bridge.js public/account-edit.js
-          )
-          for file in "${consumers[@]}"; do grep -Fq 'LISTIA_WORKSPACE' "$file"; done
+
+      - name: Validate core account billing consumers
+        run: |
+          set -Eeuo pipefail
+          for file in public/app.js public/account-center.js public/billing-management.js; do grep -Fq 'LISTIA_WORKSPACE' "$file"; done
+
+      - name: Validate office listings control consumers
+        run: |
+          set -Eeuo pipefail
+          for file in public/office-modules.js public/listings-v2.js public/control-center.js; do grep -Fq 'LISTIA_WORKSPACE' "$file"; done
+
+      - name: Validate leads site language consumers
+        run: |
+          set -Eeuo pipefail
+          for file in public/lead-workspace.js public/website-status.js public/website-language-settings.js; do grep -Fq 'LISTIA_WORKSPACE' "$file"; done
+
+      - name: Validate managed sites developments account consumers
+        run: |
+          set -Eeuo pipefail
+          for file in public/managed-site-health.js public/developments.js public/development-property-bridge.js public/account-edit.js; do grep -Fq 'LISTIA_WORKSPACE' "$file"; done
+
+      - name: Reject unordered PWA membership lookups
+        run: |
+          set -Eeuo pipefail
           if grep -R -F 'status=eq.active&limit=1' public --include='*.js'; then
             echo 'An unordered active-membership limit=1 lookup remains in the PWA.' >&2
             exit 1
