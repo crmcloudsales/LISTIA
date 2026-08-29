@@ -2,13 +2,17 @@ const ALLOWED_ORIGINS=new Set(['https://app.listiaapp.com','https://listiaapp.co
 const ALLOWED_HOSTNAMES=new Set(['app.listiaapp.com','listiaapp.com','www.listiaapp.com']);
 const TURNSTILE_VERIFY='https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const SUPABASE_INTEREST='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-interest-auth';
+const SUPABASE_FEED='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-feed-edge';
 
 const headers={
   'content-type':'application/json;charset=utf-8',
   'cache-control':'no-store',
   'x-content-type-options':'nosniff',
   'referrer-policy':'no-referrer',
-  'x-frame-options':'DENY'
+  'x-frame-options':'DENY',
+  'cross-origin-resource-policy':'same-origin',
+  'content-security-policy':"default-src 'none'; frame-ancestors 'none'",
+  'strict-transport-security':'max-age=31536000'
 };
 const json=(body,status=200,extra={})=>new Response(JSON.stringify(body),{status,headers:{...headers,...extra}});
 
@@ -35,6 +39,28 @@ async function verifyHuman(req,env,token){
   if(!ALLOWED_HOSTNAMES.has(String(result.hostname||'').toLowerCase()))return {ok:false,reason:'hostname_mismatch'};
   if(result.action!=='marketplace_interest')return {ok:false,reason:'action_mismatch'};
   return {ok:true};
+}
+
+async function handleFeed(req,env){
+  if(req.method!=='POST')return json({error:'method_not_allowed'},405,{'allow':'POST'});
+  if(!sameSite(req))return json({error:'origin_not_allowed'},403);
+  const len=Number(req.headers.get('content-length')||0);
+  if(len>4096)return json({error:'payload_too_large'},413);
+  const body=await req.json().catch(()=>null);
+  if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_json'},400);
+  if(!env.MARKETPLACE_EDGE_PROOF)return json({error:'firewall_not_configured'},503);
+  const upstream=await fetch(SUPABASE_FEED,{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-listia-edge-proof':env.MARKETPLACE_EDGE_PROOF,
+      'x-listia-client-ip':clientIp(req)
+    },
+    body:JSON.stringify(body)
+  }).catch(()=>null);
+  if(!upstream)return json({error:'upstream_unavailable'},503);
+  const text=await upstream.text();
+  return new Response(text,{status:upstream.status,headers:{...headers,'content-type':upstream.headers.get('content-type')||headers['content-type']}});
 }
 
 async function handleInterest(req,env){
@@ -80,6 +106,7 @@ export default {
       if(!env.TURNSTILE_SITE_KEY)return json({error:'turnstile_not_configured'},503);
       return json({sitekey:env.TURNSTILE_SITE_KEY},200,{'cache-control':'public, max-age=3600'});
     }
+    if(url.pathname==='/api/marketplace/feed')return handleFeed(req,env);
     if(url.pathname==='/api/interest')return handleInterest(req,env);
     return env.ASSETS.fetch(req);
   }
