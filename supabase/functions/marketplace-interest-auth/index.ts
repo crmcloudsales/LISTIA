@@ -18,12 +18,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return json(req,{error:'method_not_allowed'},405)
 
   const edgeVerified=await validEdgeProof(req)
-  if(!edgeVerified){
-    const origin=req.headers.get('origin')||''
-    if(!ALLOWED.has(origin))return json(req,{error:'origin_not_allowed'},403)
-    const sec=req.headers.get('sec-fetch-site')
-    if(sec&&sec!=='same-origin'&&sec!=='same-site')return json(req,{error:'cross_site_blocked'},403)
-  }
+  if(!edgeVerified)return json(req,{error:'human_firewall_required'},403)
 
   const jwt=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'')
   if(!jwt)return json(req,{error:'unauthorized'},401)
@@ -34,7 +29,6 @@ Deno.serve(async(req:Request)=>{
   const body=await req.json().catch(()=>null) as any
   if(!body)return json(req,{error:'invalid_json'},400)
   const mode=clean(body.mode||'form',20)
-  if(mode==='click'&&!edgeVerified)return json(req,{error:'human_firewall_required'},403)
 
   const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}})
   const {data:allowed,error:rateError}=await admin.rpc('consume_marketplace_interest_rate_limit',{p_user_id:userData.user.id,p_max_requests:6,p_window_seconds:600})
