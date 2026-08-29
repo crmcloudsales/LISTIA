@@ -7,9 +7,10 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -37,6 +38,32 @@ BAD_IMAGE = re.compile(
     r"badge|spinner|loader|tracking|pixel|gravatar)",
     re.I,
 )
+IMAGE_ID = re.compile(r"(?<!\d)(\d{6,})(?!\d)")
+
+
+def embedded_image_ids(url: str) -> set[str]:
+    """Return property-like numeric IDs embedded in the image filename/path."""
+    try:
+        path = urlparse(url).path
+    except Exception:
+        path = url
+    return set(IMAGE_ID.findall(path))
+
+
+def image_belongs_to_listing(url: str, external_id: str, reuse_count: int = 1) -> bool:
+    """Fail closed when a property photo is demonstrably tied to another listing.
+
+    Propiedades.com often embeds the listing ID in image filenames. If such an ID
+    exists, it must match. If the exact same image is mapped to multiple listings,
+    only an explicitly matching listing may keep it; otherwise the mapping is
+    ambiguous and every affected row is rejected.
+    """
+    ids = embedded_image_ids(url)
+    if ids and external_id not in ids:
+        return False
+    if reuse_count > 1 and (not ids or external_id not in ids):
+        return False
+    return True
 
 
 def image_url(img, page_url: str) -> str | None:
@@ -75,6 +102,8 @@ def media_map(html: str, page_url: str) -> dict[str, dict[str, str]]:
         detail = urljoin(page_url, href)
         candidates = [anchor]
         node = anchor
+        # Parent traversal is retained for template compatibility, but every image
+        # is subsequently checked against listing identity and cross-row reuse.
         for _ in range(8):
             node = getattr(node, "parent", None)
             if node is None:
@@ -96,12 +125,23 @@ def media_map(html: str, page_url: str) -> dict[str, dict[str, str]]:
 def parse_image_first(html: str, page_url: str) -> tuple[list[dict], int]:
     raw = base.parse_page(html, page_url)
     media = media_map(html, page_url)
+    candidate_covers = {
+        str(row.get("external_id") or ""): str((media.get(str(row.get("external_id") or "")) or {}).get("cover_image_url") or "")
+        for row in raw
+    }
+    reuse = Counter(url for url in candidate_covers.values() if url)
+
     accepted: list[dict] = []
     rejected = 0
     for row in raw:
-        m = media.get(str(row.get("external_id") or ""))
+        ext_id = str(row.get("external_id") or "")
+        m = media.get(ext_id)
         cover = (m or {}).get("cover_image_url")
-        if not cover or BAD_IMAGE.search(cover):
+        if (
+            not cover
+            or BAD_IMAGE.search(cover)
+            or not image_belongs_to_listing(cover, ext_id, reuse.get(cover, 1))
+        ):
             rejected += 1
             continue
         row["cover_image_url"] = cover
@@ -158,7 +198,21 @@ def main() -> int:
                 done += 1
                 print(f"WARN page={page}: {exc}", file=sys.stderr, flush=True)
 
-    rows = sorted(by_id.values(), key=lambda x: int(x["external_id"]))
+    # Cross-page fail-closed pass: a repeated exact cover URL is ambiguous unless
+    # its filename explicitly identifies the current listing.
+    cover_reuse = Counter(str(row.get("cover_image_url") or "") for row in by_id.values() if row.get("cover_image_url"))
+    globally_valid: list[dict] = []
+    rejected_ambiguous_reused_image = 0
+    for row in by_id.values():
+        cover = str(row.get("cover_image_url") or "")
+        ext_id = str(row.get("external_id") or "")
+        if not image_belongs_to_listing(cover, ext_id, cover_reuse.get(cover, 1)):
+            rejected_ambiguous_reused_image += 1
+            continue
+        globally_valid.append(row)
+
+    rows = sorted(globally_valid, key=lambda x: int(x["external_id"]))
+    rejected_without_image += rejected_ambiguous_reused_image
     chunks = []
     for start in range(0, len(rows), CHUNK_SIZE):
         part = rows[start:start + CHUNK_SIZE]
@@ -172,14 +226,22 @@ def main() -> int:
         "pages_attempted": total_pages,
         "unique_listings": len(rows),
         "rejected_without_image": rejected_without_image,
+        "rejected_ambiguous_reused_image": rejected_ambiguous_reused_image,
         "chunks": chunks,
         "failures": failures,
         "workers": WORKERS,
         "image_required": True,
         "generic_placeholders_rejected": True,
+        "image_listing_binding_enforced": True,
     }
     (OUT_DIR / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"unique_listings": len(rows), "chunks": len(chunks), "rejected_without_image": rejected_without_image, "failures": len(failures)}), flush=True)
+    print(json.dumps({
+        "unique_listings": len(rows),
+        "chunks": len(chunks),
+        "rejected_without_image": rejected_without_image,
+        "rejected_ambiguous_reused_image": rejected_ambiguous_reused_image,
+        "failures": len(failures),
+    }), flush=True)
     return 0 if rows else 2
 
 
