@@ -1,4 +1,4 @@
-const CACHE="listia-pwa-v0.10.1";
+const CACHE="listia-pwa-v1.0.6";
 const CORE=[
   "/","/index.html","/config.js","/app.js",
   "/styles.css?v=0.9.3","/readability.css?v=3","/pwa-components.css?v=1","/account-marketplace.css?v=1","/marketplace.css?v=2","/marketplace-feed.css?v=1","/marketplace-saved.css?v=2","/contact-engine.css?v=1","/app-shell-v2.css?v=1","/listings-v2.css?v=3","/ai-chat.css?v=1","/control-center.css?v=1","/property-complete.css?v=1","/pwa-polish.css?v=1","/pwa-polish-hotfix.css?v=2","/premium-shell.css?v=1","/pwa-final-hotfix.css?v=1","/mobile-ui-repair.css?v=1","/website-status-repair.css?v=1","/website-language-settings.css?v=1","/account-edit.css?v=1","/lead-workspace.css?v=1","/billing.css?v=1",
