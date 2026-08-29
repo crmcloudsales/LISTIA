@@ -32,14 +32,18 @@ Deno.serve(async(req:Request)=>{
     const {data:member}=await admin.from('organization_members').select('role,status').eq('organization_id',org).eq('user_id',user.id).eq('status','active').maybeSingle()
     if(!member||!['owner','admin'].includes(String(member.role)))return out(req,{error:'forbidden'},403)
 
-    const datasetId=digits(body.dataset_id||body.pixel_id)
+    const [prior]=await sql`select c.id,c.metadata,r.access_token_secret_id,s.decrypted_secret as access_token from public.integration_connections c left join private.integration_token_refs r on r.connection_id=c.id left join vault.decrypted_secrets s on s.id=r.access_token_secret_id where c.organization_id=${org}::uuid and c.provider='meta' limit 1`
+    const providedToken=String(body.access_token||'').trim()
+    if(providedToken&&(providedToken.length<20||providedToken.length>4096||/[\r\n]/.test(providedToken)))return out(req,{error:'invalid_meta_access_token'},400)
+    const token=providedToken||String(prior?.access_token||'')
+    if(!token)return out(req,{error:'meta_access_token_required'},409)
+
+    const datasetId=digits(body.dataset_id||body.pixel_id||prior?.metadata?.dataset_id)
     if(!/^\d{5,32}$/.test(datasetId))return out(req,{error:'invalid_meta_dataset_id'},400)
-    const token=String(body.access_token||'').trim()
-    if(token.length<20||token.length>4096||/[\r\n]/.test(token))return out(req,{error:'invalid_meta_access_token'},400)
-    const apiVersion=/^v\d{1,2}\.\d$/.test(String(body.api_version||''))?String(body.api_version):'v23.0'
+    const apiVersion=/^v\d{1,2}\.\d$/.test(String(body.api_version||''))?String(body.api_version):safeText(prior?.metadata?.api_version||'v23.0',20)
     const testEventCode=safeText(body.test_event_code,80)
     const minQualityRaw=Number(body.min_quality_score)
-    const minQuality=Number.isFinite(minQualityRaw)?Math.min(100,Math.max(0,minQualityRaw)):60
+    const minQuality=Number.isFinite(minQualityRaw)?Math.min(100,Math.max(0,minQualityRaw)):Number(prior?.metadata?.min_quality_score??60)
 
     const graph=await fetch(`https://graph.facebook.com/${apiVersion}/${encodeURIComponent(datasetId)}?fields=id,name`,{
       headers:{authorization:`Bearer ${token}`,'accept':'application/json'},
@@ -56,18 +60,7 @@ Deno.serve(async(req:Request)=>{
     const result=await sql.begin(async tx=>{
       const [existing]=await tx`select id,metadata from public.integration_connections where organization_id=${org}::uuid and provider='meta' limit 1 for update`
       const existingMeta=(existing?.metadata&&typeof existing.metadata==='object')?existing.metadata:{}
-      const metadata={
-        ...existingMeta,
-        dataset_id:datasetId,
-        pixel_id:datasetId,
-        api_version:apiVersion,
-        dataset_name:safeText(graphData.name||'Meta Dataset',180),
-        test_event_code:testEventCode||null,
-        require_marketing_consent:true,
-        min_quality_score:minQuality,
-        configured_at:new Date().toISOString(),
-        configured_by_user_id:user.id
-      }
+      const metadata={...existingMeta,dataset_id:datasetId,pixel_id:datasetId,api_version:apiVersion,dataset_name:safeText(graphData.name||'Meta Dataset',180),test_event_code:testEventCode||null,require_marketing_consent:true,min_quality_score:minQuality,configured_at:new Date().toISOString(),configured_by_user_id:user.id}
       let connectionId:string
       if(existing?.id){
         connectionId=String(existing.id)
@@ -79,18 +72,18 @@ Deno.serve(async(req:Request)=>{
 
       const [refs]=await tx`select access_token_secret_id from private.integration_token_refs where connection_id=${connectionId}::uuid limit 1`
       let accessId=refs?.access_token_secret_id as string|undefined
-      if(accessId){
-        await tx`select vault.update_secret(${accessId}::uuid,${token})`
-      }else{
-        const [secret]=await tx`select vault.create_secret(${token},${`oauth_${connectionId}_access`},'LISTIA Meta Conversions API access token') as id`
-        accessId=String(secret.id)
+      if(providedToken){
+        if(accessId)await tx`select vault.update_secret(${accessId}::uuid,${providedToken})`
+        else{const [secret]=await tx`select vault.create_secret(${providedToken},${`oauth_${connectionId}_access`},'LISTIA Meta Conversions API access token') as id`;accessId=String(secret.id)}
       }
+      if(!accessId&&prior?.access_token_secret_id)accessId=String(prior.access_token_secret_id)
+      if(!accessId)throw new Error('meta_token_secret_missing')
       await tx`insert into private.integration_token_refs(connection_id,access_token_secret_id,refresh_token_secret_id,token_expires_at,token_metadata,updated_at) values(${connectionId}::uuid,${accessId}::uuid,null,null,${JSON.stringify({provider:'meta',kind:'conversions_api',dataset_id:datasetId})}::jsonb,now()) on conflict(connection_id) do update set access_token_secret_id=excluded.access_token_secret_id,refresh_token_secret_id=null,token_expires_at=null,token_metadata=excluded.token_metadata,updated_at=now()`
       await tx`update public.conversion_signals set delivery_status='pending',last_error=null,updated_at=now() where organization_id=${org}::uuid and delivery_status='waiting' and 'meta'=any(platforms)`
       return{connection_id:connectionId,metadata}
     })
 
-    return out(req,{ok:true,connected:true,connection_id:result.connection_id,dataset_id:datasetId,dataset_name:result.metadata.dataset_name,test_mode:Boolean(testEventCode),min_quality_score:minQuality})
+    return out(req,{ok:true,connected:true,connection_id:result.connection_id,dataset_id:datasetId,dataset_name:result.metadata.dataset_name,test_mode:Boolean(testEventCode),min_quality_score:minQuality,token_reused:!providedToken})
   }catch(e){
     console.error('meta-capi-config',e instanceof Error?e.message:String(e))
     return out(req,{error:'internal_error'},500)
