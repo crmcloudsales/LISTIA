@@ -1,89 +1,26 @@
 name: LISTIA Quintana Roo Inventory Crawl
 
+# SECURITY HOLD (2026-08-29):
+# Legacy state-wide crawl previously committed raw inventory snapshots to the
+# public repository. It is disabled until LISTIA has a private server-to-server
+# ingestion path that does not depend on public GitHub raw files.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/crawl-quintana-roo-properties.py'
-      - 'scripts/crawl-quintana-roo-properties-parallel.py'
-      - '.github/workflows/listia-qroo-inventory-crawl.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: listia-qroo-inventory-crawl
   cancel-in-progress: true
 
 jobs:
-  crawl:
+  security-hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install crawler dependencies
-        run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
-
-      - name: Crawl all public Quintana Roo result pages
-        id: qroo_crawl
-        shell: bash
-        env:
-          QROO_CRAWL_URL: https://propiedades.com/quintana-roo/
-          QROO_CRAWL_OUT: data/qroo-crawl
-          QROO_CHUNK_SIZE: '1500'
-          QROO_WORKERS: '10'
-        run: |
-          set +e
-          mkdir -p data/qroo-crawl
-          python scripts/crawl-quintana-roo-properties-parallel.py > data/qroo-crawl/crawl.log 2>&1
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          echo "Crawler exit code: $code"
-          tail -n 100 data/qroo-crawl/crawl.log || true
-          exit 0
-
-      - name: Upload crawl diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: qroo-crawl-diagnostics
-          path: data/qroo-crawl/crawl.log
-          if-no-files-found: warn
-          retention-days: 2
-
-      - name: Validate snapshot
+      - name: Block public crawl snapshot publication
         shell: bash
         run: |
-          set -Eeuo pipefail
-          test "${{ steps.qroo_crawl.outputs.exit_code }}" = "0"
-          test -s data/qroo-crawl/manifest.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          m=json.loads(Path('data/qroo-crawl/manifest.json').read_text())
-          print(m)
-          assert m['unique_listings'] >= 30000
-          assert len(m['chunks']) >= 20
-          assert len(m['failures']) <= 25
-          PY
-
-      - name: Commit latest normalized inventory snapshot
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rm -f data/qroo-crawl/crawl.log
-          git config user.name 'LISTIA Inventory Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add data/qroo-crawl
-          git commit -m 'Refresh full Quintana Roo inventory snapshot' || exit 0
-          git pull --rebase origin main
-          git push origin main
+          echo "Legacy Q.Roo crawl is intentionally blocked: do not publish raw inventory snapshots to public GitHub."
+          echo "Use a private server-to-server ingest channel before re-enabling."
+          exit 1
