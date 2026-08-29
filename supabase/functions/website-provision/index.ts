@@ -17,6 +17,51 @@ const reply = (body: unknown, status = 200, origin = '') => new Response(JSON.st
   }
 });
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function fetchJson(url: string, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: {'accept': 'application/json'},
+      redirect: 'follow',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    const data = await r.json().catch(() => null) as any;
+    return {ok: r.ok, status: r.status, data};
+  } catch (error) {
+    return {ok: false, status: 0, data: null, error: String((error as Error)?.message || error).slice(0, 240)};
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function verifyInfra(host: string) {
+  let last: any = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    last = await fetchJson(`https://${host}/.well-known/listia-infra-health`);
+    const d = last?.data;
+    if (last?.ok && d?.ok === true && d?.host === host && d?.service === 'listia-managed-sites' && d?.route === true && d?.tls === true && d?.turnstile_configured === true) {
+      return {ok: true, turnstile: true, status: last.status};
+    }
+    if (attempt < 3) await sleep(350 * (attempt + 1));
+  }
+  return {ok: false, status: Number(last?.status || 0), error: String(last?.data?.error || last?.error || 'managed_site_infra_health_failed').slice(0, 240)};
+}
+
+async function verifyFullSite(host: string) {
+  let last: any = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    last = await fetchJson(`https://${host}/.well-known/listia-health`);
+    const d = last?.data;
+    if (last?.ok && d?.ok === true && d?.managed === true && d?.host === host && d?.service === 'listia-managed-sites') return true;
+    if (attempt < 4) await sleep(300 * (attempt + 1));
+  }
+  return false;
+}
+
 Deno.serve(async req => {
   const origin = req.headers.get('origin') || '';
   if (req.method === 'OPTIONS') {
@@ -66,25 +111,30 @@ Deno.serve(async req => {
       ? existing.configuration
       : {};
     const now = new Date().toISOString();
+    const hostname = `${subdomain}.listiaapp.com`;
     const configuration = {
       ...existingConfiguration,
       managed_by: 'LISTIA',
       seo_continuous: true,
-      junk_lead_firewall: true,
-      waf: true,
-      turnstile: true,
       web_events: true,
       pixel_ready: true,
       provisioned_via: 'wildcard',
-      activated_at: existingConfiguration.activated_at || now,
-      last_verified_at: now
+      health_gate: true,
+      provisioning_started_at: now,
+      infra_health_verified: false,
+      full_health_verified: false,
+      worker_route_verified: false,
+      tls: false,
+      turnstile: false,
+      junk_lead_firewall: false,
+      last_error: null
     };
     const row = {
       organization_id: oid,
       mode: 'listia_subdomain',
       domain: null,
       subdomain,
-      status: 'active',
+      status: 'provisioning',
       connect_fee_usd: null,
       domain_markup_percent: null,
       provider_cost_usd: null,
@@ -97,7 +147,59 @@ Deno.serve(async req => {
       body: JSON.stringify(row)
     });
     if (!writeResponse.ok) return reply({error: 'provision_failed'}, 502, origin);
-    return reply({ok: true, status: 'active', hostname: `${subdomain}.listiaapp.com`, website: (await writeResponse.json())?.[0] || null}, 200, origin);
+
+    const infra = await verifyInfra(hostname);
+    const healthAt = new Date().toISOString();
+    if (!infra.ok) {
+      const failedConfiguration = {...configuration, last_healthcheck_at: healthAt, last_error: infra.error || `infra_http_${infra.status}`};
+      await fetch(`${U}/rest/v1/organization_websites?organization_id=eq.${encodeURIComponent(oid)}`, {
+        method: 'PATCH',
+        headers: {...adminHeaders, 'content-type': 'application/json', 'prefer': 'return=minimal'},
+        body: JSON.stringify({status: 'failed', configuration: failedConfiguration})
+      });
+      return reply({ok: false, error: 'managed_site_infrastructure_not_ready', status: 'failed', hostname, charge_created: false}, 502, origin);
+    }
+
+    const activeConfiguration = {
+      ...configuration,
+      infra_health_verified: true,
+      worker_route_verified: true,
+      tls: true,
+      turnstile: true,
+      junk_lead_firewall: true,
+      activated_at: existingConfiguration.activated_at || healthAt,
+      last_healthcheck_at: healthAt,
+      last_verified_at: healthAt,
+      last_error: null
+    };
+    const activateResponse = await fetch(`${U}/rest/v1/organization_websites?organization_id=eq.${encodeURIComponent(oid)}`, {
+      method: 'PATCH',
+      headers: {...adminHeaders, 'content-type': 'application/json', 'prefer': 'return=representation'},
+      body: JSON.stringify({status: 'active', configuration: activeConfiguration})
+    });
+    if (!activateResponse.ok) return reply({error: 'activation_state_failed'}, 502, origin);
+
+    const fullHealthy = await verifyFullSite(hostname);
+    if (!fullHealthy) {
+      const failedAt = new Date().toISOString();
+      const failedConfiguration = {...activeConfiguration, full_health_verified: false, last_healthcheck_at: failedAt, last_error: 'full_site_health_failed'};
+      await fetch(`${U}/rest/v1/organization_websites?organization_id=eq.${encodeURIComponent(oid)}`, {
+        method: 'PATCH',
+        headers: {...adminHeaders, 'content-type': 'application/json', 'prefer': 'return=minimal'},
+        body: JSON.stringify({status: 'failed', configuration: failedConfiguration})
+      });
+      return reply({ok: false, error: 'managed_site_full_health_failed', status: 'failed', hostname, charge_created: false}, 502, origin);
+    }
+
+    const verifiedAt = new Date().toISOString();
+    const verifiedConfiguration = {...activeConfiguration, full_health_verified: true, last_healthcheck_at: verifiedAt, last_verified_at: verifiedAt, last_error: null};
+    const finalResponse = await fetch(`${U}/rest/v1/organization_websites?organization_id=eq.${encodeURIComponent(oid)}`, {
+      method: 'PATCH',
+      headers: {...adminHeaders, 'content-type': 'application/json', 'prefer': 'return=representation'},
+      body: JSON.stringify({status: 'active', configuration: verifiedConfiguration})
+    });
+    if (!finalResponse.ok) return reply({error: 'verification_state_failed'}, 502, origin);
+    return reply({ok: true, status: 'active', hostname, website: (await finalResponse.json())?.[0] || null}, 200, origin);
   }
 
   if (mode === 'connect_existing' || mode === 'buy_website') {
@@ -122,7 +224,7 @@ Deno.serve(async req => {
       domain_markup_percent: mode === 'buy_website' ? 100 : null,
       provider_cost_usd: null,
       final_price_usd: null,
-      configuration: {managed_by: 'LISTIA', seo_continuous: true, junk_lead_firewall: true, waf: true, turnstile: true, web_events: true, pixel_ready: true}
+      configuration: {managed_by: 'LISTIA', seo_continuous: true, web_events: true, pixel_ready: true, security_pending: true}
     };
     const writeResponse = await fetch(`${U}/rest/v1/organization_websites?on_conflict=organization_id`, {
       method: 'POST',
