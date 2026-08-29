@@ -1,10 +1,7 @@
 name: LISTIA Marketplace Edge Proof Resync
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/listia-marketplace-edge-proof-resync.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
