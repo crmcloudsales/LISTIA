@@ -31,7 +31,7 @@ const healthResponse = (request, host, ok, status = ok ? 200 : 404) =>
 const infraHealthResponse = (request, env, host, protocol) => {
   const tls = protocol === 'https:';
   const turnstile = Boolean(env?.TURNSTILE_SITE_KEY && env?.TURNSTILE_SECRET);
-  const ok = tls;
+  const ok = tls && turnstile;
   return new Response(JSON.stringify({
     ok,
     host,
@@ -50,10 +50,8 @@ export default {
     const url = new URL(request.url);
     const host = url.hostname.toLowerCase();
 
-    // Keep LISTIA's commercial site on its existing Worker Custom Domain.
     if (PASSTHROUGH_HOSTS.has(host)) return fetch(request);
 
-    // The wildcard renderer supports exactly one safe customer label.
     if (!MANAGED_HOST.test(host)) {
       return new Response('Not found', {status: 404, headers: {'cache-control': 'no-store'}});
     }
@@ -63,8 +61,8 @@ export default {
       return new Response('Not found', {status: 404, headers: {'cache-control': 'no-store'}});
     }
 
-    // Infrastructure-only probe: proves DNS/TLS/wildcard Worker routing without
-    // requiring an already-active organization_websites row. It exposes no site data.
+    // Infrastructure-only probe: proves DNS/TLS/wildcard Worker routing and the
+    // security prerequisite for forms without requiring an active customer row.
     if (url.pathname === INFRA_HEALTH_PATH) {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method not allowed', {status: 405, headers: {'cache-control': 'no-store'}});
