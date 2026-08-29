@@ -1,0 +1,26 @@
+name: LISTIA App Worker Deploy Trigger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'listia-app-worker/**'
+      - '.github/workflows/listia-app-worker-deploy-trigger.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: listia-app-worker-deploy-trigger
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical LISTIA app deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-cloudflare-pages.yml --repo "${GITHUB_REPOSITORY}" --ref main
