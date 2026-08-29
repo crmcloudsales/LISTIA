@@ -41,13 +41,13 @@ jobs:
           production_source='901fbc5976906a2badc451283f5f3bb4060f564b'
           production_verified='2026-08-29T13:05:16Z'
           deployment_proof='36126c4a6e8a1e81476a48b51225f537396c750a'
-          migration='20260829131750_enable_property_ai_dispatch_cron'
-          migration_source='c1cf480ee18fa053d8293d4bf59e461fa17ee32d'
+          migration='20260829140716_index_conversion_delivery_connection_fk'
+          migration_source='e0c9876593c7880dd3e8440a1564460744d4ffb8'
 
           data['version']='0.27.2'
           data['as_of']='2026-08-29'
           data['head_commit_verified']=observed
-          data['status']='production_active_v0_27_2_pwa_cloudco_nvidia_property_ai'
+          data['status']='production_active_v0_27_2_pwa_cloudco_nvidia_conversion_runtime'
 
           sot=data.setdefault('source_of_truth',{})
           sot['main_observed_commit']=observed
@@ -79,11 +79,34 @@ jobs:
           props['property_ai_empty_queue_short_circuit']=True
           props['property_ai_controlled_e2e_verified']=True
 
+          attr=prod.setdefault('attribution',{})
+          attr['conversion_signal_queue']=True
+          attr['real_ad_platform_dispatch_runtime']=True
+          attr['real_ad_platform_delivery_verified']=False
+          attr['conversion_dispatch_worker_version']=2
+          attr['conversion_dispatch_cron']=True
+          attr['conversion_dispatch_schedule']='* * * * *'
+          attr['conversion_dispatch_batch_max']=25
+          attr['conversion_dispatch_empty_queue_short_circuit']=True
+          attr['conversion_dispatch_server_side_tokens']=True
+          attr['conversion_dispatch_consent_gate']=True
+          attr['conversion_dispatch_lead_quality_gate']=True
+          attr['conversion_dispatch_fail_closed_without_connection']=True
+          attr['conversion_dispatch_per_platform_delivery_state']=True
+          attr['conversion_dispatch_retry_backoff']=True
+          attr['meta_capi_adapter']=True
+          attr['google_data_manager_api_adapter']=True
+          attr['tiktok_events_api_adapter']=True
+          attr['linkedin_conversions_api_adapter']=True
+
           supa=data.setdefault('supabase',{})
           supa['last_verified_migration']=migration
           supa['property_ai_runtime']='nvidia:cloudco'
           supa['property_ai_gateway_server_side_only']=True
           supa['property_ai_dispatch_cron']=True
+          supa['conversion_dispatch_worker_version']=2
+          supa['conversion_dispatch_cron']=True
+          supa['conversion_dispatch_private_delivery_state']=True
 
           path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
@@ -99,7 +122,12 @@ jobs:
           assert d['production']['pwa']['source_commit']=='901fbc5976906a2badc451283f5f3bb4060f564b'
           assert d['production']['properties']['ai_transport']=='cloudco_gateway'
           assert d['production']['properties']['property_ai_worker_version']==3
-          assert d['supabase']['last_verified_migration']=='20260829131750_enable_property_ai_dispatch_cron'
+          assert d['production']['attribution']['conversion_dispatch_worker_version']==2
+          assert d['production']['attribution']['real_ad_platform_dispatch_runtime'] is True
+          assert d['production']['attribution']['real_ad_platform_delivery_verified'] is False
+          assert d['production']['attribution']['conversion_dispatch_consent_gate'] is True
+          assert d['production']['attribution']['conversion_dispatch_lead_quality_gate'] is True
+          assert d['supabase']['last_verified_migration']=='20260829140716_index_conversion_delivery_connection_fk'
           print('BUILD_INFO normalization OK')
           PY
 
