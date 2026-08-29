@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  wire-and-retire:
+  wire:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -42,39 +42,23 @@ jobs:
           node --check public/google-ads-connect.js
           grep -Fq '<script defer="" src="/google-ads-connect.js?v=1"></script>' public/index.html
 
-      - name: Retire this one-shot workflow
-        shell: bash
-        run: |
-          cat > .github/workflows/listia-google-ads-ui-wire-v1.yml <<'YAML'
-          name: Retired - LISTIA Google Ads UI wire v1
-
-          on:
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            retired:
-              runs-on: ubuntu-latest
-              steps:
-                - name: Retirement notice
-                  run: echo 'Retired - google-ads-connect.js is wired into public/index.html. This workflow must not mutate main.'
-          YAML
-
-      - name: Commit atomically
+      - name: Commit PWA wiring only
         shell: bash
         run: |
           set -Eeuo pipefail
-          changed="$(git diff --name-only | sort)"
+          changed="$(git diff --name-only)"
           printf '%s\n' "$changed"
-          test "$changed" = $'.github/workflows/listia-google-ads-ui-wire-v1.yml\npublic/index.html' || {
+          if [[ -z "$changed" ]]; then
+            echo 'Google Ads module already wired.'
+            exit 0
+          fi
+          test "$changed" = 'public/index.html' || {
             echo 'Unexpected files changed; refusing commit.' >&2
             exit 1
           }
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/index.html .github/workflows/listia-google-ads-ui-wire-v1.yml
+          git add public/index.html
           git commit -m 'Wire Google Ads conversion setup into LISTIA PWA'
           for attempt in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0
