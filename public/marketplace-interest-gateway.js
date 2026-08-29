@@ -56,6 +56,12 @@ function humanToken(){
 }
 window.fetch=async function(input,init={}){
   const raw=typeof input==='string'?input:(input?.url||'');
+  const isFeed=raw.includes('/rest/v1/rpc/marketplace_public_feed');
+  if(isFeed){
+    let payload={};
+    try{payload=init.body?JSON.parse(String(init.body)):{} }catch{return response({error:'invalid_json'},400)}
+    return nativeFetch('/api/marketplace/feed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store',credentials:'same-origin'});
+  }
   const isClick=raw.includes('/rest/v1/rpc/submit_marketplace_interest_click');
   const isForm=raw.includes('/rest/v1/rpc/submit_marketplace_interest');
   if(!isClick&&!isForm)return nativeFetch(input,init);
