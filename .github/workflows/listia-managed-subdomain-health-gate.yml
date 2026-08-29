@@ -37,7 +37,9 @@ jobs:
           set -Eeuo pipefail
           grep -Fq "listiaapp\\.com" sites-worker/router.js
           grep -Fq "const HEALTH_PATH = '/.well-known/listia-health'" sites-worker/router.js
+          grep -Fq "const INFRA_HEALTH_PATH = '/.well-known/listia-infra-health'" sites-worker/router.js
           grep -Fq "const APP_ORIGIN = 'https://app.listiaapp.com'" sites-worker/router.js
+          grep -Fq "const ok = tls && turnstile" sites-worker/router.js
           grep -Fq "website.mode!=='listia_subdomain'" public/managed-site-health.js
           grep -Fq "mode:'listia_subdomain'" public/managed-site-health.js
           grep -Fq "/.well-known/listia-health" public/managed-site-health.js
@@ -60,11 +62,17 @@ jobs:
           fi
           grep -Fq "listia:website-provisioned" public/listings-v2.js
 
-      - name: Preserve website settings during repair
+      - name: Require two-stage managed-site health activation
         run: |
           set -Eeuo pipefail
           grep -Fq "...existingConfiguration" supabase/functions/website-provision/index.ts
-          grep -Fq "last_verified_at: now" supabase/functions/website-provision/index.ts
+          grep -Fq "status: 'provisioning'" supabase/functions/website-provision/index.ts
+          grep -Fq "/.well-known/listia-infra-health" supabase/functions/website-provision/index.ts
+          grep -Fq "/.well-known/listia-health" supabase/functions/website-provision/index.ts
+          grep -Fq "infra_health_verified: true" supabase/functions/website-provision/index.ts
+          grep -Fq "full_health_verified: true" supabase/functions/website-provision/index.ts
+          grep -Fq "last_verified_at: verifiedAt" supabase/functions/website-provision/index.ts
+          grep -Fq "status: 'failed'" supabase/functions/website-provision/index.ts
           grep -Fq "external_domains_temporarily_unavailable" supabase/functions/website-provision/index.ts
           grep -Fq "charge_created: false" supabase/functions/website-provision/index.ts
 
