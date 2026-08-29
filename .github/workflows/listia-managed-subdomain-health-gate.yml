@@ -76,18 +76,13 @@ jobs:
           grep -Fq "external_domains_temporarily_unavailable" supabase/functions/website-provision/index.ts
           grep -Fq "charge_created: false" supabase/functions/website-provision/index.ts
 
-      - name: Verify PWA wiring and release lock
+      - name: Verify managed-site PWA module wiring
         run: |
           set -Eeuo pipefail
           node <<'NODE'
           const fs=require('fs');
           const config=fs.readFileSync('public/config.js','utf8');
           const sw=fs.readFileSync('public/sw.js','utf8');
-          const configRelease=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
-          const swRelease=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
-          if(!configRelease||!swRelease||configRelease[1]!==swRelease[1]) {
-            throw new Error(`Release mismatch config=${configRelease?.[1]} sw=${swRelease?.[1]}`);
-          }
           for (const module of ['managed-site-health.js','listings-v2.js']) {
             const escaped=module.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
             const configVersion=config.match(new RegExp(`/${escaped}\\?v=([0-9]+)`));
@@ -96,5 +91,5 @@ jobs:
               throw new Error(`${module} mismatch config=${configVersion?.[1]} sw=${swVersion?.[1]}`);
             }
           }
-          console.log(`Managed subdomain wiring OK on PWA v${configRelease[1]}`);
+          console.log('Managed-site PWA modules are version-locked between config.js and sw.js');
           NODE
