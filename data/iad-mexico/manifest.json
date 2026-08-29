@@ -1,30 +1,54 @@
 {
   "source": "iad-mexico-neximo",
-  "rows": 48,
+  "rows": 1745,
   "summary": [
     {
       "operation": "sale",
       "root": "https://properties.iadmexico.mx/en-venta",
-      "rows": 24,
-      "pages": 1,
-      "total_reported": 1526,
+      "rows": 1526,
+      "pages": 64,
+      "reported_total": 1526,
       "per_page": 24
     },
     {
       "operation": "rent",
       "root": "https://properties.iadmexico.mx/en-renta",
-      "rows": 24,
-      "pages": 1,
-      "total_reported": 219,
+      "rows": 219,
+      "pages": 10,
+      "reported_total": 219,
       "per_page": 24
     }
   ],
   "chunks": [
     {
       "file": "chunk-0001.json",
-      "count": 48
+      "count": 250
+    },
+    {
+      "file": "chunk-0002.json",
+      "count": 250
+    },
+    {
+      "file": "chunk-0003.json",
+      "count": 250
+    },
+    {
+      "file": "chunk-0004.json",
+      "count": 250
+    },
+    {
+      "file": "chunk-0005.json",
+      "count": 250
+    },
+    {
+      "file": "chunk-0006.json",
+      "count": 250
+    },
+    {
+      "file": "chunk-0007.json",
+      "count": 245
     }
   ],
   "failures": [],
-  "details": false
+  "photo_mode": "public_watermarked_card_url"
 }
