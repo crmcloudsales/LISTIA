@@ -1,0 +1,112 @@
+name: LISTIA workspace secondary consumers patch v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-workspace-secondary-consumers-patch-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-secondary-consumers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch remaining workspace consumers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def patch(path_str, old, new):
+              path=Path(path_str); text=path.read_text(encoding='utf-8')
+              if old not in text:
+                  if new in text:
+                      print(f'{path_str}: already patched'); return
+                  raise SystemExit(f'{path_str}: expected marker not found')
+              if text.count(old)!=1:
+                  raise SystemExit(f'{path_str}: expected one marker, found {text.count(old)}')
+              path.write_text(text.replace(old,new,1),encoding='utf-8'); print(f'{path_str}: patched')
+
+          patch('public/billing.js',
+            "    const memberships = await request(`/rest/v1/organization_members?select=organization_id,role,status&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`, { token: session.access_token });\n    const member = Array.isArray(memberships) ? memberships[0] : null;\n    if (!member?.organization_id) throw new Error('organization_required');\n    return { token: session.access_token, user, organizationId: member.organization_id, role: member.role };",
+            "    const active = window.LISTIA_WORKSPACE?.getActiveWorkspace ? await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true }).catch(() => null) : null;\n    if (active?.organization_id) return { token: session.access_token, user, organizationId: active.organization_id, role: active.role || 'member' };\n    const memberships = await request(`/rest/v1/organization_members?select=organization_id,role,status,created_at&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`, { token: session.access_token });\n    const member = Array.isArray(memberships) ? memberships[0] : null;\n    if (!member?.organization_id) throw new Error('organization_required');\n    return { token: session.access_token, user, organizationId: member.organization_id, role: member.role };"
+          )
+
+          patch('public/appointment-actions.js',
+            "async function context(){const s=sess(),uid=s?.user?.id;if(!uid)return null;const m=await req(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]||null}",
+            "async function context(){const s=sess(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organization_id:active.organization_id,role:active.role||'member'};const m=await req(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]||null}"
+          )
+
+          patch('public/property-status.js',
+            "const memberships=await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`,session.access_token);const organizationId=Array.isArray(memberships)?memberships[0]?.organization_id:null;if(!organizationId)return null;return{token:session.access_token,organizationId}",
+            "const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let organizationId=active?.organization_id||null;if(!organizationId){const memberships=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`,session.access_token);organizationId=Array.isArray(memberships)?memberships[0]?.organization_id:null}if(!organizationId)return null;return{token:session.access_token,organizationId}"
+          )
+
+          patch('public/website-provision-bridge.js',
+            "async function org(){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await req(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]||null}",
+            "async function org(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organization_id:active.organization_id,role:active.role||'member'};const m=await req(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]||null}"
+          )
+
+          patch('public/property-complete-integration.js',
+            "const m=await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`),oid=m?.[0]?.organization_id;if(!oid)return;",
+            "const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let oid=active?.organization_id||null;if(!oid){const m=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);oid=m?.[0]?.organization_id}if(!oid)return;"
+          )
+
+          patch('public/account-resilience.js',
+            "  const [pr,mr]=await Promise.allSettled([get(`/rest/v1/profiles?select=full_name,locale,account_mode&id=eq.${encodeURIComponent(uid)}&limit=1`),get(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`)]);if(pr.status==='fulfilled')profile=pr.value?.[0]||{};if(mr.status==='fulfilled')member=mr.value?.[0]||{};const oid=member.organization_id;",
+            "  const pr=await get(`/rest/v1/profiles?select=full_name,locale,account_mode,active_organization_id&id=eq.${encodeURIComponent(uid)}&limit=1`).catch(()=>[]);profile=pr?.[0]||{};const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)member={organization_id:active.organization_id,role:active.role||'member'};else{const mr=await get(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`).catch(()=>[]);member=mr?.[0]||{}}const oid=member.organization_id;"
+          )
+
+          patch('public/draft-actions.js',
+            "  async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await request(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]?.organization_id?{organizationId:m[0].organization_id,role:m[0].role}:null}",
+            "  async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organizationId:active.organization_id,role:active.role||'member'};const m=await request(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]?.organization_id?{organizationId:m[0].organization_id,role:m[0].role}:null}"
+          )
+
+          patch('public/lead-stage-actions.js',
+            "async function context(){const s=sess(),uid=s?.user?.id;if(!uid)return null;const m=await req(`/rest/v1/organization_members?select=organization_id,role&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]||null}",
+            "async function context(){const s=sess(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organization_id:active.organization_id,role:active.role||'member'};const m=await req(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]||null}"
+          )
+
+          patch('public/property-processing-auto.js',
+            "async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await api(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);const organizationId=m?.[0]?.organization_id;return organizationId?{organizationId}:null}",
+            "async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organizationId:active.organization_id};const m=await api(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);const organizationId=m?.[0]?.organization_id;return organizationId?{organizationId}:null}"
+          )
+
+          patch('public/contact-engine.js',
+            "const m=await req(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`,s.access_token);const oid=Array.isArray(m)?m[0]?.organization_id:null;return oid?{token:s.access_token,oid}:null",
+            "const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let oid=active?.organization_id||null;if(!oid){const m=await req(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`,s.access_token);oid=Array.isArray(m)?m[0]?.organization_id:null}return oid?{token:s.access_token,oid}:null"
+          )
+
+          patch('public/control-attention.js',
+            "async function oid(){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&limit=1`);return m?.[0]?.organization_id||null}",
+            "async function oid(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return active.organization_id;const m=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]?.organization_id||null}"
+          )
+
+          patch('public/runtime.js',
+            "    const memberships = await get(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`, session.access_token);\n    const organizationId = Array.isArray(memberships) ? memberships[0]?.organization_id : null;\n    if (!organizationId) return null;",
+            "    const active = window.LISTIA_WORKSPACE?.getActiveWorkspace ? await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true }).catch(() => null) : null;\n    let organizationId = active?.organization_id || null;\n    if (!organizationId) {\n      const memberships = await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`, session.access_token);\n      organizationId = Array.isArray(memberships) ? memberships[0]?.organization_id : null;\n    }\n    if (!organizationId) return null;"
+          )
+          PY
+
+          files=(public/billing.js public/appointment-actions.js public/property-status.js public/website-provision-bridge.js public/property-complete-integration.js public/account-resilience.js public/draft-actions.js public/lead-stage-actions.js public/property-processing-auto.js public/contact-engine.js public/control-attention.js public/runtime.js)
+          for file in "${files[@]}"; do
+            node --check "$file"
+            grep -Fq 'LISTIA_WORKSPACE' "$file"
+            if grep -Fq 'status=eq.active&limit=1' "$file"; then echo "$file still has unordered membership lookup" >&2; exit 1; fi
+          done
+
+      - name: Commit secondary consumer patches
+        run: |
+          if git diff --quiet -- public; then echo 'No changes needed.'; exit 0; fi
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/billing.js public/appointment-actions.js public/property-status.js public/website-provision-bridge.js public/property-complete-integration.js public/account-resilience.js public/draft-actions.js public/lead-stage-actions.js public/property-processing-auto.js public/contact-engine.js public/control-attention.js public/runtime.js
+          git commit -m 'Use canonical workspace across remaining LISTIA modules'
+          git push origin main
