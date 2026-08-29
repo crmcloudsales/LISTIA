@@ -1,10 +1,14 @@
-name: Install official LISTIA application icon
+name: LISTIA Official Brand Assets v8
 
 on:
   push:
     branches: [main]
     paths:
-      - '.github/icon-source/**'
+      - 'public/listia-official-icon-v3.svg'
+      - 'public/listia-official-icon-maskable-v4.svg'
+      - 'public/listia-site-isotipo-v4.svg'
+      - 'public/listia-wordmark-light.webp'
+      - 'public/listia-wordmark-dark.webp'
       - '.github/workflows/listia-official-app-icon.yml'
   workflow_dispatch:
 
@@ -12,112 +16,91 @@ permissions:
   contents: write
 
 concurrency:
-  group: listia-official-app-icon
-  cancel-in-progress: false
+  group: listia-official-brand-assets-v8
+  cancel-in-progress: true
 
 jobs:
-  install-icon:
+  build-brand-assets:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          ref: main
           fetch-depth: 0
-
-      - name: Detect staged exact source
-        id: source
-        shell: bash
-        run: |
-          if [[ -f .github/icon-source/part07b07.b64 ]]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
-
-      - name: Reconstruct and verify exact user-supplied source
-        if: steps.source.outputs.present == 'true'
-        shell: bash
+      - name: Sync current main
         run: |
           set -Eeuo pipefail
-          cat \
-            .github/icon-source/part01.b64 \
-            .github/icon-source/part02.b64 \
-            .github/icon-source/part03.b64 \
-            .github/icon-source/part04.b64 \
-            .github/icon-source/part05.b64 \
-            .github/icon-source/part06.b64 \
-            .github/icon-source/part07a.b64 \
-            .github/icon-source/part07b01.b64 \
-            .github/icon-source/part07b02.b64 \
-            .github/icon-source/part07b03.b64 \
-            .github/icon-source/part07b04.b64 \
-            .github/icon-source/part07b05.b64 \
-            .github/icon-source/part07b06.b64 \
-            .github/icon-source/part07b07.b64 \
-            | tr -d '\n\r ' | base64 --decode > /tmp/listia-app-icon-official.jpg
-          echo 'aab91cc3ce7cd1bece514a3763253147dcf4e364b5074d02b852befe1973befa  /tmp/listia-app-icon-official.jpg' | sha256sum -c -
-          file /tmp/listia-app-icon-official.jpg
-
-      - name: Build application icon derivatives
-        if: steps.source.outputs.present == 'true'
-        shell: bash
+          git fetch origin main
+          git reset --hard origin/main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install renderer
+        run: python -m pip install --disable-pip-version-check pillow cairosvg
+      - name: Build official derivatives
         run: |
           set -Eeuo pipefail
-          python3 -m pip install --quiet pillow
-          python3 - <<'PY'
+          python <<'PY'
           from pathlib import Path
+          from io import BytesIO
           from PIL import Image
-          src=Path('/tmp/listia-app-icon-official.jpg')
-          im=Image.open(src)
-          assert im.size==(1536,1536), im.size
-          if im.mode not in ('RGB','RGBA'): im=im.convert('RGB')
-          out=Path('public')
-          (out/'listia-app-icon-official.jpg').write_bytes(src.read_bytes())
-          for size in (32,180,192,512): im.resize((size,size),Image.Resampling.LANCZOS).save(out/f'listia-app-icon-{size}.png','PNG',optimize=True)
-          for size in (192,512): im.resize((size,size),Image.Resampling.LANCZOS).save(out/f'listia-app-icon-maskable-{size}.png','PNG',optimize=True)
-          PY
+          import cairosvg
 
-      - name: Wire icon into PWA only
-        if: steps.source.outputs.present == 'true'
-        shell: bash
+          root=Path('public')
+          def render(svg_path,size):
+              data=cairosvg.svg2png(url=str(svg_path),output_width=size,output_height=size)
+              return Image.open(BytesIO(data)).convert('RGBA')
+          def png(img,path): img.save(path,format='PNG',optimize=True)
+
+          app_svg=root/'listia-official-icon-v3.svg'
+          mask_svg=root/'listia-official-icon-maskable-v4.svg'
+          iso_svg=root/'listia-site-isotipo-v4.svg'
+
+          for size in (32,180,192,512):
+              png(render(app_svg,size),root/f'listia-app-icon-{size}.png')
+          for size in (192,512):
+              png(render(mask_svg,size),root/f'listia-app-icon-maskable-{size}.png')
+          render(app_svg,1024).convert('RGB').save(root/'listia-app-icon-official.jpg',quality=95,optimize=True)
+
+          iso1024=render(iso_svg,1024)
+          png(iso1024,root/'listia-isotipo-official-v4.png')
+          for size,name in ((32,'listia-isotipo-32-v2.png'),(180,'listia-isotipo-180-v2.png'),(192,'listia-isotipo-192-v2.png'),(512,'listia-isotipo-512-v2.png')):
+              png(render(iso_svg,size),root/name)
+          png(render(iso_svg,192),root/'listia-isotipo-maskable-192-v3.png')
+          png(render(iso_svg,512),root/'listia-isotipo-maskable-512-v3.png')
+
+          mark=render(iso_svg,512)
+          mark.save(root/'listia-mark-transparent.webp',format='WEBP',lossless=True,method=6)
+          wm=Image.open(root/'listia-wordmark-light.webp').convert('RGBA')
+          target_h=180
+          wm=wm.resize((round(wm.width*target_h/wm.height),target_h),Image.Resampling.LANCZOS)
+          iso=render(iso_svg,260)
+          pad,gap=20,28
+          canvas=Image.new('RGBA',(pad+iso.width+gap+wm.width+pad,max(iso.height,wm.height)+2*pad),(0,0,0,0))
+          canvas.alpha_composite(iso,(pad,(canvas.height-iso.height)//2))
+          canvas.alpha_composite(wm,(pad+iso.width+gap,(canvas.height-wm.height)//2))
+          canvas.save(root/'listia-logo-transparent.webp',format='WEBP',lossless=True,method=6)
+          PY
+      - name: Validate generated scope
         run: |
           set -Eeuo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import json,re
-          icons=[
-            {'src':'/listia-app-icon-192.png?v=1','sizes':'192x192','type':'image/png','purpose':'any'},
-            {'src':'/listia-app-icon-512.png?v=1','sizes':'512x512','type':'image/png','purpose':'any'},
-            {'src':'/listia-app-icon-maskable-192.png?v=1','sizes':'192x192','type':'image/png','purpose':'maskable'},
-            {'src':'/listia-app-icon-maskable-512.png?v=1','sizes':'512x512','type':'image/png','purpose':'maskable'}]
-          manifests=list(Path('public').glob('manifest*.webmanifest'))
-          for p in manifests:
-              d=json.loads(p.read_text(encoding='utf-8')); d['icons']=icons; p.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          p=Path('public/index.html'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'<link href="/listia-isotipo-180-v2\.png\?v=\d+" rel="apple-touch-icon" sizes="180x180"/>','<link href="/listia-app-icon-180.png?v=1" rel="apple-touch-icon" sizes="180x180"/>',s)
-          s=re.sub(r'<link href="/listia-isotipo-32-v2\.png\?v=\d+" rel="icon" sizes="32x32" type="image/png"/>','<link href="/listia-app-icon-32.png?v=1" rel="icon" sizes="32x32" type="image/png"/>',s)
-          assert 'class="brand-logo" src="/listia-logo-transparent.webp"' in s
-          p.write_text(s,encoding='utf-8')
-          p=Path('public/sw.js'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'const CACHE="listia-pwa-v[^"]+";','const CACHE="listia-pwa-v0.9.9";',s)
-          for a,b in {
-            '/listia-isotipo-192-v2.png?v=4':'/listia-app-icon-192.png?v=1','/listia-isotipo-512-v2.png?v=4':'/listia-app-icon-512.png?v=1',
-            '/listia-isotipo-maskable-192-v3.png?v=5':'/listia-app-icon-maskable-192.png?v=1','/listia-isotipo-maskable-512-v3.png?v=5':'/listia-app-icon-maskable-512.png?v=1',
-            '/listia-isotipo-180-v2.png?v=4':'/listia-app-icon-180.png?v=1','/listia-isotipo-32-v2.png?v=4':'/listia-app-icon-32.png?v=1'}.items(): s=s.replace(a,b)
-          p.write_text(s,encoding='utf-8')
-          p=Path('public/_headers'); s=p.read_text(encoding='utf-8')
-          if '/listia-app-icon-*.png' not in s: s=s.rstrip()+'\n\n/listia-app-icon-*.png\n  Cache-Control: public, max-age=31536000, immutable\n\n/listia-app-icon-official.jpg\n  Cache-Control: public, max-age=31536000, immutable\n'
-          p.write_text(s,encoding='utf-8')
-          assert len(manifests)>=12
-          PY
-
-      - name: Commit exact official app icon
-        if: steps.source.outputs.present == 'true'
-        shell: bash
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -E '(^|/)marketplace' >/dev/null; then
+            echo 'Brand build must never modify Marketplace files.'
+            exit 1
+          fi
+          node -e "JSON.parse(require('fs').readFileSync('public/manifest.webmanifest','utf8'))"
+      - name: Commit derivatives
         run: |
           set -Eeuo pipefail
-          rm -rf .github/icon-source
-          git config user.name 'LISTIA DevOps'
-          git config user.email 'actions@users.noreply.github.com'
-          git add public .github/icon-source
-          git commit -m 'feat: set supplied artwork as official LISTIA application icon'
-          for attempt in 1 2 3 4 5; do git pull --rebase origin main && git push origin HEAD:main && exit 0; sleep $((attempt*2)); done
-          exit 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png \
+            public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png public/listia-app-icon-official.jpg \
+            public/listia-isotipo-official-v4.png public/listia-isotipo-32-v2.png public/listia-isotipo-180-v2.png public/listia-isotipo-192-v2.png public/listia-isotipo-512-v2.png \
+            public/listia-isotipo-maskable-192-v3.png public/listia-isotipo-maskable-512-v3.png public/listia-mark-transparent.webp public/listia-logo-transparent.webp
+          if git diff --cached --quiet; then echo 'Brand derivatives already current.'; exit 0; fi
+          git commit -m 'Build LISTIA official brand assets v8'
+          git pull --rebase origin main
+          git push origin HEAD:main
