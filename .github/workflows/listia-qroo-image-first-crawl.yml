@@ -1,27 +1,104 @@
 name: LISTIA Quintana Roo Image-First Crawl
 
-# SECURITY HOLD (2026-08-29):
-# The previous workflow committed raw crawl snapshots to a public repository.
-# Production ingest also depended on raw.githubusercontent.com, so silently
-# changing storage would break the pipeline. Keep this workflow non-writing and
-# blocked until a private server-to-server ingest path is deployed.
+# Raw crawl snapshots are ephemeral runner data only. They must never be committed
+# to GitHub or uploaded as public artifacts. Authentication to LISTIA uses GitHub
+# Actions OIDC; no Supabase API key is stored in this repository/workflow.
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/listia-qroo-image-first-crawl.yml"
   workflow_dispatch:
+    inputs:
+      max_pages:
+        description: "Pages to crawl (0 = all discovered pages)"
+        required: true
+        default: "5"
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: listia-qroo-image-first-crawl
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  security-hold:
+  private-crawl-ingest:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      QROO_CRAWL_OUT: ${{ runner.temp }}/qroo-crawl
+      QROO_WORKERS: "6"
+      QROO_CRAWL_SLEEP: "0.20"
+      QROO_INGEST_BATCH_SIZE: "200"
+      QROO_PRIVATE_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/qroo-private-ingest"
+
     steps:
-      - name: Block public crawl snapshot publication
+      - name: Checkout LISTIA
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install crawler dependencies
+        run: python -m pip install --disable-pip-version-check beautifulsoup4 curl_cffi
+
+      - name: Resolve safe crawl size
         shell: bash
         run: |
-          echo "Q.Roo crawl is intentionally blocked: raw inventory snapshots must not be committed to a public repository."
-          echo "Deploy the private server-to-server ingest path before re-enabling this workflow."
-          exit 1
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            # The workflow-file deployment itself performs one controlled page as
+            # the positive OIDC/Edge smoke test. Larger runs remain manual until
+            # this path is verified in production.
+            pages="1"
+          else
+            pages="${{ inputs.max_pages }}"
+          fi
+          if ! [[ "${pages}" =~ ^[0-9]+$ ]] || (( pages > 1000 )); then
+            echo "Invalid max_pages=${pages}" >&2
+            exit 2
+          fi
+          echo "QROO_MAX_PAGES=${pages}" >> "${GITHUB_ENV}"
+
+      - name: Crawl image-first inventory to ephemeral runner storage
+        run: python scripts/crawl-qroo-image-first.py
+
+      - name: Verify strict image output before transport
+        shell: python
+        run: |
+          import json, pathlib, re, os
+          root = pathlib.Path(os.environ["QROO_CRAWL_OUT"])
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          assert manifest.get("image_required") is True
+          assert manifest.get("generic_placeholders_rejected") is True
+          bad = re.compile(r"(?:background[-_]?card|empty[-_]?card|fallback[-_]?image|placeholder|default[-_]?image|no[-_]?image|no[-_]?photo|sin[-_]?imagen|sin[-_]?foto|image[-_]?not[-_]?available|missing[-_]?image|favicon|avatar|gravatar|sprite|tracking[-_]?pixel)", re.I)
+          rows = 0
+          for entry in manifest.get("chunks", []):
+              payload = json.loads((root / entry["file"]).read_text(encoding="utf-8"))
+              for row in payload:
+                  rows += 1
+                  cover = str(row.get("cover_image_url") or "")
+                  gallery = row.get("gallery") or []
+                  assert cover.startswith(("http://", "https://")) and not bad.search(cover), (row.get("external_id"), cover)
+                  assert isinstance(gallery, list) and gallery, row.get("external_id")
+                  assert all(isinstance(url, str) and url.startswith(("http://", "https://")) and not bad.search(url) for url in gallery), row.get("external_id")
+          assert rows == int(manifest.get("unique_listings", -1)), (rows, manifest.get("unique_listings"))
+          print(json.dumps({"validated_rows": rows, "rejected_without_image": manifest.get("rejected_without_image"), "failures": len(manifest.get("failures", []))}))
+
+      - name: Send batches to LISTIA through GitHub OIDC
+        run: python scripts/push-qroo-private-ingest.py "${QROO_CRAWL_OUT}"
+
+      - name: Confirm no repository snapshot mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- .; then
+            echo "Crawler changed tracked repository files; refusing to finish." >&2
+            git status --short
+            exit 1
+          fi
+          echo "Private Q.Roo run completed without writing crawl snapshots to GitHub."
