@@ -11,7 +11,7 @@
       "included_users": null,
       "property_limit": 3,
       "functional_limits_apply": true,
-      "usage_markup_percent": 50,
+      "usage_markup_percent": 30,
       "stripe_lookup_key": "listia_free_monthly_v1",
       "portable_key": "listia_free"
     },
@@ -20,7 +20,7 @@
       "included_users": 1,
       "max_users": 1,
       "property_limit": null,
-      "usage_markup_percent": 25,
+      "usage_markup_percent": 20,
       "stripe_lookup_key": "listia_pro_monthly_v1",
       "portable_key": "listia_pro"
     },
@@ -28,7 +28,7 @@
       "monthly_usd": 147,
       "included_users": 2,
       "property_limit": null,
-      "usage_markup_percent": 12.5,
+      "usage_markup_percent": 10,
       "stripe_lookup_key": "listia_premium_monthly_v1",
       "portable_key": "listia_premium",
       "extra_seat": {
@@ -47,9 +47,9 @@
     "plural": "Gestiones",
     "default_formula": "actual_provider_cost * (1 + plan_markup_percent / 100)",
     "target_markup_percent": {
-      "free": 50,
-      "pro": 25,
-      "premium": 12.5
+      "free": 30,
+      "pro": 20,
+      "premium": 10
     },
     "ordinary_markup_bounds_percent": {
       "minimum": 5,
@@ -72,9 +72,9 @@
       "occurred_at"
     ],
     "examples_usd": [
-      {"provider_cost": 0.50, "free": 0.75, "pro": 0.625, "premium": 0.5625},
-      {"provider_cost": 1.00, "free": 1.50, "pro": 1.25, "premium": 1.125},
-      {"provider_cost": 10.00, "free": 15.00, "pro": 12.50, "premium": 11.25}
+      {"provider_cost": 0.50, "free": 0.65, "pro": 0.60, "premium": 0.55},
+      {"provider_cost": 1.00, "free": 1.30, "pro": 1.20, "premium": 1.10},
+      {"provider_cost": 10.00, "free": 13.00, "pro": 12.00, "premium": 11.00}
     ]
   },
   "domains": {
