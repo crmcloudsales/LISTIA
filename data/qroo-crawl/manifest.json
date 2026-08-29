@@ -1,8 +1,9 @@
 {
-  "source": "qroo-public-marketplace-crawl",
+  "source": "qroo-public-marketplace-crawl-image-first",
   "base_url": "https://propiedades.com/quintana-roo/",
-  "pages_attempted": 999,
-  "unique_listings": 41472,
+  "pages_attempted": 1000,
+  "unique_listings": 41529,
+  "rejected_without_image": 0,
   "chunks": [
     {
       "file": "chunk-0001.json",
@@ -114,9 +115,10 @@
     },
     {
       "file": "chunk-0028.json",
-      "count": 972
+      "count": 1029
     }
   ],
   "failures": [],
-  "workers": 10
+  "workers": 10,
+  "image_required": true
 }
