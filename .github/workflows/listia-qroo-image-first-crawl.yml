@@ -11,6 +11,11 @@ on:
         description: "Pages to crawl (0 = all discovered pages)"
         required: true
         default: "5"
+      detail_image_fallback:
+        description: "QA only: fetch individual property pages to recover media"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +33,7 @@ jobs:
       QROO_WORKERS: "6"
       QROO_CRAWL_SLEEP: "0.20"
       QROO_INGEST_BATCH_SIZE: "200"
+      QROO_DETAIL_IMAGE_FALLBACK: "${{ inputs.detail_image_fallback }}"
       QROO_PRIVATE_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/qroo-private-ingest"
 
     steps:
@@ -69,6 +75,11 @@ jobs:
           assert manifest.get("generic_placeholders_rejected") is True
           assert manifest.get("image_listing_binding_enforced") is True
 
+          # Detail recovery is disabled by default. If explicitly enabled for QA,
+          # the same ownership/reuse checks below still apply before transport.
+          requested_detail = os.environ.get("QROO_DETAIL_IMAGE_FALLBACK", "false").lower() == "true"
+          assert bool(manifest.get("detail_page_image_fallback")) is requested_detail
+
           bad = re.compile(r"(?:background[-_]?card|empty[-_]?card|fallback[-_]?image|placeholder|default[-_]?image|no[-_]?image|no[-_]?photo|sin[-_]?imagen|sin[-_]?foto|image[-_]?not[-_]?available|missing[-_]?image|favicon|avatar|gravatar|sprite|tracking[-_]?pixel)", re.I)
           numeric_id = re.compile(r"(?<!\d)(\d{6,})(?!\d)")
           rows = 0
@@ -96,6 +107,8 @@ jobs:
               "unique_covers": len(seen_covers),
               "rejected_without_image": manifest.get("rejected_without_image"),
               "rejected_ambiguous_reused_image": manifest.get("rejected_ambiguous_reused_image"),
+              "recovered_from_detail_pages": manifest.get("recovered_from_detail_pages"),
+              "detail_page_image_fallback": manifest.get("detail_page_image_fallback"),
               "failures": len(manifest.get("failures", [])),
           }))
 
