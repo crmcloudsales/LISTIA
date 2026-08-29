@@ -1,0 +1,7 @@
+Listia Marketplace v7
+- Larger Venta/Renta badge
+- Single Me interesa CTA
+- CTA opens detail and creates/routs lead
+- Listia installed name
+- non-maskable official app icon
+- official site isotipo visible across PWA/commercial

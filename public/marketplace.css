@@ -6,7 +6,7 @@ html[dir="rtl"] .marketplace-panel,html[dir="rtl"] .marketplace-card,html[dir="r
 @media(max-width:520px){.marketplace-entry{padding:8px 10px}.marketplace-panel{padding-left:18px!important;padding-right:18px!important}.marketplace-head{gap:10px}.marketplace-filters{grid-template-columns:1fr}.marketplace-interest-grid{grid-template-columns:1fr}.marketplace-actions{flex-direction:column}.marketplace-detail-grid{grid-template-columns:1fr 1fr}.marketplace-title{font-size:17px}}
 
 /* LISTIA MARKETPLACE V6 START */
-.marketplace-badge{font-size:14px!important;padding:7px 12px!important;letter-spacing:.02em;line-height:1.1}
+.marketplace-badge{font-size:16px!important;padding:7px 12px!important;letter-spacing:.02em;line-height:1.1}
 .marketplace-actions{display:block!important}.marketplace-interest-button{width:100%;min-height:50px;font-size:16px;font-weight:900;border-radius:15px;box-shadow:0 8px 22px rgba(126,47,255,.22)}
 .marketplace-card{transition:transform .18s ease,box-shadow .18s ease}.marketplace-card:hover{transform:translateY(-2px);box-shadow:0 18px 44px rgba(25,18,45,.14)}
 .marketplace-media[role=button],.marketplace-title{cursor:pointer}.marketplace-media:focus-visible,.marketplace-title:focus-visible,.marketplace-gallery-thumb:focus-visible{outline:3px solid #7b3fff;outline-offset:3px}
@@ -14,5 +14,9 @@ html[dir="rtl"] .marketplace-panel,html[dir="rtl"] .marketplace-card,html[dir="r
 .marketplace-gallery-rail{display:flex;gap:9px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x proximity}.marketplace-gallery-thumb{flex:0 0 92px;height:70px;padding:0;border:2px solid transparent;border-radius:13px;overflow:hidden;background:#eee;scroll-snap-align:start}.marketplace-gallery-thumb.active{border-color:#7b3fff}.marketplace-gallery-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .marketplace-interest-status{min-height:0;margin:2px 0 8px;font-weight:800}.marketplace-interest-status.marketplace-success,.marketplace-interest-status.marketplace-error{padding:12px 14px;border-radius:13px}.marketplace-map{margin-top:18px;display:grid;gap:8px}.marketplace-map h2,.marketplace-map>strong{margin:0;font-size:18px}.marketplace-map iframe{width:100%;height:320px;border:0;border-radius:18px;background:#eee}
 .listia-map-note{display:block;color:#85828d;font-size:12px;line-height:1.45}.listia-media-pending{width:100%;height:100%;min-height:170px;display:grid;place-items:center;align-content:center;gap:8px;background:radial-gradient(circle at 50% 25%,rgba(125,69,255,.20),transparent 45%),#15151d;color:#aaa8b3;text-align:center}.listia-media-pending-icon{font-size:40px;line-height:1;color:#9f83ff}.listia-media-pending small{font-size:12px;font-weight:800;letter-spacing:.02em}.marketplace-detail-media>.listia-media-pending{min-height:280px}
-@media(max-width:600px){.marketplace-badge{font-size:14px!important}.marketplace-detail-gallery .marketplace-detail-media{aspect-ratio:4/3}.marketplace-map iframe{height:270px}.listia-media-pending{min-height:210px}}
+@media(max-width:600px){.marketplace-badge{font-size:15px!important}.marketplace-detail-gallery .marketplace-detail-media{aspect-ratio:4/3}.marketplace-map iframe{height:270px}.listia-media-pending{min-height:210px}}
 /* LISTIA MARKETPLACE V6 END */
+
+/* LISTIA MARKETPLACE V7 */
+.marketplace-detail-cta{position:sticky;bottom:10px;z-index:4;padding:10px 0;background:linear-gradient(180deg,rgba(7,7,10,0),rgba(7,7,10,.92) 34%)}
+.marketplace-detail-cta .marketplace-interest-button{width:100%;min-height:54px;font-size:17px}
