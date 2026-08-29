@@ -1,0 +1,180 @@
+name: LISTIA workspace consumers patch v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-workspace-consumers-patch-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-consumers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Migrate workspace consumers to canonical active organization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          def replace_block(path_str, pattern, replacement, marker, label):
+              path = Path(path_str)
+              text = path.read_text(encoding='utf-8')
+              if marker in text:
+                  print(f'{label}: already patched')
+                  return False
+              new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one block, found {count}')
+              path.write_text(new_text, encoding='utf-8')
+              print(f'{label}: patched')
+              return True
+
+          canonical_fallback = 'order=created_at.asc,organization_id.asc&limit=1'
+
+          replace_block(
+              'public/office-modules.js',
+              r'  async function context\(\)\{.*?\n  \}\n\n  function show',
+              textwrap.dedent('''
+                async function context(){
+                  const session=readSession(); if(!session?.access_token) return null;
+                  const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;
+                  if(active?.organization_id)return{token:session.access_token,organizationId:active.organization_id};
+                  let userId=session.user?.id||null; if(!userId){const u=await get('/auth/v1/user',session.access_token);userId=u?.id||null}
+                  if(!userId)return null;
+                  const m=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`,session.access_token);
+                  const organizationId=Array.isArray(m)?m[0]?.organization_id:null; return organizationId?{token:session.access_token,organizationId}:null;
+                }
+
+                function show
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'office-modules'
+          )
+
+          replace_block(
+              'public/listings-v2.js',
+              r'async function orgId\(\)\{.*?\}\nfunction money',
+              textwrap.dedent('''
+                async function orgId(){const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return active.organization_id;const s=session(),uid=s?.user?.id;if(!uid)throw new Error('session');const rows=await request(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return rows?.[0]?.organization_id||null}
+                function money
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'listings-v2'
+          )
+
+          replace_block(
+              'public/control-center.js',
+              r'async function oid\(\)\{.*?\}\nfunction shell',
+              textwrap.dedent('''
+                async function oid(){const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return active.organization_id;const s=sess(),uid=s?.user?.id;if(!uid)throw new Error('session');const m=await get(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]?.organization_id}
+                function shell
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'control-center'
+          )
+
+          replace_block(
+              'public/lead-workspace.js',
+              r'async function ctx\(\)\{.*?\}\nasync function action',
+              textwrap.dedent('''
+                async function ctx(){const s=sess(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{token:s.access_token,uid,organizationId:active.organization_id,role:active.role||'member'};const m=await get(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]?{token:s.access_token,uid,organizationId:m[0].organization_id,role:m[0].role}:null}
+                async function action
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'lead-workspace'
+          )
+
+          replace_block(
+              'public/website-status.js',
+              r'async function ctx\(\)\{.*?\}\nfunction host',
+              textwrap.dedent('''
+                async function ctx(){const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let oid=active?.organization_id||null;if(!oid){const s=session(),uid=s?.user?.id;if(!uid)return null;const m=await req(`/rest/v1/organization_members?select=organization_id,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);oid=m?.[0]?.organization_id||null}if(!oid)return null;const w=await req(`/rest/v1/organization_websites?select=mode,domain,subdomain,status,updated_at&organization_id=eq.${encodeURIComponent(oid)}&limit=1`);return w?.[0]||null}
+                function host
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'website-status'
+          )
+
+          replace_block(
+              'public/managed-site-health.js',
+              r'async function context\(\)\{.*?\}\nasync function probe',
+              textwrap.dedent('''
+                async function context(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let member=active?.organization_id?{organization_id:active.organization_id,role:active.role||'member'}:null;if(!member){const m=await req(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);member=m?.[0]||null}if(!member?.organization_id)return null;const rows=await req(`/rest/v1/organization_websites?select=mode,subdomain,status,configuration&organization_id=eq.${encodeURIComponent(member.organization_id)}&limit=1`);const website=rows?.[0]||null;if(!website||website.mode!=='listia_subdomain')return null;const sub=String(website.subdomain||'').trim().toLowerCase();if(!SUB.test(sub)||RESERVED.has(sub))return null;return{organization_id:member.organization_id,role:String(member.role||''),website,subdomain:sub,host:`${sub}.listiaapp.com`}}
+                async function probe
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'managed-site-health'
+          )
+
+          replace_block(
+              'public/developments.js',
+              r'async function context\(force=false\)\{.*?\}\nasync function portfolio',
+              textwrap.dedent('''
+                async function context(force=false){if(contextCache&&!force)return contextCache;const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force}).catch(()=>null):null;if(active?.organization_id){contextCache={uid,organization_id:active.organization_id,role:active.role||'member'};return contextCache}const m=await api(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);contextCache=m?.[0]?{uid,organization_id:m[0].organization_id,role:m[0].role}:null;return contextCache}
+                async function portfolio
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'developments'
+          )
+
+          replace_block(
+              'public/development-property-bridge.js',
+              r'async function ctx\(\)\{.*?\}\nasync function portfolio',
+              textwrap.dedent('''
+                async function ctx(){const s=session(),uid=s?.user?.id;if(!uid)return null;const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;if(active?.organization_id)return{organization_id:active.organization_id,role:active.role||'member'};const m=await api(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);return m?.[0]||null}
+                async function portfolio
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'development-property-bridge'
+          )
+
+          replace_block(
+              'public/account-edit.js',
+              r'async function context\(\)\{.*?\}\nfunction button',
+              textwrap.dedent('''
+                async function context(){const s=sess(),uid=s?.user?.id;if(!uid)throw new Error('session');const p=await req(`/rest/v1/profiles?select=id,full_name,locale,account_mode,active_organization_id&id=eq.${encodeURIComponent(uid)}&limit=1`);const active=window.LISTIA_WORKSPACE?.getActiveWorkspace?await window.LISTIA_WORKSPACE.getActiveWorkspace({force:true}).catch(()=>null):null;let member=active?.organization_id?{organization_id:active.organization_id,role:active.role||'member'}:{};if(!member.organization_id){const m=await req(`/rest/v1/organization_members?select=organization_id,role,created_at&user_id=eq.${encodeURIComponent(uid)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`);member=m?.[0]||{}}const oid=member.organization_id;let org=null;if(oid){const o=await req(`/rest/v1/organizations?select=id,name,primary_market,country_code,timezone&id=eq.${encodeURIComponent(oid)}&limit=1`);org=o?.[0]||null}return{profile:p?.[0]||null,member,org}}
+                function button
+              ''').strip(),
+              'LISTIA_WORKSPACE?.getActiveWorkspace',
+              'account-edit'
+          )
+
+          for path_str in [
+              'public/office-modules.js','public/listings-v2.js','public/control-center.js',
+              'public/lead-workspace.js','public/website-status.js','public/managed-site-health.js',
+              'public/developments.js','public/development-property-bridge.js','public/account-edit.js'
+          ]:
+              text = Path(path_str).read_text(encoding='utf-8')
+              if 'status=eq.active&limit=1' in text:
+                  raise SystemExit(f'{path_str}: unordered active membership query remains')
+              if 'LISTIA_WORKSPACE?.getActiveWorkspace' not in text:
+                  raise SystemExit(f'{path_str}: canonical workspace marker missing')
+              if canonical_fallback not in text:
+                  raise SystemExit(f'{path_str}: deterministic fallback missing')
+          PY
+
+          for file in public/office-modules.js public/listings-v2.js public/control-center.js public/lead-workspace.js public/website-status.js public/managed-site-health.js public/developments.js public/development-property-bridge.js public/account-edit.js; do
+            node --check "$file"
+          done
+
+      - name: Commit canonical workspace consumer patches
+        run: |
+          if git diff --quiet -- public; then
+            echo "No changes needed."
+            exit 0
+          fi
+          git config user.name "LISTIA DevOps"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/office-modules.js public/listings-v2.js public/control-center.js public/lead-workspace.js public/website-status.js public/managed-site-health.js public/developments.js public/development-property-bridge.js public/account-edit.js
+          git commit -m "Use canonical active workspace across LISTIA modules"
+          git push origin main
