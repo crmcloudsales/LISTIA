@@ -1,0 +1,110 @@
+name: Refresh official Listia brand assets v4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/listia-official-icon-v3.svg'
+      - 'public/listia-official-icon-maskable-v4.svg'
+      - 'public/listia-site-isotipo-v4.svg'
+      - 'commercial/listia-official-icon-v3.svg'
+      - '.github/workflows/listia-brand-refresh-v4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-brand-refresh-v4
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build exact icon and isotype derivatives
+        run: |
+          set -Eeuo pipefail
+          pip install --disable-pip-version-check --quiet cairosvg pillow
+          python - <<'PY'
+          from pathlib import Path
+          import io, json, re
+          from PIL import Image
+          import cairosvg
+
+          root=Path('public')
+          app_svg=(root/'listia-official-icon-v3.svg').read_bytes()
+          mask_svg=(root/'listia-official-icon-maskable-v4.svg').read_bytes()
+          iso_svg=(root/'listia-site-isotipo-v4.svg').read_bytes()
+
+          def render(svg,size):
+              raw=cairosvg.svg2png(bytestring=svg,output_width=size,output_height=size)
+              return Image.open(io.BytesIO(raw)).convert('RGB')
+
+          for size in (32,180,192,512):
+              render(app_svg,size).save(root/f'listia-app-icon-{size}.png','PNG',optimize=True)
+          for size in (192,512):
+              render(mask_svg,size).save(root/f'listia-app-icon-maskable-{size}.png','PNG',optimize=True)
+
+          iso=render(iso_svg,512)
+          iso.save(root/'listia-mark-transparent.webp','WEBP',quality=96,method=6)
+          iso.save(root/'listia-logo-transparent.webp','WEBP',quality=96,method=6)
+          render(iso_svg,512).save(root/'listia-isotipo-official-v4.png','PNG',optimize=True)
+
+          icons=[
+            {'src':'/listia-app-icon-192.png?v=5','sizes':'192x192','type':'image/png','purpose':'any'},
+            {'src':'/listia-app-icon-512.png?v=5','sizes':'512x512','type':'image/png','purpose':'any'},
+            {'src':'/listia-app-icon-maskable-192.png?v=5','sizes':'192x192','type':'image/png','purpose':'maskable'},
+            {'src':'/listia-app-icon-maskable-512.png?v=5','sizes':'512x512','type':'image/png','purpose':'maskable'}]
+          manifests=list(root.glob('manifest*.webmanifest'))
+          for p in manifests:
+              d=json.loads(p.read_text(encoding='utf-8'))
+              d['name']='Listia — Real Estate with AI'
+              d['short_name']='Listia'
+              d['icons']=icons
+              p.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          p=root/'index.html'
+          s=p.read_text(encoding='utf-8')
+          s=re.sub(r'<title>[^<]*</title>','<title>Listia</title>',s,count=1)
+          s=re.sub(r'<link href="/listia-app-icon-180\.png\?v=\d+" rel="apple-touch-icon" sizes="180x180"/>','<link href="/listia-app-icon-180.png?v=5" rel="apple-touch-icon" sizes="180x180"/>',s)
+          s=re.sub(r'<link href="/listia-app-icon-32\.png\?v=\d+" rel="icon" sizes="32x32" type="image/png"/>','<link href="/listia-app-icon-32.png?v=5" rel="icon" sizes="32x32" type="image/png"/>',s)
+          s=s.replace('/manifest-en.webmanifest?v=0.9.5','/manifest-en.webmanifest?v=0.9.6')
+          p.write_text(s,encoding='utf-8')
+
+          sw=root/'sw.js'
+          if sw.exists():
+              s=sw.read_text(encoding='utf-8')
+              s=re.sub(r'const CACHE="listia-pwa-v[^"]+";','const CACHE="listia-pwa-v0.10.0";',s)
+              s=re.sub(r'/listia-app-icon-(32|180|192|512)\.png\?v=\d+',r'/listia-app-icon-\1.png?v=5',s)
+              s=re.sub(r'/listia-app-icon-maskable-(192|512)\.png\?v=\d+',r'/listia-app-icon-maskable-\1.png?v=5',s)
+              sw.write_text(s,encoding='utf-8')
+
+          assert manifests, 'No manifests found'
+          assert 'short_name": "Listia"' in (root/'manifest-en.webmanifest').read_text(encoding='utf-8')
+          assert '<title>Listia</title>' in p.read_text(encoding='utf-8')
+          PY
+
+      - name: Commit generated official brand assets
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: refresh official Listia app icon, favicon, isotype and label'
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
