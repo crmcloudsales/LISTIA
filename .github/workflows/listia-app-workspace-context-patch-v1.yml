@@ -1,0 +1,94 @@
+name: LISTIA app workspace context patch v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-app-workspace-context-patch-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Replace arbitrary membership selection with canonical workspace
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('public/app.js')
+          text = path.read_text(encoding='utf-8')
+          old = '''async function getUserOrganization(session, userId) {
+  const memberPath = `/rest/v1/organization_members?select=organization_id,role,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`;
+  const memberships = await api(memberPath, { accessToken: session.access_token });
+  const membership = Array.isArray(memberships) ? memberships[0] : null;
+  if (!membership?.organization_id) return null;
+
+  const orgPath = `/rest/v1/organizations?select=id,name,business_type,primary_market,onboarding_completed&id=eq.${encodeURIComponent(membership.organization_id)}&limit=1`;
+  const organizations = await api(orgPath, { accessToken: session.access_token });
+  const org = Array.isArray(organizations) ? organizations[0] : null;
+  if (!org) return null;
+  return { ...org, membership_role: membership.role };
+}'''
+          new = '''async function getUserOrganization(session, userId) {
+  let membership = null;
+
+  if (window.LISTIA_WORKSPACE?.getActiveWorkspace) {
+    try {
+      const active = await window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true });
+      if (active?.organization_id) {
+        membership = { organization_id: active.organization_id, role: active.role || "member" };
+      }
+    } catch (error) {
+      console.warn("LISTIA canonical workspace unavailable; using deterministic membership fallback", error);
+    }
+  }
+
+  if (!membership?.organization_id) {
+    const memberPath = `/rest/v1/organization_members?select=organization_id,role,status,created_at&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc,organization_id.asc&limit=1`;
+    const memberships = await api(memberPath, { accessToken: session.access_token });
+    membership = Array.isArray(memberships) ? memberships[0] : null;
+  }
+
+  if (!membership?.organization_id) return null;
+  const orgPath = `/rest/v1/organizations?select=id,name,business_type,primary_market,onboarding_completed&id=eq.${encodeURIComponent(membership.organization_id)}&limit=1`;
+  const organizations = await api(orgPath, { accessToken: session.access_token });
+  const org = Array.isArray(organizations) ? organizations[0] : null;
+  if (!org) return null;
+  return { ...org, membership_role: membership.role };
+}'''
+          if new in text:
+              print('Canonical workspace app patch already present.')
+          elif old in text:
+              text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+              print('Patched app.js to use canonical workspace context.')
+          else:
+              raise SystemExit('Expected getUserOrganization block not found; refusing broad patch.')
+          PY
+          node --check public/app.js
+          grep -Fq 'window.LISTIA_WORKSPACE.getActiveWorkspace({ force: true })' public/app.js
+          grep -Fq 'order=created_at.asc,organization_id.asc&limit=1' public/app.js
+          if grep -Fq 'status=eq.active&limit=1' public/app.js; then
+            echo 'Unordered membership fallback still present in app.js' >&2
+            exit 1
+          fi
+
+      - name: Commit app workspace patch
+        run: |
+          if git diff --quiet -- public/app.js; then
+            echo "No changes needed."
+            exit 0
+          fi
+          git config user.name "LISTIA DevOps"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/app.js
+          git commit -m "Use canonical active workspace in LISTIA core app"
+          git push origin main
