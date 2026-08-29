@@ -1,0 +1,54 @@
+name: LISTIA Marketplace v7 Polish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apply-marketplace-v7-polish.py'
+      - '.github/workflows/listia-marketplace-v7-polish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-marketplace-v7-polish
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply v7 marketplace and brand patch
+        run: python3 scripts/apply-marketplace-v7-polish.py
+      - name: Validate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq "font-size:16px!important" public/marketplace.css
+          grep -Fq "marketplace-detail-cta" public/marketplace.js
+          grep -Fq "marketplace.css?v=7" public/marketplace.js
+          grep -Fq 'short_name": "Listia"' public/manifest.webmanifest
+          ! grep -q '"purpose": "maskable"' public/manifest.webmanifest
+          grep -Fq 'listia-site-isotipo-v4.svg?v=7' public/index.html
+          grep -Fq 'listia-app-icon-32.png?v=7' commercial/index.html
+          grep -Fq "const LOGO_SRC = './listia-site-isotipo-v4.svg?v=7';" commercial/index.html
+          node --check public/marketplace.js
+      - name: Commit v7 production files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public commercial
+          git commit -m 'feat: polish Marketplace v7 and Listia branding' || exit 0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
