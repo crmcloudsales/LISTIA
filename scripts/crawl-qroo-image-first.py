@@ -27,7 +27,16 @@ OUT_DIR = Path(os.getenv("QROO_CRAWL_OUT", "data/qroo-crawl"))
 CHUNK_SIZE = int(os.getenv("QROO_CHUNK_SIZE", "1500"))
 MAX_PAGES = int(os.getenv("QROO_MAX_PAGES", "0"))
 WORKERS = max(2, min(int(os.getenv("QROO_WORKERS", "14")), 24))
-BAD_IMAGE = re.compile(r"(?:logo|favicon|sprite|avatar|profile|icon|placeholder|default[-_]?image|badge|spinner|loader|tracking|pixel|gravatar)", re.I)
+
+# A URL being syntactically valid is not enough to satisfy LISTIA's image rule.
+# Known generic site assets/placeholders must never be accepted as property media.
+BAD_IMAGE = re.compile(
+    r"(?:logo|favicon|sprite|avatar|profile|icon|placeholder|default[-_]?image|"
+    r"background[-_]?card|empty[-_]?card|fallback[-_]?image|no[-_]?image|no[-_]?photo|"
+    r"sin[-_]?imagen|sin[-_]?foto|image[-_]?not[-_]?available|missing[-_]?image|"
+    r"badge|spinner|loader|tracking|pixel|gravatar)",
+    re.I,
+)
 
 
 def image_url(img, page_url: str) -> str | None:
@@ -46,6 +55,8 @@ def image_url(img, page_url: str) -> str | None:
         try:
             resolved = urljoin(page_url, raw)
         except Exception:
+            continue
+        if BAD_IMAGE.search(resolved):
             continue
         if resolved.startswith(("http://", "https://")) and not resolved.lower().split("?")[0].endswith((".svg", ".ico")):
             return resolved
@@ -89,12 +100,13 @@ def parse_image_first(html: str, page_url: str) -> tuple[list[dict], int]:
     rejected = 0
     for row in raw:
         m = media.get(str(row.get("external_id") or ""))
-        if not m or not m.get("cover_image_url"):
+        cover = (m or {}).get("cover_image_url")
+        if not cover or BAD_IMAGE.search(cover):
             rejected += 1
             continue
-        row["cover_image_url"] = m["cover_image_url"]
-        row["gallery"] = [m["cover_image_url"]]
-        row["page_url"] = m.get("detail_url") or row.get("page_url")
+        row["cover_image_url"] = cover
+        row["gallery"] = [cover]
+        row["page_url"] = (m or {}).get("detail_url") or row.get("page_url")
         accepted.append(row)
     return accepted, rejected
 
@@ -164,6 +176,7 @@ def main() -> int:
         "failures": failures,
         "workers": WORKERS,
         "image_required": True,
+        "generic_placeholders_rejected": True,
     }
     (OUT_DIR / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"unique_listings": len(rows), "chunks": len(chunks), "rejected_without_image": rejected_without_image, "failures": len(failures)}), flush=True)
