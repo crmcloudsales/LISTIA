@@ -1,0 +1,80 @@
+name: LISTIA Brand Routing Repair v9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-brand-routing-repair-v9.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-brand-routing-repair-v9
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Repair commercial LISTIA brand asset routing
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/build-commercial-worker.py')
+          s=p.read_text(encoding='utf-8')
+          if 'const SITE_LOGO=' not in s:
+              old='def build_worker(html:str,marketplace_html:str,affiliate_html:str,affiliate_icon_svg:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str)->str:'
+              new='def build_worker(html:str,marketplace_html:str,affiliate_html:str,affiliate_icon_svg:str,site_logo_svg:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str,wordmark_light_b64:str,wordmark_dark_b64:str,favicon_b64:str)->str:'
+              if old not in s: raise SystemExit('builder signature anchor missing')
+              s=s.replace(old,new,1)
+
+              old='const AFFILIATE_ICON={json.dumps(affiliate_icon_svg,ensure_ascii=False)};\\nconst CLOUDCO_HTML='
+              new='const AFFILIATE_ICON={json.dumps(affiliate_icon_svg,ensure_ascii=False)};\\nconst SITE_LOGO={json.dumps(site_logo_svg,ensure_ascii=False)};\\nconst LISTIA_WORDMARK_LIGHT_B64={json.dumps(wordmark_light_b64)};\\nconst LISTIA_WORDMARK_DARK_B64={json.dumps(wordmark_dark_b64)};\\nconst LISTIA_FAVICON_B64={json.dumps(favicon_b64)};\\nconst CLOUDCO_HTML='
+              if old not in s: raise SystemExit('worker constants anchor missing')
+              s=s.replace(old,new,1)
+
+              old="if(url.pathname==='/listia-official-icon-v3.svg')return response(AFFILIATE_ICON,200,'image/svg+xml; charset=UTF-8',method,{{}},'public, max-age=31536000, immutable');"
+              new=old+"if(url.pathname==='/listia-site-isotipo-v4.svg')return response(SITE_LOGO,200,'image/svg+xml; charset=UTF-8',method,{{}},'public, max-age=31536000, immutable');if(url.pathname==='/listia-wordmark-light.webp')return response(decodeBase64(LISTIA_WORDMARK_LIGHT_B64),200,'image/webp',method,{{}},'public, max-age=31536000, immutable');if(url.pathname==='/listia-wordmark-dark.webp')return response(decodeBase64(LISTIA_WORDMARK_DARK_B64),200,'image/webp',method,{{}},'public, max-age=31536000, immutable');if(url.pathname==='/listia-app-icon-32.png'||url.pathname==='/favicon.ico')return response(decodeBase64(LISTIA_FAVICON_B64),200,'image/png',method,{{}},'public, max-age=31536000, immutable');"
+              if old not in s: raise SystemExit('brand route anchor missing')
+              s=s.replace(old,new,1)
+
+              old='(c/"listia-official-icon-v3.svg").read_text(encoding="utf-8"),(c/"cloudco.html").read_text(encoding="utf-8")'
+              new='(c/"listia-official-icon-v3.svg").read_text(encoding="utf-8"),(c/"listia-site-isotipo-v4.svg").read_text(encoding="utf-8"),(c/"cloudco.html").read_text(encoding="utf-8")'
+              if old not in s: raise SystemExit('builder call site-logo anchor missing')
+              s=s.replace(old,new,1)
+
+              old='b64(c/"cloudco-assets"/"cloudco-logo-official.webp"),b64(pub/"listia-mark-transparent.webp"))'
+              new='b64(c/"cloudco-assets"/"cloudco-logo-official.webp"),b64(pub/"listia-mark-transparent.webp"),b64(c/"listia-wordmark-light.webp"),b64(c/"listia-wordmark-dark.webp"),b64(pub/"listia-app-icon-32.png"))'
+              if old not in s: raise SystemExit('builder call binary anchor missing')
+              s=s.replace(old,new,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+
+          python3 -m py_compile scripts/build-commercial-worker.py
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
+          node --check /tmp/listia-commercial-worker.mjs
+          grep -Fq "url.pathname==='/listia-site-isotipo-v4.svg'" /tmp/listia-commercial-worker.mjs
+          grep -Fq "url.pathname==='/listia-wordmark-light.webp'" /tmp/listia-commercial-worker.mjs
+          grep -Fq "url.pathname==='/listia-app-icon-32.png'" /tmp/listia-commercial-worker.mjs
+
+      - name: Commit validated repair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/build-commercial-worker.py
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fix LISTIA commercial brand asset routing'
+          git pull --rebase origin main
+          git push origin HEAD:main
