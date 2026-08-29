@@ -1,0 +1,26 @@
+{
+  "source": "iad-mexico-neximo",
+  "rows": 48,
+  "summary": [
+    {
+      "operation": "sale",
+      "root": "https://properties.iadmexico.mx/en-venta",
+      "pages": 1,
+      "rows": 24
+    },
+    {
+      "operation": "rent",
+      "root": "https://properties.iadmexico.mx/en-renta",
+      "pages": 1,
+      "rows": 24
+    }
+  ],
+  "chunks": [
+    {
+      "file": "chunk-0001.json",
+      "count": 48
+    }
+  ],
+  "failures": [],
+  "details": false
+}
