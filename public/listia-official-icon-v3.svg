@@ -1,13 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1536">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6d29de"/>
-      <stop offset=".45" stop-color="#7b3fff"/>
-      <stop offset="1" stop-color="#a93efe"/>
-    </linearGradient>
-  </defs>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d29de"/><stop offset=".45" stop-color="#7b3fff"/><stop offset="1" stop-color="#a93efe"/></linearGradient></defs>
   <rect width="1536" height="1536" fill="url(#g)"/>
-  <g transform="translate(168.96 168.96) scale(.78)">
-    <path d="M 672,350 L 391,576 L 342,644 L 328,699 L 328,1043 L 350,1115 L 392,1167 L 458,1202 L 603,1207 L 640,1193 L 663,1170 L 677,1132 L 683,940 L 716,896 L 770,878 L 823,899 L 852,940 L 858,1132 L 868,1162 L 890,1189 L 932,1207 L 1051,1207 L 1111,1189 L 1154,1157 L 1181,1122 L 1207,1043 L 1207,699 L 1184,625 L 1141,573 L 863,350 L 787,328 L 733,330 Z" fill="#fff"/>
-  </g>
+  <path d="M 673,350 L 637,373 L 386,581 L 359,613 L 340,650 L 328,702 L 328,1041 L 336,1081 L 350,1114 L 376,1151 L 396,1170 L 449,1199 L 487,1207 L 601,1207 L 628,1199 L 649,1185 L 663,1169 L 677,1131 L 677,963 L 685,934 L 704,906 L 724,890 L 749,880 L 776,878 L 819,895 L 838,914 L 852,938 L 858,962 L 858,1130 L 867,1159 L 891,1189 L 907,1199 L 934,1207 L 1049,1207 L 1087,1199 L 1112,1188 L 1144,1166 L 1170,1138 L 1193,1098 L 1205,1056 L 1207,701 L 1202,671 L 1189,635 L 1170,604 L 1139,572 L 898,373 L 862,350 L 827,336 L 785,328 L 724,332 Z" fill="#fff"/>
 </svg>
