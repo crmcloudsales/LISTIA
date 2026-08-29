@@ -32,6 +32,8 @@ Deno.serve(async(req:Request)=>{
   if(!['ready','published'].includes(String(property.status)))return json(req,{error:'property_not_ready',status:property.status},409)
   const [draft]=await sql`select status,missing_fields from public.property_drafts where property_id=${propertyId}::uuid and organization_id=${organizationId}::uuid limit 1`
   if(!draft||draft.status!=='approved'||(Array.isArray(draft.missing_fields)&&draft.missing_fields.length))return json(req,{error:'approved_complete_draft_required'},409)
+  const [imageAsset]=await sql`select id from public.property_assets where property_id=${propertyId}::uuid and organization_id=${organizationId}::uuid and asset_type='image' and coalesce(mime_type,'') like 'image/%' and nullif(btrim(coalesce(storage_path,'')),'') is not null order by created_at asc limit 1`
+  if(!imageAsset)return json(req,{error:'image_required',message:'A property cannot be published without at least one image.'},409)
   const slug=slugify(property.title||'property',propertyId),now=new Date().toISOString()
   const [listing]=await sql.begin(async tx=>{
     const [row]=await tx`
