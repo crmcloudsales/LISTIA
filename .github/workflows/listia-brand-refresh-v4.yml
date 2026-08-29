@@ -82,7 +82,7 @@ jobs:
           s=re.sub(r'<link href="/listia-app-icon-32\.png\?v=\d+" rel="icon" sizes="32x32" type="image/png"/>','<link href="/listia-app-icon-32.png?v=5" rel="icon" sizes="32x32" type="image/png"/>',s)
           s=s.replace('/manifest-en.webmanifest?v=0.9.5','/manifest-en.webmanifest?v=0.9.6')
           if '/lead-notifications.js' not in s:
-              s=s.replace('<script src="/app.js', '<script src="/lead-notifications.js?v=1"></script>\n<script src="/app.js',1)
+              s=re.sub(r'(<script[^>]*src="/app\.js[^>]*></script>)',r'<script defer="" src="/lead-notifications.js?v=1"></script>\n\1',s,count=1)
           p.write_text(s,encoding='utf-8')
 
           sw=root/'sw.js'
