@@ -1,0 +1,65 @@
+name: LISTIA Workspace Context Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/workspace-context.js'
+      - 'public/account-center.js'
+      - 'public/billing-management.js'
+      - 'public/app.js'
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'supabase/migrations/*canonical_active_workspace*'
+      - '.github/workflows/listia-workspace-context-gate.yml'
+  workflow_dispatch:
+
+jobs:
+  workspace-context-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate canonical workspace context
+        run: |
+          set -Eeuo pipefail
+          node --check public/workspace-context.js
+          node --check public/account-center.js
+          node --check public/billing-management.js
+          node --check public/app.js
+          node --check public/config.js
+          node --check public/sw.js
+
+          grep -Fq "rpc('get_my_workspace_context')" public/workspace-context.js
+          grep -Fq "rpc('set_my_active_organization'" public/workspace-context.js
+          grep -Fq 'listia:workspacechange' public/workspace-context.js
+          grep -Fq 'LISTIA_WORKSPACE.getContext' public/account-center.js
+          grep -Fq 'LISTIA_WORKSPACE.getActiveWorkspace' public/billing-management.js
+          grep -Fq 'workspace-context.js?v=1' public/config.js
+          grep -Fq 'workspace-context.js?v=1' public/sw.js
+          grep -Fq 'billing-management.js?v=4' public/config.js
+          grep -Fq 'account-center.js?v=3' public/config.js
+          grep -Fq 'billing-management.js?v=4' public/sw.js
+          grep -Fq 'account-center.js?v=3' public/sw.js
+
+          if grep -Fq 'status=eq.active&limit=1' public/account-center.js; then
+            echo 'Account Center still uses an unordered active-membership limit=1 lookup.' >&2
+            exit 1
+          fi
+          if grep -Fq 'status=eq.active&limit=1' public/billing-management.js; then
+            echo 'Billing still uses an unordered active-membership limit=1 lookup.' >&2
+            exit 1
+          fi
+
+          migration="$(ls -1 supabase/migrations/*canonical_active_workspace* | tail -1)"
+          grep -Fq 'active_organization_id' "$migration"
+          grep -Fq 'get_my_workspace_context' "$migration"
+          grep -Fq 'set_my_active_organization' "$migration"
+          grep -Fq "order by om.created_at asc, om.organization_id asc" "$migration"
+          grep -Fq 'revoke all on function public.get_my_workspace_context() from public, anon' "$migration"
+          grep -Fq 'revoke all on function public.set_my_active_organization(uuid) from public, anon' "$migration"
+
+          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:"[0-9.]+"' public/config.js | head -1 | cut -d'"' -f2)"
+          sw_version="$(grep -Eo 'listia-pwa-v[0-9.]+' public/sw.js | head -1 | sed 's/listia-pwa-v//')"
+          test -n "$cfg_version"
+          test "$cfg_version" = "$sw_version"
+          echo "LISTIA workspace context OK — PWA v${cfg_version}"
