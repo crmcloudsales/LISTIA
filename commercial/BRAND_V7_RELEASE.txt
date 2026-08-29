@@ -1,0 +1,5 @@
+Listia commercial brand v7
+- Visible brand isotipo: listia-site-isotipo-v4.svg
+- Favicon: official Listia app icon
+- Brand casing: Listia
+Deployment trigger: 2026-08-29
