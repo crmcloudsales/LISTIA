@@ -5,14 +5,18 @@
     {
       "operation": "sale",
       "root": "https://properties.iadmexico.mx/en-venta",
+      "rows": 24,
       "pages": 1,
-      "rows": 24
+      "total_reported": 1526,
+      "per_page": 24
     },
     {
       "operation": "rent",
       "root": "https://properties.iadmexico.mx/en-renta",
+      "rows": 24,
       "pages": 1,
-      "rows": 24
+      "total_reported": 219,
+      "per_page": 24
     }
   ],
   "chunks": [
