@@ -22,6 +22,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          # Edge proof synchronized on 2026-08-29.
           config_body=$(mktemp)
           config_code=$(curl -sS --max-time 20 -o "$config_body" -w '%{http_code}' 'https://app.listiaapp.com/api/security/turnstile-config')
           [[ "$config_code" == 200 ]] || { echo "Turnstile config HTTP ${config_code}"; cat "$config_body"; exit 1; }
