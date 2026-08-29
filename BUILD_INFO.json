@@ -1,20 +1,20 @@
 {
   "version": "0.27.2",
   "as_of": "2026-08-29",
-  "head_commit_verified": "327b5ecba10027249d05e8a3496fdb82dae2fbcc",
+  "head_commit_verified": "228f4b3eb68d03a636377bd508f06319303048a9",
   "status": "production_active_v0_27_2_pwa_cloudco_nvidia_conversion_runtime",
   "source_of_truth": {
     "repository": "crmcloudsales/LISTIA",
     "branch": "main",
     "supabase_project": "zvzafiarwerbuoaccnoz",
-    "main_observed_commit": "327b5ecba10027249d05e8a3496fdb82dae2fbcc",
-    "main_observed_at_utc": "2026-08-29T14:08:07Z",
-    "production_source_commit": "901fbc5976906a2badc451283f5f3bb4060f564b",
-    "production_verified_at_utc": "2026-08-29T13:05:16Z",
-    "deployment_proof_commit": "36126c4a6e8a1e81476a48b51225f537396c750a",
+    "main_observed_commit": "228f4b3eb68d03a636377bd508f06319303048a9",
+    "main_observed_at_utc": "2026-08-29T14:44:23Z",
+    "production_source_commit": "0e4497c0a97b58f68e8db3e66a2aed98b3107196",
+    "production_verified_at_utc": "2026-08-29T14:43:03Z",
+    "deployment_proof_commit": "44d27c6ee20d220f52b000921b637d09162f7e6e",
     "deployment_proof_file": "PWA_LIVE_DEPLOYMENT_PROOF.txt",
-    "backend_last_verified_migration": "20260829140716_index_conversion_delivery_connection_fk",
-    "backend_migration_source_commit": "e0c9876593c7880dd3e8440a1564460744d4ffb8",
+    "backend_last_verified_migration": "20260829140851_add_google_oauth_capability_state",
+    "backend_migration_source_commit": "60b910b3289dd7e03b5cf541341cf081a0548213",
     "rule": "Production frontend commit, current GitHub main and backend migration state are tracked separately. The BUILD_INFO commit itself can be newer than main_observed_commit because it records the immediately preceding verified state. Verify GitHub main, Supabase live state and production checks before claiming completion."
   },
   "languages": {
@@ -48,7 +48,7 @@
       "active": true,
       "host": "https://app.listiaapp.com",
       "bootstrap_version": "0.27.2",
-      "source_commit": "901fbc5976906a2badc451283f5f3bb4060f564b",
+      "source_commit": "0e4497c0a97b58f68e8db3e66a2aed98b3107196",
       "source_worker": "listia-app",
       "route": "app.listiaapp.com/*",
       "javascript_gate": true,
@@ -215,7 +215,14 @@
       "meta_capi_adapter": true,
       "google_data_manager_api_adapter": true,
       "tiktok_events_api_adapter": true,
-      "linkedin_conversions_api_adapter": true
+      "linkedin_conversions_api_adapter": true,
+      "meta_capi_config_endpoint": true,
+      "meta_capi_connection_verified": false,
+      "meta_capi_delivery_verified": false,
+      "google_ads_incremental_oauth": true,
+      "google_ads_config_endpoint": true,
+      "google_ads_setup_ui": true,
+      "google_ads_real_delivery_verified": false
     },
     "voice": {
       "runtime": true,
@@ -242,13 +249,15 @@
     "push_dispatch_cron": true,
     "edge_functions_active": true,
     "website_provision_function_version": 3,
-    "last_verified_migration": "20260829140716_index_conversion_delivery_connection_fk",
+    "last_verified_migration": "20260829140851_add_google_oauth_capability_state",
     "property_ai_runtime": "nvidia:cloudco",
     "property_ai_gateway_server_side_only": true,
     "property_ai_dispatch_cron": true,
     "conversion_dispatch_worker_version": 2,
     "conversion_dispatch_cron": true,
-    "conversion_dispatch_private_delivery_state": true
+    "conversion_dispatch_private_delivery_state": true,
+    "google_oauth_incremental_capabilities": true,
+    "meta_capi_config_function": true
   },
   "pricing": {
     "free_usd_month": 0,
