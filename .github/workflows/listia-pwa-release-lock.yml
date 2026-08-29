@@ -1,0 +1,35 @@
+name: LISTIA PWA Release Lock
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/config.js'
+      - 'public/sw.js'
+      - '.github/workflows/listia-pwa-release-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify PWA release and cache identity
+        run: |
+          set -Eeuo pipefail
+          node --check public/config.js
+          node --check public/sw.js
+          node <<'NODE'
+          const fs=require('fs');
+          const config=fs.readFileSync('public/config.js','utf8');
+          const sw=fs.readFileSync('public/sw.js','utf8');
+          const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
+          const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
+          if(!app||!cache) throw new Error(`Missing release metadata app=${app?.[1]} cache=${cache?.[1]}`);
+          if(app[1]!==cache[1]) throw new Error(`PWA release mismatch: BOOTSTRAP_VERSION=${app[1]} service-worker-cache=${cache[1]}`);
+          console.log(`PWA release lock OK: ${app[1]}`);
+          NODE
