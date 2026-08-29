@@ -1,0 +1,78 @@
+name: LISTIA iad Mexico Inventory Crawl
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/crawl-iad-mexico.py'
+      - '.github/workflows/listia-iad-inventory-crawl.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-iad-inventory-crawl
+  cancel-in-progress: true
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install --disable-pip-version-check beautifulsoup4 curl_cffi
+
+      - name: Crawl iad Mexico test page
+        id: iad_crawl
+        shell: bash
+        env:
+          IAD_OUT: data/iad-mexico
+          IAD_MAX_PAGES: '1'
+          IAD_FETCH_DETAILS: '0'
+          IAD_WORKERS: '4'
+          IAD_CHUNK_SIZE: '250'
+        run: |
+          set +e
+          mkdir -p data/iad-mexico
+          python scripts/crawl-iad-mexico.py > data/iad-mexico/crawl.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat data/iad-mexico/crawl.log || true
+          exit 0
+
+      - name: Validate snapshot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${{ steps.iad_crawl.outputs.exit_code }}" = "0"
+          test -s data/iad-mexico/manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('data/iad-mexico/manifest.json').read_text())
+          print(m)
+          assert m['rows'] >= 20
+          assert m['chunks']
+          PY
+
+      - name: Commit snapshot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f data/iad-mexico/crawl.log
+          git config user.name 'LISTIA Inventory Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add data/iad-mexico
+          git commit -m 'Refresh iad Mexico inventory snapshot' || exit 0
+          git pull --rebase origin main
+          git push origin main
