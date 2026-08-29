@@ -49,6 +49,36 @@ jobs:
           [[ "$human_code" == 403 ]] || { echo "Missing Turnstile HTTP ${human_code}"; cat "$human_body"; exit 4; }
           jq -e '.error == "missing_human_verification"' "$human_body" >/dev/null
 
+          feed_body=$(mktemp)
+          feed_code=$(curl -sS --max-time 20 -X POST \
+            -H 'Origin: https://app.listiaapp.com' \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Content-Type: application/json' \
+            --data '{"p_limit":1,"p_offset":0}' \
+            -o "$feed_body" -w '%{http_code}' 'https://app.listiaapp.com/api/marketplace/feed')
+          [[ "$feed_code" == 200 ]] || { echo "Protected feed HTTP ${feed_code}"; cat "$feed_body"; exit 5; }
+          jq -e 'type == "array" and length <= 1' "$feed_body" >/dev/null
+
+          feed_cross=$(mktemp)
+          feed_cross_code=$(curl -sS --max-time 20 -X POST \
+            -H 'Origin: https://evil.example' \
+            -H 'Sec-Fetch-Site: cross-site' \
+            -H 'Content-Type: application/json' \
+            --data '{"p_limit":1}' \
+            -o "$feed_cross" -w '%{http_code}' 'https://app.listiaapp.com/api/marketplace/feed')
+          [[ "$feed_cross_code" == 403 ]] || { echo "Cross-origin feed HTTP ${feed_cross_code}"; cat "$feed_cross"; exit 6; }
+          jq -e '.error == "origin_not_allowed"' "$feed_cross" >/dev/null
+
+          direct_body=$(mktemp)
+          direct_code=$(curl -sS --max-time 20 -X POST \
+            -H 'apikey: sb_publishable_aY9AjGa59GQ5rNGZlGAJpw_uhgVZfb1' \
+            -H 'Content-Type: application/json' \
+            --data '{"p_limit":1}' \
+            -o "$direct_body" -w '%{http_code}' 'https://zvzafiarwerbuoaccnoz.supabase.co/rest/v1/rpc/marketplace_public_feed_v2')
+          [[ "$direct_code" != 200 ]] || { echo 'Direct Supabase Marketplace RPC is unexpectedly public'; cat "$direct_body"; exit 7; }
+
           echo 'Marketplace firewall production smoke: PASS'
           echo 'Cross-origin lead attempts: BLOCKED'
           echo 'Lead attempts without Turnstile: BLOCKED'
+          echo 'Marketplace feed: EDGE-PROTECTED'
+          echo 'Direct public Supabase feed RPC: CLOSED'
