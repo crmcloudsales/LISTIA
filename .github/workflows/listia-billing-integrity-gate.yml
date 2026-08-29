@@ -1,0 +1,87 @@
+name: LISTIA Billing Integrity Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'BILLING.md'
+      - 'public/billing-catalog.json'
+      - 'supabase/functions/billing-checkout-create/**'
+      - 'supabase/functions/billing-stripe-webhook/**'
+      - 'supabase/functions/billing-portal-create/**'
+      - 'supabase/functions/billing-premium-seats-update/**'
+      - 'supabase/migrations/*billing*'
+      - 'supabase/migrations/*markup*'
+      - '.github/workflows/listia-billing-integrity-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify canonical LISTIA subscription economics
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          c=json.loads(Path('public/billing-catalog.json').read_text(encoding='utf-8'))
+          p=c['plans']
+          assert p['free']['monthly_usd']==0
+          assert p['pro']['monthly_usd']==97
+          assert p['premium']['monthly_usd']==147
+          assert p['premium']['extra_seat']['monthly_usd']==47
+          assert p['free']['usage_markup_percent']==30
+          assert p['pro']['usage_markup_percent']==20
+          assert p['premium']['usage_markup_percent']==10
+          assert c['usage']['target_markup_percent']=={'free':30,'pro':20,'premium':10}
+          assert p['free']['property_limit']==3
+          assert p['pro']['included_users']==1
+          assert p['premium']['included_users']==2
+          PY
+
+      - name: Verify backend billing invariants
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          webhook='supabase/functions/billing-stripe-webhook/index.ts'
+          checkout='supabase/functions/billing-checkout-create/index.ts'
+          portal='supabase/functions/billing-portal-create/index.ts'
+          seats='supabase/functions/billing-premium-seats-update/index.ts'
+          migration='supabase/migrations/20260829213501_normalize_listia_usage_markup_policy_v2.sql'
+
+          grep -Fq "effectivePlan === 'pro' ? 20 : effectivePlan === 'premium' ? 10 : 30" "$webhook"
+          grep -Fq 'recordAffiliateCommission' "$webhook"
+          grep -Fq 'affiliate_commissions' "$webhook"
+          grep -Fq "action = 'billing_checkout_create'" "$checkout"
+          grep -Fq "billing_portal_create" "$portal"
+          grep -Fq "billing_premium_seats_update" "$seats"
+          grep -Fq "proration_behavior:'always_invoice'" "$seats"
+          grep -Fq 'idempotencyKey' "$seats"
+          grep -Fq "when 'pro' then 20::numeric" "$migration"
+          grep -Fq "when 'premium' then 10::numeric" "$migration"
+          grep -Fq 'else 30::numeric' "$migration"
+
+      - name: Reject obsolete ordinary markup policy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          c=json.loads(Path('public/billing-catalog.json').read_text())
+          values={c['plans'][k]['usage_markup_percent'] for k in ('free','pro','premium')}
+          if values != {30,20,10}:
+              raise SystemExit('Obsolete LISTIA ordinary markup detected')
+          doc=Path('BILLING.md').read_text(encoding='utf-8')
+          for required in ('FREE: **30%**','PRO: **20%**','PREMIUM: **10%**'):
+              if required not in doc: raise SystemExit(f'Billing documentation drift: {required}')
+          PY
