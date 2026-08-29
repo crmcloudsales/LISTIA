@@ -4,12 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'public/workspace-context.js'
-      - 'public/account-center.js'
-      - 'public/billing-management.js'
-      - 'public/app.js'
-      - 'public/config.js'
-      - 'public/sw.js'
+      - 'public/*.js'
+      - 'supabase/functions/listia-conversation/**'
       - 'supabase/migrations/*canonical_active_workspace*'
       - '.github/workflows/listia-workspace-context-gate.yml'
   workflow_dispatch:
@@ -19,47 +15,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate canonical workspace context
+      - name: Validate canonical workspace isolation
         run: |
           set -Eeuo pipefail
-          node --check public/workspace-context.js
-          node --check public/account-center.js
-          node --check public/billing-management.js
-          node --check public/app.js
-          node --check public/config.js
-          node --check public/sw.js
+          files=(
+            public/workspace-context.js
+            public/workspace-selector.js
+            public/app.js
+            public/account-center.js
+            public/billing-management.js
+            public/office-modules.js
+            public/listings-v2.js
+            public/control-center.js
+            public/lead-workspace.js
+            public/website-status.js
+            public/website-language-settings.js
+            public/managed-site-health.js
+            public/developments.js
+            public/development-property-bridge.js
+            public/account-edit.js
+            public/config.js
+            public/sw.js
+          )
+          for file in "${files[@]}"; do node --check "$file"; done
 
           grep -Fq "rpc('get_my_workspace_context')" public/workspace-context.js
           grep -Fq "rpc('set_my_active_organization'" public/workspace-context.js
           grep -Fq 'listia:workspacechange' public/workspace-context.js
-          grep -Fq 'LISTIA_WORKSPACE.getContext' public/account-center.js
-          grep -Fq 'LISTIA_WORKSPACE.getActiveWorkspace' public/billing-management.js
-          grep -Fq 'workspace-context.js?v=1' public/config.js
-          grep -Fq 'workspace-context.js?v=1' public/sw.js
-          grep -Fq 'billing-management.js?v=4' public/config.js
-          grep -Fq 'account-center.js?v=3' public/config.js
-          grep -Fq 'billing-management.js?v=4' public/sw.js
-          grep -Fq 'account-center.js?v=3' public/sw.js
+          grep -Fq 'workspaces.length<2' public/workspace-selector.js
+          grep -Fq 'api.setActiveWorkspace(next)' public/workspace-selector.js
+          grep -Fq 'location.reload()' public/workspace-selector.js
 
-          if grep -Fq 'status=eq.active&limit=1' public/account-center.js; then
-            echo 'Account Center still uses an unordered active-membership limit=1 lookup.' >&2
+          consumers=(
+            public/app.js
+            public/account-center.js
+            public/billing-management.js
+            public/office-modules.js
+            public/listings-v2.js
+            public/control-center.js
+            public/lead-workspace.js
+            public/website-status.js
+            public/website-language-settings.js
+            public/managed-site-health.js
+            public/developments.js
+            public/development-property-bridge.js
+            public/account-edit.js
+          )
+          for file in "${consumers[@]}"; do
+            grep -Fq 'LISTIA_WORKSPACE' "$file"
+          done
+
+          if grep -R -F 'status=eq.active&limit=1' public --include='*.js'; then
+            echo 'An unordered active-membership limit=1 lookup remains in the PWA.' >&2
             exit 1
           fi
-          if grep -Fq 'status=eq.active&limit=1' public/billing-management.js; then
-            echo 'Billing still uses an unordered active-membership limit=1 lookup.' >&2
+
+          conversation='supabase/functions/listia-conversation/index.ts'
+          grep -Fq 'active_organization_id' "$conversation"
+          grep -Fq "order('created_at',{ascending:true})" "$conversation"
+          grep -Fq "order('organization_id',{ascending:true})" "$conversation"
+          grep -Fq "m.organization_id===profile?.active_organization_id" "$conversation"
+          if grep -Fq ".eq('status','active').limit(1).maybeSingle()" "$conversation"; then
+            echo 'LISTIA Conversation still chooses an arbitrary active membership.' >&2
             exit 1
           fi
+
+          grep -Fq 'workspace-context.js?v=1' public/config.js
+          grep -Fq 'workspace-selector.js?v=1' public/config.js
+          grep -Fq 'workspace-context.js?v=1' public/sw.js
+          grep -Fq 'workspace-selector.js?v=1' public/sw.js
 
           migration="$(ls -1 supabase/migrations/*canonical_active_workspace* | tail -1)"
           grep -Fq 'active_organization_id' "$migration"
           grep -Fq 'get_my_workspace_context' "$migration"
           grep -Fq 'set_my_active_organization' "$migration"
-          grep -Fq "order by om.created_at asc, om.organization_id asc" "$migration"
+          grep -Fq 'order by om.created_at asc, om.organization_id asc' "$migration"
           grep -Fq 'revoke all on function public.get_my_workspace_context() from public, anon' "$migration"
           grep -Fq 'revoke all on function public.set_my_active_organization(uuid) from public, anon' "$migration"
 
-          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:"[0-9.]+"' public/config.js | head -1 | cut -d'"' -f2)"
+          cfg_version="$(grep -Eo 'BOOTSTRAP_VERSION:"[0-9.]+' public/config.js | head -1 | cut -d'"' -f2)"
           sw_version="$(grep -Eo 'listia-pwa-v[0-9.]+' public/sw.js | head -1 | sed 's/listia-pwa-v//')"
           test -n "$cfg_version"
           test "$cfg_version" = "$sw_version"
-          echo "LISTIA workspace context OK — PWA v${cfg_version}"
+          echo "LISTIA workspace isolation OK — PWA v${cfg_version}"
