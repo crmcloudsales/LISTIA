@@ -9,48 +9,60 @@
     "minimum_real_property_images": 1,
     "deduplicate": true,
     "verified_contact_capture_parallel": true,
+    "cross_web_contact_enrichment_required": true,
+    "inmuebles24_public_phone_whatsapp_reveal_required_when_accessible": true,
+    "search_exact_realtor_broker_company_developer_names_across_web": true,
+    "search_public_official_site_google_facebook_linkedin_instagram_professional_directories_press": true,
+    "preserve_multiple_verified_agent_and_executive_contacts": true,
     "verified_phone_or_whatsapp_without_public_email_is_valid_contact": true,
+    "continue_searching_missing_channels": true,
+    "label_historical_contacts_as_historical": true,
     "do_not_invent_contact_data": true,
-    "aggregator_without_public_advertiser_not_lead_routeable": true,
+    "do_not_infer_email_patterns": true,
+    "aggregator_without_resolved_advertiser_requires_cross_web_resolution_before_not_routeable": true,
     "market_intelligence_reuse": true
   },
   "production_checkpoint": {
-    "public_total": 7098,
-    "public_with_photo": 7098,
-    "sale": 5820,
-    "rent": 1278,
-    "sources_used": 102
+    "public_total": 7352,
+    "public_with_photo": 7352,
+    "sale": 5977,
+    "rent": 1375,
+    "sources_used": 105
   },
   "source_prospect_checkpoint": {
-    "qroo_sources": 100,
-    "verified_sources": 92,
-    "with_email": 82,
-    "with_phone": 89,
-    "with_whatsapp": 29,
-    "with_principal_person": 21
+    "qroo_sources_with_attributed_inventory": 103,
+    "verified_sources": 95,
+    "with_email": 84,
+    "with_phone": 93,
+    "with_whatsapp": 32,
+    "with_principal_person": 24
   },
-  "recent_enrichment": [
-    "Grupo Tsalach / Marta Marcilla",
-    "Isla Mujeres Luxury Homes",
-    "Bacalar Properties / Oscar Luna",
-    "Mahahual Propiedades / Lisandro Lenski",
-    "Nautilus Real Estate",
-    "PROVISA",
-    "Bienes Raices Quintana Roo / Yadira Uitz",
-    "Onix Living / Zienna Cancun",
-    "Hacienda Tuk rental Tulum"
+  "recent_cross_web_enrichment": [
+    "Bacalar Properties / Oscar Luna / Miguel Pozo",
+    "AMORAMAR / Karla Torres",
+    "RE/MAX Isla / Jim Botaish / Colin Howard",
+    "Cozumel Capital / Rita Sheese / Ivonne Schonbrunn",
+    "Tulum Country Club / Encarna Pinero / Isabel Garcia Lorca",
+    "Eproperties / Luis A. Mirabent / Enrique Yanez / advisor contacts",
+    "Tulum Realtors / Administrador Osunza Poot / public team",
+    "Terracasa / Arturo listing contact",
+    "The Realtors Co. public phone",
+    "Inmuebles24 advertiser profiles used as identity and public-contact discovery layer"
   ],
   "direct_source_runs": {
-    "recovery_run_id": 33322155243,
-    "recovery_attempt": 3,
     "mixed_sale_rent_run_id": 33327395078,
-    "mixed_sale_rent_config": "30 sources x 100 details/source",
-    "mixed_sale_rent_status_at_checkpoint": "queued_or_waiting_for_concurrency"
+    "mixed_sale_rent_status": "success",
+    "mixed_sale_rent_validated": 283,
+    "mixed_sale_rent_inserted": 187,
+    "mixed_sale_rent_duplicate_or_existing": 96,
+    "enriched_advertiser_run_id": 33329012708,
+    "enriched_advertiser_run_status_at_checkpoint": "in_progress",
+    "enriched_advertiser_config": "30 sources x 100 details/source"
   },
   "canonical_storage": {
     "supabase": ["marketplace_listings", "marketplace_parties", "marketplace_source_parties", "marketplace_listing_parties", "marketplace_source_prospect_backup", "marketplace_lead_routing", "market_intelligence_daily_snapshots"],
     "github": ["docs/MARKETPLACE_OPERATING_RULES.md", "ops/qroo-marketplace-state.json", "ops/qroo-direct-sources.json", "ops/qroo-direct-trigger.json", "ops/market-intelligence-state.json"],
-    "drive": ["LISTIA Marketplace — Fuentes y Prospectos", "LISTIA Marketplace — Backup Fuentes Quintana Roo", "LISTIA Market Intelligence — Master Architecture & Handoff"],
-    "library": ["/LISTIA/LISTIA_MARKETPLACE_OPERATING_RULES_2026-08-30_v2.md", "/LISTIA/Marketplace/QROO_MARKETPLACE_STATE_2026-08-30.json"]
+    "drive": ["LISTIA Marketplace — Fuentes y Prospectos", "LISTIA Marketplace — Backup Fuentes Quintana Roo", "TAREAS", "LISTIA Market Intelligence — Master Architecture & Handoff"],
+    "library": ["/LISTIA/LISTIA_MARKETPLACE_OPERATING_RULES_2026-08-30_v3.md", "/LISTIA/Marketplace/QROO_MARKETPLACE_STATE_2026-08-30.json"]
   }
 }
