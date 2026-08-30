@@ -1,8 +1,8 @@
 {
-  "max_sources": 20,
-  "max_details_per_source": 60,
+  "max_sources": 30,
+  "max_details_per_source": 100,
   "territory": "Quintana Roo",
-  "purpose": "Scale dynamic verified public source crawl after successful six-source pilot",
+  "purpose": "Expand verified direct inventory across both sale and rent, prioritizing rental-heavy and under-covered Q.Roo sources",
   "requested_at": "2026-08-30",
-  "run_nonce": 2
+  "run_nonce": 3
 }
