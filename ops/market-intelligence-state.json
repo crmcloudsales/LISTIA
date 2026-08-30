@@ -1,0 +1,80 @@
+{
+  "updated_at": "2026-08-30T16:56:00Z",
+  "status": "active",
+  "owner_workstream": "marketplace_research_inventory_and_market_intelligence",
+  "product_name": "LISTIA Market Intelligence",
+  "supabase": {
+    "project_id": "zvzafiarwerbuoaccnoz",
+    "objects": [
+      "analytics.market_supply_live",
+      "analytics.market_demand_live_30d",
+      "public.market_intelligence_daily_snapshots",
+      "public.refresh_market_intelligence_daily_snapshot()",
+      "public.get_market_intelligence(uuid,text,text,text,text)"
+    ],
+    "snapshot_segments_saved": 758,
+    "currency_rule": "never_mix_currencies_without_explicit_dated_fx_conversion"
+  },
+  "plans": {
+    "free": "preview_locked",
+    "pro": "live_supply_and_price_charts",
+    "premium": "pro_plus_segment_intelligence_demand_signals_trends_and_developer_mode"
+  },
+  "quintana_roo": {
+    "total_rows": 7140,
+    "public_published": 7089,
+    "public_with_cover_photo": 7089,
+    "sale": 5814,
+    "rent": 1275,
+    "currency": {"MXN": 6675, "USD": 414},
+    "top_markets": {
+      "Tulum": 1707,
+      "Benito Juarez": 1509,
+      "Playa del Carmen": 1049,
+      "Cancun": 950,
+      "Solidaridad": 757,
+      "Puerto Morelos": 248,
+      "Cozumel": 193,
+      "Puerto Aventuras": 159,
+      "Bacalar": 132,
+      "Akumal": 102,
+      "Isla Mujeres": 71,
+      "Chetumal": 57,
+      "Mahahual": 43,
+      "Holbox": 38
+    },
+    "sale_property_types": {
+      "apartment": 2790,
+      "house": 1395,
+      "land": 1009,
+      "condo": 162,
+      "building": 117,
+      "commercial": 113,
+      "development": 108,
+      "villa": 49,
+      "penthouse": 30
+    },
+    "sale_bedrooms": {
+      "0": 5,
+      "1": 1001,
+      "2": 1285,
+      "3": 1117,
+      "4": 463,
+      "5_plus": 225,
+      "unknown": 1718
+    }
+  },
+  "handoff_docs": [
+    "docs/LISTIA_MARKET_INTELLIGENCE.md",
+    "docs/LISTIA_MARKET_INTELLIGENCE_COMMERCIAL_HANDOFF.md"
+  ],
+  "next_development_actions": [
+    "build Market Intelligence navigation and dashboards using get_market_intelligence RPC",
+    "instrument normalized marketplace demand events",
+    "show data freshness and coverage quality",
+    "add trend charts from daily snapshots",
+    "add Premium Developer Mode",
+    "never infer demand from supply alone"
+  ],
+  "continuation_rule": "When another LISTIA chat is asked to continue development or commercial work, read this state file and the handoff docs first."
+}
