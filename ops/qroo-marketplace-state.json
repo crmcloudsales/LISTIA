@@ -1,0 +1,42 @@
+{
+  "territory": "Quintana Roo",
+  "status": "active_not_closed",
+  "updated_at": "2026-08-30",
+  "next_territory": "Yucatan",
+  "mandatory_order": ["Quintana Roo", "Yucatan", "Ciudad de Mexico", "Guadalajara/Jalisco", "Monterrey/Nuevo Leon", "Puebla", "rest of Mexico"],
+  "rules": {
+    "sale_and_rent_required": true,
+    "minimum_real_property_images": 1,
+    "deduplicate": true,
+    "verified_contact_capture_parallel": true,
+    "do_not_invent_contact_data": true,
+    "aggregator_without_public_advertiser_not_lead_routeable": true,
+    "market_intelligence_reuse": true
+  },
+  "production_checkpoint": {
+    "public_total": 7089,
+    "public_with_photo": 7089,
+    "sale": 5814,
+    "rent": 1275,
+    "sources_used": 101
+  },
+  "source_prospect_checkpoint": {
+    "qroo_sources": 99,
+    "with_email": 76,
+    "with_phone": 84,
+    "with_whatsapp": 25,
+    "with_principal_person": 17
+  },
+  "current_direct_source_rerun": {
+    "run_id": 33322155243,
+    "job_id": 99298114681,
+    "status_at_checkpoint": "in_progress",
+    "purpose": "re-run direct-source crawl after formalizing missing source contacts"
+  },
+  "canonical_storage": {
+    "supabase": ["marketplace_listings", "marketplace_parties", "marketplace_source_parties", "marketplace_listing_parties", "marketplace_source_prospect_backup", "marketplace_lead_routing"],
+    "github": ["docs/MARKETPLACE_OPERATING_RULES.md", "ops/qroo-marketplace-state.json", "ops/qroo-direct-sources.json", "ops/qroo-direct-trigger.json", "ops/market-intelligence-state.json"],
+    "drive": ["LISTIA Marketplace — Fuentes y Prospectos", "LISTIA Marketplace — Backup Fuentes Quintana Roo", "LISTIA Market Intelligence — Master Architecture & Handoff"],
+    "library": ["/LISTIA/LISTIA_MARKETPLACE_OPERATING_RULES_2026-08-30_v2.md", "/LISTIA/Marketplace/QROO_MARKETPLACE_STATE_2026-08-30.json"]
+  }
+}
