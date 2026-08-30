@@ -34,7 +34,7 @@ Whenever LISTIA discovers, reviews, crawls, ingests, refreshes, or uses a websit
 Capture when publicly verifiable:
 - website URL;
 - company / brokerage / developer / agency name;
-- CEO, owner, founder, principal, broker, listing agent, or responsible person;
+- CEO, owner, founder, principal, broker, listing agent, realtor, director, sales director or other responsible person;
 - role;
 - public professional email;
 - public professional phone;
@@ -44,9 +44,30 @@ Capture when publicly verifiable:
 - listing count attributable to that source;
 - verification/provenance URL and confidence/status.
 
+## Mandatory cross-web contact enrichment rule
+The source page is only the starting point. A missing field on the source page does NOT end contact research.
+For every source, advertiser, realtor, broker, brokerage, developer or project, use the exact public name to search the open web for additional verifiable professional contact data.
+Mandatory enrichment path when needed:
+1. listing/detail page and advertiser profile;
+2. portal advertiser page, including public reveal controls such as Inmuebles24 "Ver teléfono" and WhatsApp when accessible without login;
+3. official company/project website and contact/team/about/legal pages;
+4. Google/web search using exact company and person names;
+5. public Facebook Page/business profile;
+6. public LinkedIn company and professional profiles;
+7. Instagram/business profile and other public professional directories;
+8. AMPI/RE/MAX/franchise/MLS or other professional-network pages;
+9. press releases, interviews, business directories and public corporate pages for CEO, owner, founder and director identification.
+
+Once a realtor/broker/person name is known, search that person separately, combined with the company/project name and location, for professional email, phone, WhatsApp and role.
+Once a company/developer name is known, separately search for CEO, owner, founder, broker, commercial director, sales director and other responsible principals.
+Preserve multiple contacts when verified; do not collapse a brokerage to one generic inbox if agent-level or executive contacts are public.
+Record provenance and freshness. Historical contacts may be preserved but must be labeled historical rather than represented as current.
+Never infer an email address from a naming pattern and never invent a phone/WhatsApp number.
+A public phone or WhatsApp is a valid verified contact even if no email is found; continue searching for the missing channels rather than downgrading the verified channel.
+
 Purpose: build the future LISTIA/CloudCo subscriber base in parallel with Marketplace expansion. LISTIA — MARKETPLACE only collects, verifies, preserves, and maps this data. Campaigns, email automation, billing, and subscription offers belong to their own workstreams.
 
-Routing priority: listing-specific contact > branch > company/developer > direct source. Generic portals are provenance, not automatic lead recipients. If an aggregator does not publicly expose the advertiser, the listing may remain useful for inventory/market data but is not lead-routeable until a verifiable commercial responsible party or original source is resolved.
+Routing priority: listing-specific contact > agent/realtor > branch > company/developer > direct source. Generic portals are provenance, not automatic lead recipients. If an aggregator does not initially expose the advertiser, attempt to resolve it from the listing/profile and cross-web enrichment before classifying the listing as not lead-routeable.
 Never invent CEO/owner/contact data. If legal ownership is not proven, store the commercial responsible party and label the role accurately.
 
 Canonical storage: Supabase marketplace_parties, marketplace_source_parties, marketplace_listing_parties, marketplace_source_prospect_backup.
