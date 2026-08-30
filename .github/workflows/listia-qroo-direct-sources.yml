@@ -32,6 +32,7 @@ jobs:
       QROO_DIRECT_WORKERS: "8"
       QROO_DIRECT_CHUNK_SIZE: "150"
       QROO_DIRECT_INGEST_BATCH_SIZE: "150"
+      QROO_DIRECT_QUEUE_LIMIT: "100"
       QROO_DIRECT_PRIVATE_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/qroo-direct-private-ingest"
 
     steps:
@@ -65,7 +66,7 @@ jobs:
             sources="${trigger[0]}"
             details="${trigger[1]}"
           fi
-          if ! [[ "${sources}" =~ ^[0-9]+$ ]] || (( sources < 1 || sources > 20 )); then
+          if ! [[ "${sources}" =~ ^[0-9]+$ ]] || (( sources < 1 || sources > 100 )); then
             echo "Invalid max_sources=${sources}" >&2
             exit 2
           fi
@@ -76,7 +77,11 @@ jobs:
           echo "QROO_DIRECT_MAX_SOURCES=${sources}" >> "${GITHUB_ENV}"
           echo "QROO_DIRECT_MAX_DETAILS=${details}" >> "${GITHUB_ENV}"
           echo "QROO_DIRECT_OUT=${RUNNER_TEMP}/qroo-direct" >> "${GITHUB_ENV}"
-          echo "Direct pilot: sources=${sources}; details/source=${details}"
+          echo "QROO_DIRECT_CONFIG=${RUNNER_TEMP}/qroo-direct-sources.json" >> "${GITHUB_ENV}"
+          echo "Direct crawl: sources=${sources}; details/source=${details}"
+
+      - name: Fetch dynamic verified source queue through OIDC
+        run: python scripts/fetch-qroo-direct-source-config.py ops/qroo-direct-sources.json "${QROO_DIRECT_CONFIG}"
 
       - name: Crawl verified public direct sources
         run: python scripts/crawl-qroo-direct-sources.py
