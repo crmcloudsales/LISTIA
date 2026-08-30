@@ -9,32 +9,46 @@
     "minimum_real_property_images": 1,
     "deduplicate": true,
     "verified_contact_capture_parallel": true,
+    "verified_phone_or_whatsapp_without_public_email_is_valid_contact": true,
     "do_not_invent_contact_data": true,
     "aggregator_without_public_advertiser_not_lead_routeable": true,
     "market_intelligence_reuse": true
   },
   "production_checkpoint": {
-    "public_total": 7089,
-    "public_with_photo": 7089,
-    "sale": 5814,
-    "rent": 1275,
-    "sources_used": 101
+    "public_total": 7098,
+    "public_with_photo": 7098,
+    "sale": 5820,
+    "rent": 1278,
+    "sources_used": 102
   },
   "source_prospect_checkpoint": {
-    "qroo_sources": 99,
-    "with_email": 76,
-    "with_phone": 84,
-    "with_whatsapp": 25,
-    "with_principal_person": 17
+    "qroo_sources": 100,
+    "verified_sources": 92,
+    "with_email": 82,
+    "with_phone": 89,
+    "with_whatsapp": 29,
+    "with_principal_person": 21
   },
-  "current_direct_source_rerun": {
-    "run_id": 33322155243,
-    "job_id": 99298114681,
-    "status_at_checkpoint": "in_progress",
-    "purpose": "re-run direct-source crawl after formalizing missing source contacts"
+  "recent_enrichment": [
+    "Grupo Tsalach / Marta Marcilla",
+    "Isla Mujeres Luxury Homes",
+    "Bacalar Properties / Oscar Luna",
+    "Mahahual Propiedades / Lisandro Lenski",
+    "Nautilus Real Estate",
+    "PROVISA",
+    "Bienes Raices Quintana Roo / Yadira Uitz",
+    "Onix Living / Zienna Cancun",
+    "Hacienda Tuk rental Tulum"
+  ],
+  "direct_source_runs": {
+    "recovery_run_id": 33322155243,
+    "recovery_attempt": 3,
+    "mixed_sale_rent_run_id": 33327395078,
+    "mixed_sale_rent_config": "30 sources x 100 details/source",
+    "mixed_sale_rent_status_at_checkpoint": "queued_or_waiting_for_concurrency"
   },
   "canonical_storage": {
-    "supabase": ["marketplace_listings", "marketplace_parties", "marketplace_source_parties", "marketplace_listing_parties", "marketplace_source_prospect_backup", "marketplace_lead_routing"],
+    "supabase": ["marketplace_listings", "marketplace_parties", "marketplace_source_parties", "marketplace_listing_parties", "marketplace_source_prospect_backup", "marketplace_lead_routing", "market_intelligence_daily_snapshots"],
     "github": ["docs/MARKETPLACE_OPERATING_RULES.md", "ops/qroo-marketplace-state.json", "ops/qroo-direct-sources.json", "ops/qroo-direct-trigger.json", "ops/market-intelligence-state.json"],
     "drive": ["LISTIA Marketplace — Fuentes y Prospectos", "LISTIA Marketplace — Backup Fuentes Quintana Roo", "LISTIA Market Intelligence — Master Architecture & Handoff"],
     "library": ["/LISTIA/LISTIA_MARKETPLACE_OPERATING_RULES_2026-08-30_v2.md", "/LISTIA/Marketplace/QROO_MARKETPLACE_STATE_2026-08-30.json"]
