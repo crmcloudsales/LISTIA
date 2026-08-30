@@ -2,7 +2,7 @@
   "max_sources": 30,
   "max_details_per_source": 100,
   "territory": "Quintana Roo",
-  "purpose": "Expand verified direct inventory across both sale and rent, prioritizing rental-heavy and under-covered Q.Roo sources",
+  "purpose": "Expand verified sale and rent inventory after cross-web enrichment of Inmuebles24 advertisers and direct brokerage sources",
   "requested_at": "2026-08-30",
-  "run_nonce": 3
+  "run_nonce": 4
 }
