@@ -1,0 +1,130 @@
+name: LISTIA Quintana Roo Direct Sources
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_sources:
+        description: "Verified direct sources to attempt"
+        required: true
+        default: "6"
+      max_details_per_source:
+        description: "Maximum public detail pages per source"
+        required: true
+        default: "80"
+  push:
+    branches: [main]
+    paths:
+      - "ops/qroo-direct-trigger.json"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: listia-qroo-direct-sources
+  cancel-in-progress: false
+
+jobs:
+  crawl-validate-ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      QROO_DIRECT_WORKERS: "8"
+      QROO_DIRECT_CHUNK_SIZE: "150"
+      QROO_DIRECT_INGEST_BATCH_SIZE: "150"
+      QROO_DIRECT_PRIVATE_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/qroo-direct-private-ingest"
+
+    steps:
+      - name: Checkout LISTIA
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install crawler dependencies
+        run: python -m pip install --disable-pip-version-check beautifulsoup4 curl_cffi
+
+      - name: Resolve controlled crawl inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            sources="${{ inputs.max_sources }}"
+            details="${{ inputs.max_details_per_source }}"
+          else
+            readarray -t trigger < <(python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('ops/qroo-direct-trigger.json').read_text(encoding='utf-8'))
+          print(data.get('max_sources', 6))
+          print(data.get('max_details_per_source', 80))
+          PY
+            )
+            sources="${trigger[0]}"
+            details="${trigger[1]}"
+          fi
+          if ! [[ "${sources}" =~ ^[0-9]+$ ]] || (( sources < 1 || sources > 20 )); then
+            echo "Invalid max_sources=${sources}" >&2
+            exit 2
+          fi
+          if ! [[ "${details}" =~ ^[0-9]+$ ]] || (( details < 1 || details > 250 )); then
+            echo "Invalid max_details_per_source=${details}" >&2
+            exit 2
+          fi
+          echo "QROO_DIRECT_MAX_SOURCES=${sources}" >> "${GITHUB_ENV}"
+          echo "QROO_DIRECT_MAX_DETAILS=${details}" >> "${GITHUB_ENV}"
+          echo "QROO_DIRECT_OUT=${RUNNER_TEMP}/qroo-direct" >> "${GITHUB_ENV}"
+          echo "Direct pilot: sources=${sources}; details/source=${details}"
+
+      - name: Crawl verified public direct sources
+        run: python scripts/crawl-qroo-direct-sources.py
+
+      - name: Validate direct-source snapshot
+        shell: python
+        run: |
+          import json, os, pathlib, re
+          from urllib.parse import urlparse
+
+          root=pathlib.Path(os.environ['QROO_DIRECT_OUT'])
+          manifest=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+          for key in ('image_required','generic_placeholders_rejected','verified_source_contact_required','robots_respected','same_host_detail_provenance'):
+              assert manifest.get(key) is True, key
+          assert int(manifest.get('rows', 0)) > 0
+
+          bad=re.compile(r'(?:logo|favicon|sprite|avatar|placeholder|default[-_]?image|no[-_]?image|no[-_]?photo|sin[-_]?imagen|missing[-_]?image|tracking|pixel)', re.I)
+          rows=0
+          covers=set()
+          for entry in manifest.get('chunks', []):
+              payload=json.loads((root/entry['file']).read_text(encoding='utf-8'))
+              for row in payload:
+                  rows += 1
+                  source=row['source_url']
+                  page=row['page_url']
+                  cover=row['cover_image_url']
+                  gallery=row.get('gallery') or []
+                  sh=(urlparse(source).hostname or '').lower().removeprefix('www.')
+                  ph=(urlparse(page).hostname or '').lower().removeprefix('www.')
+                  assert page.startswith('https://') and sh and sh == ph, (source,page)
+                  assert cover.startswith(('http://','https://')) and not bad.search(cover), cover
+                  assert gallery and all(isinstance(x,str) and x.startswith(('http://','https://')) and not bad.search(x) for x in gallery)
+                  assert cover not in covers, ('reused_cover', cover)
+                  covers.add(cover)
+                  assert str(row.get('slug','')).startswith('qroo-direct-')
+          assert rows == int(manifest['rows'])
+          print(json.dumps({'validated_rows':rows,'unique_covers':len(covers),'sources_attempted':manifest.get('sources_attempted'),'summaries':manifest.get('summaries'),'failures':len(manifest.get('failures',[]))}, ensure_ascii=False))
+
+      - name: Send direct-source batches through GitHub OIDC
+        run: python scripts/push-qroo-direct-private-ingest.py "${QROO_DIRECT_OUT}"
+
+      - name: Confirm ephemeral-only crawl data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- .; then
+            echo "Direct crawler changed tracked repository files; refusing to finish." >&2
+            git status --short
+            exit 1
+          fi
+          echo "Direct Q.Roo crawl completed without storing snapshots in GitHub."
