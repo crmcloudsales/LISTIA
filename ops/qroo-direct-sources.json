@@ -1,0 +1,89 @@
+{
+  "territory": "Quintana Roo",
+  "sources": [
+    {
+      "name": "RE/MAX Isla",
+      "source_url": "https://remaxisla.com/property/",
+      "crawl_roots": ["https://remaxisla.com/property/"],
+      "city_hint": "Isla Mujeres",
+      "priority": 1
+    },
+    {
+      "name": "Holbox For Sale",
+      "source_url": "https://holboxforsale.com/",
+      "crawl_roots": ["https://holboxforsale.com/"],
+      "city_hint": "Holbox",
+      "priority": 1
+    },
+    {
+      "name": "Buy Bacalar",
+      "source_url": "https://buybacalar.com/all-properties/",
+      "crawl_roots": ["https://buybacalar.com/all-properties/"],
+      "city_hint": "Bacalar",
+      "priority": 1
+    },
+    {
+      "name": "Bacalar Properties",
+      "source_url": "https://bacalarproperties.com/",
+      "crawl_roots": ["https://bacalarproperties.com/"],
+      "city_hint": "Bacalar",
+      "priority": 1
+    },
+    {
+      "name": "Mahahual Propiedades",
+      "source_url": "https://mahahualpropiedades.com/",
+      "crawl_roots": ["https://mahahualpropiedades.com/"],
+      "city_hint": "Mahahual",
+      "priority": 1
+    },
+    {
+      "name": "OSO Inmobiliaria Chetumal",
+      "source_url": "https://osoinmobiliaria.com.mx/",
+      "crawl_roots": ["https://osoinmobiliaria.com.mx/"],
+      "city_hint": "Chetumal",
+      "priority": 1
+    },
+    {
+      "name": "AltaMar Isla Mujeres",
+      "source_url": "https://altamarislamujeres.com/",
+      "crawl_roots": ["https://altamarislamujeres.com/"],
+      "city_hint": "Isla Mujeres",
+      "priority": 2
+    },
+    {
+      "name": "Isla Mujeres Luxury Homes",
+      "source_url": "https://www.islamujeresluxuryhomes.com/",
+      "crawl_roots": ["https://www.islamujeresluxuryhomes.com/"],
+      "city_hint": "Isla Mujeres",
+      "priority": 2
+    },
+    {
+      "name": "Caribe Holbox Real Estate",
+      "source_url": "https://www.caribeholbox.com/",
+      "crawl_roots": ["https://www.caribeholbox.com/"],
+      "city_hint": "Holbox",
+      "priority": 2
+    },
+    {
+      "name": "GMB Real Estate Holbox",
+      "source_url": "https://www.gmb.com.mx/holbox/",
+      "crawl_roots": ["https://www.gmb.com.mx/holbox/"],
+      "city_hint": "Holbox",
+      "priority": 2
+    },
+    {
+      "name": "100% Inmobiliaria Sur Quintana Roo",
+      "source_url": "https://www.100xcientoinmobiliaria.com/",
+      "crawl_roots": ["https://www.100xcientoinmobiliaria.com/"],
+      "city_hint": "Chetumal",
+      "priority": 2
+    },
+    {
+      "name": "LAgence Mahahual",
+      "source_url": "https://lagencemx.com/mahahual",
+      "crawl_roots": ["https://lagencemx.com/mahahual"],
+      "city_hint": "Mahahual",
+      "priority": 2
+    }
+  ]
+}
