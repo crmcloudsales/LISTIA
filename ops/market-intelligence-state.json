@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-30T16:56:00Z",
+  "updated_at": "2026-08-30T17:03:00Z",
   "status": "active",
   "owner_workstream": "marketplace_research_inventory_and_market_intelligence",
   "product_name": "LISTIA Market Intelligence",
@@ -13,6 +13,12 @@
       "public.get_market_intelligence(uuid,text,text,text,text)"
     ],
     "snapshot_segments_saved": 758,
+    "snapshot_cron": {
+      "job_name": "listia-market-intelligence-daily-snapshot",
+      "schedule_utc": "10 6 * * *",
+      "local_intent": "daily after America/Cancun date rollover",
+      "active": true
+    },
     "currency_rule": "never_mix_currencies_without_explicit_dated_fx_conversion"
   },
   "plans": {
@@ -68,6 +74,17 @@
     "docs/LISTIA_MARKET_INTELLIGENCE.md",
     "docs/LISTIA_MARKET_INTELLIGENCE_COMMERCIAL_HANDOFF.md"
   ],
+  "backups": {
+    "google_drive_folder": "https://drive.google.com/drive/folders/1KWchwAx4aOAj92G-i38KZcTGdVntbofv",
+    "google_doc_master": "https://docs.google.com/document/d/1tpU34c4bawrWHEkoIaJULx6TRdLK3vHMniTEHtHl7CA",
+    "google_drive_excel": "https://docs.google.com/spreadsheets/d/1Yxw5_sk_htki-8ajtJoWhZNYqfPe5to7/edit",
+    "library_folder": "/LISTIA/Marketplace/Market Intelligence",
+    "library_files": [
+      "LISTIA_Market_Intelligence_Master_2026-08-30.md",
+      "LISTIA_Market_Intelligence_State_2026-08-30.json",
+      "LISTIA_Market_Intelligence_QROO_Baseline_2026-08-30.xlsx"
+    ]
+  },
   "next_development_actions": [
     "build Market Intelligence navigation and dashboards using get_market_intelligence RPC",
     "instrument normalized marketplace demand events",
