@@ -2,6 +2,7 @@
   "max_sources": 6,
   "max_details_per_source": 80,
   "territory": "Quintana Roo",
-  "purpose": "Pilot verified direct public sources in underrepresented Q Roo markets",
-  "requested_at": "2026-08-30"
+  "purpose": "Run verified direct public source pilot after deployment",
+  "requested_at": "2026-08-30",
+  "run_nonce": 1
 }
