@@ -1,4 +1,4 @@
-name: LISTIA PWA Branding v9 Apply
+name: LISTIA PWA Branding v10 Apply
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: listia-pwa-brand-v9-apply
+  group: listia-pwa-brand-v10-apply
   cancel-in-progress: false
 
 jobs:
@@ -31,42 +31,41 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq librsvg2-bin python3-pil
 
-      - name: Generate canonical full-bleed LISTIA icons and bump PWA branding
+      - name: Generate padded LISTIA icons and bump PWA release
         shell: bash
         run: |
           set -Eeuo pipefail
-          rsvg-convert -w 32  -h 32  public/listia-official-icon-v3.svg -o public/listia-app-icon-32.png
-          rsvg-convert -w 180 -h 180 public/listia-official-icon-v3.svg -o public/listia-app-icon-180.png
-          rsvg-convert -w 192 -h 192 public/listia-official-icon-v3.svg -o public/listia-app-icon-192.png
-          rsvg-convert -w 512 -h 512 public/listia-official-icon-v3.svg -o public/listia-app-icon-512.png
-          rsvg-convert -w 192 -h 192 public/listia-official-icon-maskable-v4.svg -o public/listia-app-icon-maskable-192.png
-          rsvg-convert -w 512 -h 512 public/listia-official-icon-maskable-v4.svg -o public/listia-app-icon-maskable-512.png
+          rsvg-convert -w 32  -h 32  public/listia-official-icon-v5.svg -o public/listia-app-icon-32.png
+          rsvg-convert -w 180 -h 180 public/listia-official-icon-v5.svg -o public/listia-app-icon-180.png
+          rsvg-convert -w 192 -h 192 public/listia-official-icon-v5.svg -o public/listia-app-icon-192.png
+          rsvg-convert -w 512 -h 512 public/listia-official-icon-v5.svg -o public/listia-app-icon-512.png
+          rsvg-convert -w 192 -h 192 public/listia-official-icon-v5.svg -o public/listia-app-icon-maskable-192.png
+          rsvg-convert -w 512 -h 512 public/listia-official-icon-v5.svg -o public/listia-app-icon-maskable-512.png
 
           python3 - <<'PY'
           from pathlib import Path
           from PIL import Image
           import json,re
 
-          # Release identity: force browsers/service workers to retire v8 assets.
           p=Path('public/config.js'); s=p.read_text(encoding='utf-8')
-          s=s.replace('BOOTSTRAP_VERSION:"0.27.2"','BOOTSTRAP_VERSION:"0.27.3"')
-          s=s.replace("const v='8'","const v='9'")
+          s=s.replace('BOOTSTRAP_VERSION:"0.27.3"','BOOTSTRAP_VERSION:"0.27.4"')
+          s=s.replace("const v='9'","const v='10'")
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/sw.js'); s=p.read_text(encoding='utf-8')
-          s=s.replace('const CACHE="listia-pwa-v0.27.2";','const CACHE="listia-pwa-v0.27.3";')
-          s=s.replace('?v=8','?v=9')
+          s=s.replace('const CACHE="listia-pwa-v0.27.3";','const CACHE="listia-pwa-v0.27.4";')
+          s=s.replace('?v=9','?v=10')
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/index.html'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'(/manifest-en\.webmanifest)\?v=\d+',r'\1?v=9',s)
-          s=re.sub(r'(/listia-app-icon-180\.png)\?v=\d+',r'\1?v=9',s)
-          s=re.sub(r'(/listia-app-icon-32\.png)\?v=\d+',r'\1?v=9',s)
-          s=re.sub(r'(/listia-site-isotipo-v4\.svg)\?v=\d+',r'\1?v=9',s)
+          s=re.sub(r'(/manifest-en\.webmanifest)\?v=\d+',r'\1?v=10',s)
+          s=re.sub(r'(/listia-app-icon-180\.png)\?v=\d+',r'\1?v=10',s)
+          s=re.sub(r'(/listia-app-icon-32\.png)\?v=\d+',r'\1?v=10',s)
+          s=re.sub(r'(/listia-site-isotipo-v4\.svg)\?v=\d+',r'\1?v=10',s)
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/listia-site-isotipo-v4.svg'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'(/listia-wordmark-light\.webp)\?v=\d+',r'\1?v=9',s)
+          s=re.sub(r'(/listia-wordmark-light\.webp)\?v=\d+',r'\1?v=10',s)
           p.write_text(s,encoding='utf-8')
 
           for p in Path('public').glob('manifest*.webmanifest'):
@@ -74,8 +73,20 @@ jobs:
               for icon in d.get('icons',[]):
                   src=str(icon.get('src',''))
                   if 'listia-app-icon-' in src:
-                      icon['src']=re.sub(r'\?v=\d+$','?v=9',src) if '?v=' in src else src+'?v=9'
+                      icon['src']=re.sub(r'\?v=\d+$','?v=10',src) if '?v=' in src else src+'?v=10'
               p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
+
+          Path('public/APP_ICON_VERSION.txt').write_text(
+              'LISTIA OFFICIAL APPLICATION ICON\n'
+              'version=10\n'
+              'source=public/listia-official-icon-v5.svg\n'
+              'scope=application-icon-site-favicon-and-pwa-cache\n'
+              'house_scale=0.72\n'
+              'padding_rule=preserve-complete-house-add-safe-space-no-crop\n'
+              'brand_logo=listia-site-isotipo-v4.svg\n'
+              'pwa_release=0.27.4\n'
+              'cache_version=v10\n',
+              encoding='utf-8')
 
           expected={
             'listia-app-icon-32.png':32,
@@ -88,7 +99,6 @@ jobs:
           for name,size in expected.items():
               im=Image.open(Path('public')/name).convert('RGBA')
               if im.size!=(size,size): raise SystemExit(f'{name}: bad dimensions {im.size}')
-              # Full-bleed background: reject white/transparent outside borders.
               px=im.load(); border=[]
               for i in range(size): border.extend((px[i,0],px[i,size-1],px[0,i],px[size-1,i]))
               if any(a<250 or (r>235 and g>235 and b>235) for r,g,b,a in border):
@@ -97,10 +107,10 @@ jobs:
 
           node --check public/config.js
           node --check public/sw.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.27.3"' public/config.js
-          grep -Fq 'const CACHE="listia-pwa-v0.27.3"' public/sw.js
-          grep -Fq '/listia-app-icon-512.png?v=9' public/sw.js
-          grep -Fq '/listia-app-icon-32.png?v=9' public/index.html
+          grep -Fq 'BOOTSTRAP_VERSION:"0.27.4"' public/config.js
+          grep -Fq 'const CACHE="listia-pwa-v0.27.4"' public/sw.js
+          grep -Fq '/listia-app-icon-512.png?v=10' public/sw.js
+          grep -Fq '/listia-app-icon-32.png?v=10' public/index.html
 
       - name: Guard against Marketplace mutation
         shell: bash
@@ -111,14 +121,14 @@ jobs:
             exit 1
           fi
 
-      - name: Commit canonical LISTIA PWA brand v9
+      - name: Commit LISTIA PWA icon v10
         shell: bash
         run: |
           set -Eeuo pipefail
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/config.js public/sw.js public/index.html public/listia-site-isotipo-v4.svg public/manifest*.webmanifest public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png
+          git add public/config.js public/sw.js public/index.html public/listia-site-isotipo-v4.svg public/manifest*.webmanifest public/APP_ICON_VERSION.txt public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Apply LISTIA PWA branding v9 and release 0.27.3'
+          git commit -m 'Fix LISTIA installed app icon padding v10'
           git pull --rebase origin main
           git push origin HEAD:main
