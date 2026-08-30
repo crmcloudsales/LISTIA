@@ -1,7 +1,7 @@
 {
-  "max_pages": 100,
+  "max_pages": 500,
   "detail_image_fallback": false,
   "territory": "Quintana Roo",
-  "purpose": "Scale validated image-first crawl after successful 20-page pilot",
+  "purpose": "Scale validated image-first crawl after successful 100-page run",
   "requested_at": "2026-08-30"
 }
