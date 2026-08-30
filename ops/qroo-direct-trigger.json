@@ -1,8 +1,8 @@
 {
-  "max_sources": 6,
-  "max_details_per_source": 80,
+  "max_sources": 20,
+  "max_details_per_source": 60,
   "territory": "Quintana Roo",
-  "purpose": "Run verified direct public source pilot after deployment",
+  "purpose": "Scale dynamic verified public source crawl after successful six-source pilot",
   "requested_at": "2026-08-30",
-  "run_nonce": 1
+  "run_nonce": 2
 }
