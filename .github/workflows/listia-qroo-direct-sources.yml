@@ -84,7 +84,7 @@ jobs:
         run: python scripts/fetch-qroo-direct-source-config.py ops/qroo-direct-sources.json "${QROO_DIRECT_CONFIG}"
 
       - name: Crawl verified public direct sources
-        run: python scripts/crawl-qroo-direct-sources.py
+        run: python scripts/crawl-qroo-direct-sources-v2.py
 
       - name: Validate direct-source snapshot
         shell: python
