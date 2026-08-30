@@ -33,6 +33,30 @@ No published Marketplace property may exist without at least one valid image of 
 NO PHOTO = NO PUBLISHED LISTING.
 Never substitute placeholders, logos, unrelated images, generic stock, or another property's images.
 
+## Parallel source-to-subscriber capture rule
+Marketplace crawling and subscriber-prospect capture are ONE workflow, not two separate projects.
+
+Whenever LISTIA discovers, reviews, crawls, ingests, refreshes, or uses a website/source for Marketplace inventory, preserve a reusable internal source/prospect record at the same time.
+
+For every source website, capture and maintain when publicly verifiable:
+- website URL;
+- company / brokerage / developer / agency name;
+- CEO, owner, founder, principal, broker, listing agent, or other responsible person when verifiable;
+- role of that person/entity;
+- public professional email;
+- public professional phone;
+- public WhatsApp when available;
+- a very short inventory summary, maximum 40 characters;
+- state/territory;
+- count of Marketplace properties attributable to that source;
+- verification/provenance URL and confidence/status.
+
+This database exists so LISTIA/CloudCo can later identify potential subscribers and route Marketplace opportunities to the correct business. LISTIA — MARKETPLACE only collects, verifies, preserves, and maps this data. Email automation, subscription offers, billing flows, and launch messaging belong to their appropriate workstreams/chats.
+
+Do not invent CEO/owner/contact data. If legal ownership is not proven, store the commercial responsible party instead and label the role accurately. Prefer listing-specific contact over branch/company contact, and branch/company contact over a generic portal. Generic portals are provenance, not automatically the lead recipient.
+
+Canonical structured storage is Supabase (`marketplace_parties`, `marketplace_source_parties`, `marketplace_listing_parties`, `marketplace_source_prospect_backup`). Keep a Drive backup/snapshot in `LISTIA Marketplace — Fuentes y Prospectos`, and keep the persistent operating rule in TAREAS, GitHub, and the ChatGPT Library.
+
 ## Continuity / anti-freeze rule
 Never leave a Marketplace execution running indefinitely without returning a user-visible checkpoint.
 If an operation becomes too long, repetitive, blocked, unstable, or risks freezing:
@@ -60,5 +84,5 @@ After a stop command: zero additional searches, writes, deployments, database ch
 - Prefer listing-specific responsible contact over branch/company-level fallback when verified.
 
 ## Scope isolation
-This workstream owns Marketplace inventory, ingestion, source discovery, normalization, deduplication, listing images, location/map enrichment, Marketplace feed/search/cards/details, source/contact mapping, and state-by-state expansion.
+This workstream owns Marketplace inventory, ingestion, source discovery, normalization, deduplication, listing images, location/map enrichment, Marketplace feed/search/cards/details, source/contact mapping, source-prospect capture, and state-by-state expansion.
 If work primarily belongs to another LISTIA module, log it in the master TAREAS document for LISTIA — DESARROLLO instead of modifying unrelated modules here.
