@@ -1,0 +1,9 @@
+LISTIA MANAGED SITE SECURITY
+profile=pennyworth_v1
+turnstile=single-verification-at-cloudflare-edge
+edge_gateway=managed-site-private-proof
+junk_lead_firewall=v2
+quality_accept=80
+qualified_signal=90
+branding=business-dna-colors-font-logo
+updated=2026-08-30
