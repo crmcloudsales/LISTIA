@@ -1,10 +1,9 @@
 LISTIA OFFICIAL APPLICATION ICON
-version=9
-source=public/listia-official-icon-v3.svg
-source_blob=665cee559b286d8087748339b23c2838cab45362
-maskable_source=public/listia-official-icon-maskable-v4.svg
+version=10
+source=public/listia-official-icon-v5.svg
 scope=application-icon-site-favicon-and-pwa-cache
+house_scale=0.72
+padding_rule=preserve-complete-house-add-safe-space-no-crop
 brand_logo=listia-site-isotipo-v4.svg
-pwa_release=0.27.3
-cache_version=v9
-deployment_trigger=2026-08-29T21:30Z
+pwa_release=0.27.4
+cache_version=v10
