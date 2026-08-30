@@ -1,0 +1,7 @@
+{
+  "max_pages": 20,
+  "detail_image_fallback": false,
+  "territory": "Quintana Roo",
+  "purpose": "Validate current image-first crawl and private ingest before scaling state coverage",
+  "requested_at": "2026-08-30"
+}
