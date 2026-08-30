@@ -44,6 +44,20 @@
       "priority": 1
     },
     {
+      "name": "Tulum Rental Homes",
+      "source_url": "https://www.tulumrentalhomes.com.mx/",
+      "crawl_roots": ["https://www.tulumrentalhomes.com.mx/rentals", "https://www.tulumrentalhomes.com.mx/"],
+      "city_hint": "Tulum",
+      "priority": 1
+    },
+    {
+      "name": "Sun Homes Riviera Maya",
+      "source_url": "https://sunhomesrivieramaya.com/",
+      "crawl_roots": ["https://sunhomesrivieramaya.com/"],
+      "city_hint": "Playa del Carmen",
+      "priority": 1
+    },
+    {
       "name": "AltaMar Isla Mujeres",
       "source_url": "https://altamarislamujeres.com/",
       "crawl_roots": ["https://altamarislamujeres.com/"],
@@ -83,6 +97,48 @@
       "source_url": "https://lagencemx.com/mahahual",
       "crawl_roots": ["https://lagencemx.com/mahahual"],
       "city_hint": "Mahahual",
+      "priority": 2
+    },
+    {
+      "name": "Brokers Tulum",
+      "source_url": "https://brokerstulum.mx/",
+      "crawl_roots": ["https://brokerstulum.mx/"],
+      "city_hint": "Tulum",
+      "priority": 2
+    },
+    {
+      "name": "Playa Home Real Estate",
+      "source_url": "https://www.inmobiliaria-tulum.com/",
+      "crawl_roots": ["https://www.inmobiliaria-tulum.com/"],
+      "city_hint": "Tulum",
+      "priority": 2
+    },
+    {
+      "name": "Tulum Realtors",
+      "source_url": "https://www.tulumrealtors.com/",
+      "crawl_roots": ["https://www.tulumrealtors.com/"],
+      "city_hint": "Tulum",
+      "priority": 2
+    },
+    {
+      "name": "Real Riviera Living",
+      "source_url": "https://realrivieraliving.com/",
+      "crawl_roots": ["https://realrivieraliving.com/"],
+      "city_hint": "Playa del Carmen",
+      "priority": 2
+    },
+    {
+      "name": "Activo Inmobiliario Quintana Roo",
+      "source_url": "https://www.activoinmobiliario.mx/",
+      "crawl_roots": ["https://www.activoinmobiliario.mx/"],
+      "city_hint": "Playa del Carmen",
+      "priority": 2
+    },
+    {
+      "name": "Plalla Real Estate",
+      "source_url": "https://plalla.com/",
+      "crawl_roots": ["https://plalla.com/"],
+      "city_hint": "Tulum",
       "priority": 2
     }
   ]
