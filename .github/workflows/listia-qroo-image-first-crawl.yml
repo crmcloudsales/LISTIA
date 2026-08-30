@@ -3,7 +3,9 @@ name: LISTIA Quintana Roo Image-First Crawl
 # Raw crawl snapshots are ephemeral runner data only. They must never be committed
 # to GitHub or uploaded as public artifacts. Authentication to LISTIA uses GitHub
 # Actions OIDC; no Supabase API key is stored in this repository/workflow.
-# Manual-only until larger state runs are deliberately promoted after QA.
+# Manual runs remain available. A push run is allowed only when the dedicated
+# ops trigger file changes, so Marketplace coverage work can be executed safely
+# without broadening the workflow to arbitrary pushes.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +18,10 @@ on:
         required: true
         type: boolean
         default: false
+  push:
+    branches: [main]
+    paths:
+      - "ops/qroo-crawl-trigger.json"
 
 permissions:
   contents: read
@@ -33,7 +39,6 @@ jobs:
       QROO_WORKERS: "6"
       QROO_CRAWL_SLEEP: "0.20"
       QROO_INGEST_BATCH_SIZE: "200"
-      QROO_DETAIL_IMAGE_FALLBACK: "${{ inputs.detail_image_fallback }}"
       QROO_PRIVATE_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/qroo-private-ingest"
 
     steps:
@@ -52,13 +57,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pages="${{ inputs.max_pages }}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            pages="${{ inputs.max_pages }}"
+            detail="${{ inputs.detail_image_fallback }}"
+          else
+            readarray -t trigger < <(python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('ops/qroo-crawl-trigger.json').read_text(encoding='utf-8'))
+          pages = data.get('max_pages', 20)
+          detail = bool(data.get('detail_image_fallback', False))
+          print(pages)
+          print('true' if detail else 'false')
+          PY
+            )
+            pages="${trigger[0]}"
+            detail="${trigger[1]}"
+          fi
           if ! [[ "${pages}" =~ ^[0-9]+$ ]] || (( pages > 1000 )); then
             echo "Invalid max_pages=${pages}" >&2
             exit 2
           fi
           echo "QROO_MAX_PAGES=${pages}" >> "${GITHUB_ENV}"
+          echo "QROO_DETAIL_IMAGE_FALLBACK=${detail}" >> "${GITHUB_ENV}"
           echo "QROO_CRAWL_OUT=${RUNNER_TEMP}/qroo-crawl" >> "${GITHUB_ENV}"
+          echo "Resolved QROO_MAX_PAGES=${pages}; detail_image_fallback=${detail}"
 
       - name: Crawl image-first inventory to ephemeral runner storage
         run: python scripts/crawl-qroo-image-first.py
@@ -75,8 +98,6 @@ jobs:
           assert manifest.get("generic_placeholders_rejected") is True
           assert manifest.get("image_listing_binding_enforced") is True
 
-          # Detail recovery is disabled by default. If explicitly enabled for QA,
-          # the same ownership/reuse checks below still apply before transport.
           requested_detail = os.environ.get("QROO_DETAIL_IMAGE_FALLBACK", "false").lower() == "true"
           assert bool(manifest.get("detail_page_image_fallback")) is requested_detail
 
