@@ -1,145 +1,28 @@
 {
   "territory": "Quintana Roo",
   "sources": [
-    {
-      "name": "RE/MAX Isla",
-      "source_url": "https://remaxisla.com/property/",
-      "crawl_roots": ["https://remaxisla.com/property/"],
-      "city_hint": "Isla Mujeres",
-      "priority": 1
-    },
-    {
-      "name": "Holbox For Sale",
-      "source_url": "https://holboxforsale.com/",
-      "crawl_roots": ["https://holboxforsale.com/"],
-      "city_hint": "Holbox",
-      "priority": 1
-    },
-    {
-      "name": "Buy Bacalar",
-      "source_url": "https://buybacalar.com/all-properties/",
-      "crawl_roots": ["https://buybacalar.com/all-properties/"],
-      "city_hint": "Bacalar",
-      "priority": 1
-    },
-    {
-      "name": "Bacalar Properties",
-      "source_url": "https://bacalarproperties.com/",
-      "crawl_roots": ["https://bacalarproperties.com/"],
-      "city_hint": "Bacalar",
-      "priority": 1
-    },
-    {
-      "name": "Mahahual Propiedades",
-      "source_url": "https://mahahualpropiedades.com/",
-      "crawl_roots": ["https://mahahualpropiedades.com/"],
-      "city_hint": "Mahahual",
-      "priority": 1
-    },
-    {
-      "name": "OSO Inmobiliaria Chetumal",
-      "source_url": "https://osoinmobiliaria.com.mx/",
-      "crawl_roots": ["https://osoinmobiliaria.com.mx/"],
-      "city_hint": "Chetumal",
-      "priority": 1
-    },
-    {
-      "name": "Tulum Rental Homes",
-      "source_url": "https://www.tulumrentalhomes.com.mx/",
-      "crawl_roots": ["https://www.tulumrentalhomes.com.mx/rentals", "https://www.tulumrentalhomes.com.mx/"],
-      "city_hint": "Tulum",
-      "priority": 1
-    },
-    {
-      "name": "Sun Homes Riviera Maya",
-      "source_url": "https://sunhomesrivieramaya.com/",
-      "crawl_roots": ["https://sunhomesrivieramaya.com/"],
-      "city_hint": "Playa del Carmen",
-      "priority": 1
-    },
-    {
-      "name": "AltaMar Isla Mujeres",
-      "source_url": "https://altamarislamujeres.com/",
-      "crawl_roots": ["https://altamarislamujeres.com/"],
-      "city_hint": "Isla Mujeres",
-      "priority": 2
-    },
-    {
-      "name": "Isla Mujeres Luxury Homes",
-      "source_url": "https://www.islamujeresluxuryhomes.com/",
-      "crawl_roots": ["https://www.islamujeresluxuryhomes.com/"],
-      "city_hint": "Isla Mujeres",
-      "priority": 2
-    },
-    {
-      "name": "Caribe Holbox Real Estate",
-      "source_url": "https://www.caribeholbox.com/",
-      "crawl_roots": ["https://www.caribeholbox.com/"],
-      "city_hint": "Holbox",
-      "priority": 2
-    },
-    {
-      "name": "GMB Real Estate Holbox",
-      "source_url": "https://www.gmb.com.mx/holbox/",
-      "crawl_roots": ["https://www.gmb.com.mx/holbox/"],
-      "city_hint": "Holbox",
-      "priority": 2
-    },
-    {
-      "name": "100% Inmobiliaria Sur Quintana Roo",
-      "source_url": "https://www.100xcientoinmobiliaria.com/",
-      "crawl_roots": ["https://www.100xcientoinmobiliaria.com/"],
-      "city_hint": "Chetumal",
-      "priority": 2
-    },
-    {
-      "name": "LAgence Mahahual",
-      "source_url": "https://lagencemx.com/mahahual",
-      "crawl_roots": ["https://lagencemx.com/mahahual"],
-      "city_hint": "Mahahual",
-      "priority": 2
-    },
-    {
-      "name": "Brokers Tulum",
-      "source_url": "https://brokerstulum.mx/",
-      "crawl_roots": ["https://brokerstulum.mx/"],
-      "city_hint": "Tulum",
-      "priority": 2
-    },
-    {
-      "name": "Playa Home Real Estate",
-      "source_url": "https://www.inmobiliaria-tulum.com/",
-      "crawl_roots": ["https://www.inmobiliaria-tulum.com/"],
-      "city_hint": "Tulum",
-      "priority": 2
-    },
-    {
-      "name": "Tulum Realtors",
-      "source_url": "https://www.tulumrealtors.com/",
-      "crawl_roots": ["https://www.tulumrealtors.com/"],
-      "city_hint": "Tulum",
-      "priority": 2
-    },
-    {
-      "name": "Real Riviera Living",
-      "source_url": "https://realrivieraliving.com/",
-      "crawl_roots": ["https://realrivieraliving.com/"],
-      "city_hint": "Playa del Carmen",
-      "priority": 2
-    },
-    {
-      "name": "Activo Inmobiliario Quintana Roo",
-      "source_url": "https://www.activoinmobiliario.mx/",
-      "crawl_roots": ["https://www.activoinmobiliario.mx/"],
-      "city_hint": "Playa del Carmen",
-      "priority": 2
-    },
-    {
-      "name": "Plalla Real Estate",
-      "source_url": "https://plalla.com/",
-      "crawl_roots": ["https://plalla.com/"],
-      "city_hint": "Tulum",
-      "priority": 2
-    }
+    {"name":"RE/MAX Isla","source_url":"https://remaxisla.com/property/","crawl_roots":["https://remaxisla.com/property/"],"city_hint":"Isla Mujeres","priority":1},
+    {"name":"Holbox For Sale","source_url":"https://holboxforsale.com/","crawl_roots":["https://holboxforsale.com/"],"city_hint":"Holbox","priority":1},
+    {"name":"Buy Bacalar","source_url":"https://buybacalar.com/all-properties/","crawl_roots":["https://buybacalar.com/all-properties/"],"city_hint":"Bacalar","priority":1},
+    {"name":"Bacalar Properties","source_url":"https://bacalarproperties.com/","crawl_roots":["https://bacalarproperties.com/"],"city_hint":"Bacalar","priority":1},
+    {"name":"Mahahual Propiedades","source_url":"https://mahahualpropiedades.com/","crawl_roots":["https://mahahualpropiedades.com/"],"city_hint":"Mahahual","priority":1},
+    {"name":"OSO Inmobiliaria Chetumal","source_url":"https://osoinmobiliaria.com.mx/","crawl_roots":["https://osoinmobiliaria.com.mx/"],"city_hint":"Chetumal","priority":1},
+    {"name":"Tulum Rental Homes","source_url":"https://www.tulumrentalhomes.com.mx/","crawl_roots":["https://www.tulumrentalhomes.com.mx/rentals","https://www.tulumrentalhomes.com.mx/"],"city_hint":"Tulum","priority":1},
+    {"name":"Sun Homes Riviera Maya","source_url":"https://sunhomesrivieramaya.com/","crawl_roots":["https://sunhomesrivieramaya.com/"],"city_hint":"Playa del Carmen","priority":1},
+    {"name":"Terracasa Inmobiliaria","source_url":"https://terracasainmobiliaria.com/","crawl_roots":["https://terracasainmobiliaria.com/","https://terracasainmobiliaria.com/property-slider/"],"city_hint":"Cancún","priority":1},
+    {"name":"Eproperties Luxury Real Estate México","source_url":"https://eproperties.mx/","crawl_roots":["https://eproperties.mx/"],"city_hint":"Cancún","priority":1},
+    {"name":"The Realtors Co.","source_url":"https://www.therealtorsco.com/","crawl_roots":["https://www.therealtorsco.com/"],"city_hint":"Cancún","priority":1},
+    {"name":"AltaMar Isla Mujeres","source_url":"https://altamarislamujeres.com/","crawl_roots":["https://altamarislamujeres.com/"],"city_hint":"Isla Mujeres","priority":2},
+    {"name":"Isla Mujeres Luxury Homes","source_url":"https://www.islamujeresluxuryhomes.com/","crawl_roots":["https://www.islamujeresluxuryhomes.com/"],"city_hint":"Isla Mujeres","priority":2},
+    {"name":"Caribe Holbox Real Estate","source_url":"https://www.caribeholbox.com/","crawl_roots":["https://www.caribeholbox.com/"],"city_hint":"Holbox","priority":2},
+    {"name":"GMB Real Estate Holbox","source_url":"https://www.gmb.com.mx/holbox/","crawl_roots":["https://www.gmb.com.mx/holbox/"],"city_hint":"Holbox","priority":2},
+    {"name":"100% Inmobiliaria Sur Quintana Roo","source_url":"https://www.100xcientoinmobiliaria.com/","crawl_roots":["https://www.100xcientoinmobiliaria.com/"],"city_hint":"Chetumal","priority":2},
+    {"name":"LAgence Mahahual","source_url":"https://lagencemx.com/mahahual","crawl_roots":["https://lagencemx.com/mahahual"],"city_hint":"Mahahual","priority":2},
+    {"name":"Brokers Tulum","source_url":"https://brokerstulum.mx/","crawl_roots":["https://brokerstulum.mx/"],"city_hint":"Tulum","priority":2},
+    {"name":"Playa Home Real Estate","source_url":"https://www.inmobiliaria-tulum.com/","crawl_roots":["https://www.inmobiliaria-tulum.com/"],"city_hint":"Tulum","priority":2},
+    {"name":"Tulum Realtors","source_url":"https://www.tulumrealtors.com/","crawl_roots":["https://www.tulumrealtors.com/"],"city_hint":"Tulum","priority":2},
+    {"name":"Real Riviera Living","source_url":"https://realrivieraliving.com/","crawl_roots":["https://realrivieraliving.com/"],"city_hint":"Playa del Carmen","priority":2},
+    {"name":"Activo Inmobiliario Quintana Roo","source_url":"https://www.activoinmobiliario.mx/","crawl_roots":["https://www.activoinmobiliario.mx/"],"city_hint":"Playa del Carmen","priority":2},
+    {"name":"Plalla Real Estate","source_url":"https://plalla.com/","crawl_roots":["https://plalla.com/"],"city_hint":"Tulum","priority":2}
   ]
 }
