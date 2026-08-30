@@ -1,4 +1,4 @@
-name: LISTIA Official Brand Assets v9 Lock
+name: LISTIA Official App Icon v10 Lock
 
 on:
   push:
@@ -9,13 +9,9 @@ on:
       - 'public/index.html'
       - 'public/manifest*.webmanifest'
       - 'public/listia-app-icon-*.png'
-      - 'public/listia-app-icon-official.jpg'
-      - 'public/listia-official-icon-v3.svg'
-      - 'public/listia-official-icon-maskable-v4.svg'
+      - 'public/listia-official-icon-v5.svg'
       - 'public/listia-site-isotipo-v4.svg'
-      - 'public/listia-wordmark-*.webp'
-      - 'public/listia-logo-transparent.webp'
-      - 'public/listia-mark-transparent.webp'
+      - 'public/APP_ICON_VERSION.txt'
       - '.github/workflows/listia-official-app-icon.yml'
   workflow_dispatch:
 
@@ -28,11 +24,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Validate canonical LISTIA branding transition v8 to v9
+      - name: Validate corrected LISTIA installed-app icon
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git hash-object public/listia-official-icon-v3.svg)" = "665cee559b286d8087748339b23c2838cab45362"
+          test -f public/listia-official-icon-v5.svg
+          grep -Fq 'scale(.72)' public/listia-official-icon-v5.svg
           test -f public/listia-app-icon-32.png
           test -f public/listia-app-icon-180.png
           test -f public/listia-app-icon-192.png
@@ -66,7 +63,7 @@ jobs:
           const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
           if(!app||!cache) throw new Error('Missing LISTIA release metadata');
           if(app[1]!==cache[1]) throw new Error(`PWA release mismatch app=${app?.[1]} cache=${cache?.[1]}`);
-          if(!['0.27.2','0.27.3'].includes(app[1])) throw new Error(`Unexpected release ${app[1]}`);
+          if(app[1]!=='0.27.4') throw new Error(`Expected release 0.27.4, got ${app[1]}`);
           const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
           if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
           const versions=new Set();
@@ -80,6 +77,8 @@ jobs:
               versions.add(match[1]);
             }
           }
-          if(versions.size!==1||![...versions].every(v=>v==='8'||v==='9')) throw new Error(`Mixed or unexpected icon versions: ${[...versions]}`);
-          console.log(`LISTIA brand lock OK release=${app[1]} icon=v${[...versions][0]}`);
+          if(versions.size!==1||![...versions].every(v=>v==='10')) throw new Error(`Expected icon v10 only, got ${[...versions]}`);
+          const marker=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
+          if(!marker.includes('house_scale=0.72')) throw new Error('Corrected house padding marker missing');
+          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v10 house_scale=.72`);
           NODE
