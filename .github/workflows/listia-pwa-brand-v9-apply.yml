@@ -1,4 +1,4 @@
-name: LISTIA PWA Branding v10 Apply
+name: LISTIA PWA Branding v11 Apply
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: listia-pwa-brand-v10-apply
+  group: listia-pwa-brand-v11-apply
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq librsvg2-bin python3-pil
 
-      - name: Generate padded LISTIA icons and bump PWA release
+      - name: Generate brand-color LISTIA icons and bump PWA release
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -48,24 +48,24 @@ jobs:
           import json,re
 
           p=Path('public/config.js'); s=p.read_text(encoding='utf-8')
-          s=s.replace('BOOTSTRAP_VERSION:"0.27.3"','BOOTSTRAP_VERSION:"0.27.4"')
-          s=s.replace("const v='9'","const v='10'")
+          s=s.replace('BOOTSTRAP_VERSION:"0.27.4"','BOOTSTRAP_VERSION:"0.27.5"')
+          s=s.replace("const v='10'","const v='11'")
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/sw.js'); s=p.read_text(encoding='utf-8')
-          s=s.replace('const CACHE="listia-pwa-v0.27.3";','const CACHE="listia-pwa-v0.27.4";')
-          s=s.replace('?v=9','?v=10')
+          s=s.replace('const CACHE="listia-pwa-v0.27.4";','const CACHE="listia-pwa-v0.27.5";')
+          s=s.replace('?v=10','?v=11')
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/index.html'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'(/manifest-en\.webmanifest)\?v=\d+',r'\1?v=10',s)
-          s=re.sub(r'(/listia-app-icon-180\.png)\?v=\d+',r'\1?v=10',s)
-          s=re.sub(r'(/listia-app-icon-32\.png)\?v=\d+',r'\1?v=10',s)
-          s=re.sub(r'(/listia-site-isotipo-v4\.svg)\?v=\d+',r'\1?v=10',s)
+          s=re.sub(r'(/manifest-en\.webmanifest)\?v=\d+',r'\1?v=11',s)
+          s=re.sub(r'(/listia-app-icon-180\.png)\?v=\d+',r'\1?v=11',s)
+          s=re.sub(r'(/listia-app-icon-32\.png)\?v=\d+',r'\1?v=11',s)
+          s=re.sub(r'(/listia-site-isotipo-v4\.svg)\?v=\d+',r'\1?v=11',s)
           p.write_text(s,encoding='utf-8')
 
           p=Path('public/listia-site-isotipo-v4.svg'); s=p.read_text(encoding='utf-8')
-          s=re.sub(r'(/listia-wordmark-light\.webp)\?v=\d+',r'\1?v=10',s)
+          s=re.sub(r'(/listia-wordmark-light\.webp)\?v=\d+',r'\1?v=11',s)
           p.write_text(s,encoding='utf-8')
 
           for p in Path('public').glob('manifest*.webmanifest'):
@@ -73,19 +73,20 @@ jobs:
               for icon in d.get('icons',[]):
                   src=str(icon.get('src',''))
                   if 'listia-app-icon-' in src:
-                      icon['src']=re.sub(r'\?v=\d+$','?v=10',src) if '?v=' in src else src+'?v=10'
+                      icon['src']=re.sub(r'\?v=\d+$','?v=11',src) if '?v=' in src else src+'?v=11'
               p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
 
           Path('public/APP_ICON_VERSION.txt').write_text(
               'LISTIA OFFICIAL APPLICATION ICON\n'
-              'version=10\n'
+              'version=11\n'
               'source=public/listia-official-icon-v5.svg\n'
               'scope=application-icon-site-favicon-and-pwa-cache\n'
               'house_scale=0.72\n'
+              'house_fill=brand-purple-gradient-no-white\n'
               'padding_rule=preserve-complete-house-add-safe-space-no-crop\n'
               'brand_logo=listia-site-isotipo-v4.svg\n'
-              'pwa_release=0.27.4\n'
-              'cache_version=v10\n',
+              'pwa_release=0.27.5\n'
+              'cache_version=v11\n',
               encoding='utf-8')
 
           expected={
@@ -107,10 +108,10 @@ jobs:
 
           node --check public/config.js
           node --check public/sw.js
-          grep -Fq 'BOOTSTRAP_VERSION:"0.27.4"' public/config.js
-          grep -Fq 'const CACHE="listia-pwa-v0.27.4"' public/sw.js
-          grep -Fq '/listia-app-icon-512.png?v=10' public/sw.js
-          grep -Fq '/listia-app-icon-32.png?v=10' public/index.html
+          grep -Fq 'BOOTSTRAP_VERSION:"0.27.5"' public/config.js
+          grep -Fq 'const CACHE="listia-pwa-v0.27.5"' public/sw.js
+          grep -Fq '/listia-app-icon-512.png?v=11' public/sw.js
+          grep -Fq '/listia-app-icon-32.png?v=11' public/index.html
 
       - name: Guard against Marketplace mutation
         shell: bash
@@ -121,7 +122,7 @@ jobs:
             exit 1
           fi
 
-      - name: Commit LISTIA PWA icon v10
+      - name: Commit LISTIA PWA icon v11
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -129,6 +130,6 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add public/config.js public/sw.js public/index.html public/listia-site-isotipo-v4.svg public/manifest*.webmanifest public/APP_ICON_VERSION.txt public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png
           git diff --cached --quiet && exit 0
-          git commit -m 'Fix LISTIA installed app icon padding v10'
+          git commit -m 'Apply LISTIA brand-color app icon v11'
           git pull --rebase origin main
           git push origin HEAD:main
