@@ -1,4 +1,4 @@
-name: LISTIA Official App Icon v10 Lock
+name: LISTIA Official App Icon v11 Lock
 
 on:
   push:
@@ -24,12 +24,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Validate corrected LISTIA installed-app icon
+      - name: Validate brand-color LISTIA installed-app icon
         shell: bash
         run: |
           set -Eeuo pipefail
           test -f public/listia-official-icon-v5.svg
           grep -Fq 'scale(.72)' public/listia-official-icon-v5.svg
+          grep -Fq 'fill="url(#house)"' public/listia-official-icon-v5.svg
+          if grep -Fq 'fill="#fff"' public/listia-official-icon-v5.svg; then
+            echo 'White house fill must not return.' >&2
+            exit 1
+          fi
           test -f public/listia-app-icon-32.png
           test -f public/listia-app-icon-180.png
           test -f public/listia-app-icon-192.png
@@ -63,7 +68,7 @@ jobs:
           const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
           if(!app||!cache) throw new Error('Missing LISTIA release metadata');
           if(app[1]!==cache[1]) throw new Error(`PWA release mismatch app=${app?.[1]} cache=${cache?.[1]}`);
-          if(app[1]!=='0.27.4') throw new Error(`Expected release 0.27.4, got ${app[1]}`);
+          if(app[1]!=='0.27.5') throw new Error(`Expected release 0.27.5, got ${app[1]}`);
           const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
           if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
           const versions=new Set();
@@ -77,8 +82,9 @@ jobs:
               versions.add(match[1]);
             }
           }
-          if(versions.size!==1||![...versions].every(v=>v==='10')) throw new Error(`Expected icon v10 only, got ${[...versions]}`);
+          if(versions.size!==1||![...versions].every(v=>v==='11')) throw new Error(`Expected icon v11 only, got ${[...versions]}`);
           const marker=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
           if(!marker.includes('house_scale=0.72')) throw new Error('Corrected house padding marker missing');
-          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v10 house_scale=.72`);
+          if(!marker.includes('house_fill=brand-purple-gradient-no-white')) throw new Error('Brand-color house marker missing');
+          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v11 house_scale=.72 no-white-house`);
           NODE
