@@ -8,7 +8,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='GET') return json(405,{error:'method_not_allowed'});
   const u=new URL(req.url);
   const mode=sane(u.searchParams.get('mode')||'clusters',24);
-  if(!['clusters','listings','summary','microzones'].includes(mode)) return json(400,{error:'invalid_mode'});
+  if(!['clusters','listings','summary','microzones','trends'].includes(mode)) return json(400,{error:'invalid_mode'});
   const municipality=sane(u.searchParams.get('municipality'));
   const place=sane(u.searchParams.get('place'));
   const operation=sane(u.searchParams.get('operation'),20).toLowerCase();
@@ -21,7 +21,7 @@ Deno.serve(async(req:Request)=>{
   const minPrice=minPriceRaw===null?NaN:Number(minPriceRaw);
   const maxPrice=maxPriceRaw===null?NaN:Number(maxPriceRaw);
   const minBeds=minBedsRaw===null?NaN:Number(minBedsRaw);
-  const limit=clamp(Number(u.searchParams.get('limit')|| (mode==='listings'?'250':mode==='microzones'?'150':'100'))||100,1,500);
+  const limit=clamp(Number(u.searchParams.get('limit')|| (mode==='listings'?'250':mode==='microzones'?'150':mode==='trends'?'180':'100'))||100,1,500);
 
   const sb=Deno.env.get('SUPABASE_URL')||'';
   const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
@@ -47,6 +47,14 @@ Deno.serve(async(req:Request)=>{
     if(operation&&['sale','rent','unknown'].includes(operation)) q.set('operation_type',`eq.${operation}`);
     if(currency&&['MXN','USD'].includes(currency)) q.set('currency',`eq.${currency}`);
     if(confidence&&['high','medium','low'].includes(confidence)) q.set('metric_confidence',`eq.${confidence}`);
+  } else if(mode==='trends'){
+    path='marketplace_qroo_market_trends';
+    q.set('select','snapshot_date,canonical_place,municipality,operation_type,currency,inventory_count,source_count,price_samples,price_m2_samples,median_price,median_price_per_m2');
+    q.set('order','snapshot_date.asc'); q.set('limit',String(limit));
+    if(place) q.set('canonical_place',`eq.${place}`);
+    if(municipality) q.set('municipality',`eq.${municipality}`);
+    if(operation&&['sale','rent','unknown'].includes(operation)) q.set('operation_type',`eq.${operation}`);
+    if(currency&&['MXN','USD'].includes(currency)) q.set('currency',`eq.${currency}`);
   } else {
     path='marketplace_qroo_mapped_listings';
     q.set('select','id,source_id,slug,title,operation_type,property_type,price,currency,location_text,city,state_region,bedrooms,bathrooms,area_m2,cover_image_url,external_url,canonical_place,municipality,map_latitude,map_longitude,map_precision');
