@@ -24,3 +24,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run deploy-cloudflare-pages.yml --repo "${GITHUB_REPOSITORY}" --ref main
+
+# 2026-08-31: canonical deployment dispatch for Quintana Roo Marketplace map release.
