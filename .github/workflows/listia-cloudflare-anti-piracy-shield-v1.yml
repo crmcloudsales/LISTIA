@@ -38,7 +38,7 @@ jobs:
             id=$(jq -r --arg d "$desc" '.result.rules[]? | select(.description==$d) | .id' "$current" | head -n1)
             expr=$(jq -r --arg d "$desc" '.result.rules[]? | select(.description==$d) | .expression' "$current" | head -n1)
             [[ -n "$id" && -n "$expr" ]] || { echo "Missing rule: $desc"; exit 4; }
-            if [[ -n "$extra" && "$expr" != *"${extra:0:20}"* ]]; then combined="(${expr} or ${extra})"; else combined="$expr"; fi
+            if [[ -n "$extra" && "$expr" != *"$extra"* ]]; then combined="(${expr} or ${extra})"; else combined="$expr"; fi
             payload=$(jq -nc --arg d "$desc" --arg e "$combined" '{description:$d,expression:$e,action:"block",enabled:true}')
             out=$(mktemp)
             code=$(curl -sS -X PATCH -o "$out" -w '%{http_code}' -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/${id}")
