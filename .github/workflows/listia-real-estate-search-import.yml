@@ -1,0 +1,140 @@
+name: LISTIA Real Estate Search Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed_ref:
+        description: "Original search/share reference used to discover the inventory"
+        required: false
+        default: "https://share.google/xjrJKOTyHn3XkugbN"
+      input_ref:
+        description: "Repo JSON/CSV path or HTTPS JSON/CSV export. JSON may contain items, results, or direct public listing urls."
+        required: true
+        default: "ops/real-estate-search-import.json"
+      channel:
+        description: "Ingestion channel label"
+        required: true
+        default: "real_estate_search"
+      max_items:
+        description: "Maximum results to prepare this run"
+        required: true
+        default: "250"
+      batch_size:
+        description: "Supabase ingest batch size (1-250)"
+        required: true
+        default: "100"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: listia-real-estate-search-import
+  cancel-in-progress: false
+
+jobs:
+  prepare-validate-ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LISTIA_MARKETPLACE_SEARCH_INGEST_URL: "https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-search-private-ingest"
+
+    steps:
+      - name: Checkout LISTIA
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install public-page parser
+        run: python -m pip install --disable-pip-version-check beautifulsoup4
+
+      - name: Validate controlled inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_items='${{ inputs.max_items }}'
+          batch_size='${{ inputs.batch_size }}'
+          if ! [[ "$max_items" =~ ^[0-9]+$ ]] || (( max_items < 1 || max_items > 5000 )); then
+            echo "Invalid max_items=$max_items" >&2
+            exit 2
+          fi
+          if ! [[ "$batch_size" =~ ^[0-9]+$ ]] || (( batch_size < 1 || batch_size > 250 )); then
+            echo "Invalid batch_size=$batch_size" >&2
+            exit 2
+          fi
+          input_ref='${{ inputs.input_ref }}'
+          if [[ "$input_ref" == http://* ]]; then
+            echo "Only HTTPS remote inputs are accepted" >&2
+            exit 2
+          fi
+          echo "LISTIA_SEARCH_INPUT=$input_ref" >> "$GITHUB_ENV"
+          echo "LISTIA_SEARCH_SEED=${{ inputs.seed_ref }}" >> "$GITHUB_ENV"
+          echo "LISTIA_SEARCH_CHANNEL=${{ inputs.channel }}" >> "$GITHUB_ENV"
+          echo "LISTIA_SEARCH_MAX_ITEMS=$max_items" >> "$GITHUB_ENV"
+          echo "LISTIA_SEARCH_BATCH_SIZE=$batch_size" >> "$GITHUB_ENV"
+          echo "LISTIA_SEARCH_PREPARED=$RUNNER_TEMP/listia-real-estate-search.json" >> "$GITHUB_ENV"
+
+      - name: Prepare direct public listing results
+        run: |
+          python scripts/prepare-real-estate-search-import.py \
+            --input "$LISTIA_SEARCH_INPUT" \
+            --output "$LISTIA_SEARCH_PREPARED" \
+            --seed-ref "$LISTIA_SEARCH_SEED" \
+            --max-items "$LISTIA_SEARCH_MAX_ITEMS"
+
+      - name: Validate prepared payload
+        shell: python
+        run: |
+          import json, os, pathlib, re
+          from urllib.parse import urlparse
+
+          payload=json.loads(pathlib.Path(os.environ['LISTIA_SEARCH_PREPARED']).read_text(encoding='utf-8'))
+          items=payload.get('items') or []
+          assert 0 < len(items) <= int(os.environ['LISTIA_SEARCH_MAX_ITEMS'])
+          public_candidates=0
+          contacts=0
+          for item in items:
+              listing=item.get('listing', item)
+              page=str(listing.get('page_url') or listing.get('external_url') or '')
+              title=str(listing.get('title') or '').strip()
+              assert page.startswith('https://') and urlparse(page).hostname, page
+              assert title and len(title) <= 300, title
+              source=item.get('source') or {}
+              if source.get('url'):
+                  assert str(source['url']).startswith('https://')
+              rights=str(listing.get('rights_basis') or source.get('rights_basis') or 'public_link_only')
+              publish=bool(listing.get('publish_authorized'))
+              confirmed=bool(listing.get('rights_confirmed'))
+              cover=str(listing.get('cover_image_url') or '')
+              if publish:
+                  assert rights in ('authorized_feed','licensed_partner')
+                  assert confirmed is True
+                  assert cover.startswith(('http://','https://'))
+                  public_candidates += 1
+              for contact in item.get('contacts') or []:
+                  evidence=str(contact.get('evidence_url') or '')
+                  if evidence:
+                      assert evidence.startswith('https://')
+                  contacts += 1
+          print(json.dumps({'items':len(items),'contacts':contacts,'auto_publish_candidates':public_candidates,'seed_ref':payload.get('seed_ref')}, ensure_ascii=False))
+
+      - name: Send batches through GitHub OIDC
+        run: |
+          python scripts/push-marketplace-search-private-ingest.py \
+            "$LISTIA_SEARCH_PREPARED" \
+            --channel "$LISTIA_SEARCH_CHANNEL" \
+            --batch-size "$LISTIA_SEARCH_BATCH_SIZE"
+
+      - name: Confirm ephemeral-only search payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- .; then
+            echo "Search importer modified tracked repository files; refusing to finish." >&2
+            git status --short
+            exit 1
+          fi
+          echo "LISTIA real-estate search import completed without storing result snapshots in GitHub."
