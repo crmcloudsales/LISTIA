@@ -94,7 +94,7 @@ def b64(path:Path)->str: return base64.b64encode(path.read_bytes()).decode("asci
 def build_worker(html:str,marketplace_html:str,marketplace_css:str,marketplace_js:str,affiliate_html:str,affiliate_icon_svg:str,site_logo_svg:str,cloudco_html:str,footer_js:str,global_locales_js:str,japanese_js:str,terms_html:str,privacy_html:str,legal_css:str,logo_b64:str,listia_mark_b64:str,wordmark_light_b64:str,wordmark_dark_b64:str,favicon_b64:str)->str:
     validate_html(html);validate_marketplace(marketplace_html,marketplace_css,marketplace_js);validate_locale_assets(global_locales_js,japanese_js,footer_js);validate_cloudco(cloudco_html,footer_js);validate_legal(terms_html,privacy_html)
     if 'LISTIA Affiliate Program' not in affiliate_html or '40%' not in affiliate_html: raise ValueError('affiliate portal validation failed')
-    cloudco_html=cloudco_html.replace('/cloudco-assets/cloudco-logo-official.webp','/cloudco-assets/cloudco-logo-official.webp?v=2')
+    cloudco_html=cloudco_html.replace('src="/cloudco-assets/cloudco-logo-official.webp"',f'src="data:image/webp;base64,{logo_b64}" data-cloudco-logo-fallback="/cloudco-assets/cloudco-logo-official.webp?v=2"')
     robots="User-agent: *\nAllow: /\nDisallow: /cloudco\nDisallow: /cloudco/\nSitemap: https://listiaapp.com/sitemap.xml\n"
     today=date.today().isoformat()
     urls=[*(f"https://listiaapp.com/?lang={x}" for x in LANGUAGES),*(f"https://listiaapp.com{p}" for p in MARKETPLACE_ROUTES),"https://listiaapp.com/affiliate"]
