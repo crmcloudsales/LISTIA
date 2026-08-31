@@ -58,10 +58,14 @@
       this.root.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;this.root.setPointerCapture?.(e.pointerId);const p=project(this.center.lat,this.center.lng,this.zoom);this.drag={x:e.clientX,y:e.clientY,cx:p.x,cy:p.y};});
       this.root.addEventListener('pointermove',e=>{if(!this.drag)return;this.userMoved=true;const dx=e.clientX-this.drag.x,dy=e.clientY-this.drag.y;this.center=unproject(this.drag.cx-dx,this.drag.cy-dy,this.zoom);this.render();});
       const end=()=>{this.drag=null};this.root.addEventListener('pointerup',end);this.root.addEventListener('pointercancel',end);
-      new ResizeObserver(()=>this.render()).observe(this.root);
+      if ('ResizeObserver' in window) new ResizeObserver(()=>this.render()).observe(this.root);
+      else window.addEventListener('resize',()=>this.render(),{passive:true});
     }
     setZoom(z){this.zoom=clamp(Math.round(z),3,17);this.render()}
-    setRows(rows,fit=false){this.rows=(rows||[]).filter(validPoint);if((fit||!this.userMoved)&&this.rows.length)this.fit();else this.render()}
+    setRows(rows,fit=false){
+      this.rows=(rows||[]).map((x,index)=>Object.assign({},x,{__listiaCardIndex:index})).filter(validPoint);
+      if((fit||!this.userMoved)&&this.rows.length)this.fit();else this.render();
+    }
     fit(){
       if(!this.rows.length){this.render();return}
       let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
@@ -87,13 +91,13 @@
       const center=project(this.center.lat,this.center.lng,this.zoom),left=center.x-w/2,top=center.y-h/2,cell=58,groups=new Map();
       this.rows.forEach((x,index)=>{const p=project(Number(x.latitude),Number(x.longitude),this.zoom),sx=p.x-left,sy=p.y-top;if(sx<-40||sx>w+40||sy<-40||sy>h+40)return;const key=`${Math.round(sx/cell)}:${Math.round(sy/cell)}`;const g=groups.get(key)||{x:0,y:0,items:[]};g.x+=sx;g.y+=sy;g.items.push({x,index});groups.set(key,g)});
       const frag=document.createDocumentFragment();
-      groups.forEach(g=>{const b=document.createElement('button'),n=g.items.length;b.type='button';b.className='marketplace-v8-marker '+(n>1?'cluster':(g.items[0].x.operation_type==='rent'?'rent':'sale'));b.style.left=`${g.x/n}px`;b.style.top=`${g.y/n}px`;if(n>1){b.textContent=String(n);b.setAttribute('aria-label',`${n} properties`);b.onclick=()=>{this.userMoved=true;this.setZoom(this.zoom+2)}}else{const x=g.items[0].x;b.textContent=money(x.price,x.currency).replace(/\.00$/,'').replace(/^MX\$/,'$').replace(/^US\$/,'$');if(!b.textContent)b.textContent='●';b.setAttribute('aria-label',x.title||'Property');b.onclick=()=>this.showPreview(x,g.items[0].index)}frag.append(b)});
+      groups.forEach(g=>{const b=document.createElement('button'),n=g.items.length;b.type='button';b.className='marketplace-v8-marker '+(n>1?'cluster':(g.items[0].x.operation_type==='rent'?'rent':'sale'));b.style.left=`${g.x/n}px`;b.style.top=`${g.y/n}px`;if(n>1){b.textContent=String(n);b.setAttribute('aria-label',`${n} properties`);b.onclick=()=>{this.userMoved=true;this.setZoom(this.zoom+2)}}else{const x=g.items[0].x;b.textContent=money(x.price,x.currency).replace(/\.00$/,'').replace(/^MX\$/,'$').replace(/^US\$/,'$');if(!b.textContent)b.textContent='●';b.setAttribute('aria-label',x.title||'Property');b.onclick=()=>this.showPreview(x,Number.isInteger(x.__listiaCardIndex)?x.__listiaCardIndex:g.items[0].index)}frag.append(b)});
       this.markers.replaceChildren(frag);
       const meta=document.getElementById('marketplaceV8MapMeta');if(meta)meta.textContent=`${copy().mapped(this.rows.length)}`;
     }
     showPreview(x,index){
       const img=this.preview.querySelector('img'),title=this.preview.querySelector('strong'),meta=this.preview.querySelector('span'),button=this.preview.querySelector('button');
-      img.src=x.cover_image_url||'/listia-site-isotipo-v4.svg?v=7';img.alt='';title.textContent=x.title||'';meta.textContent=[money(x.price,x.currency),x.location_text||x.city||''].filter(Boolean).join(' · ');button.textContent=copy().view;button.onclick=()=>{const cards=[...document.querySelectorAll('#marketplaceGrid .marketplace-card')];const card=cards[index];if(card){card.querySelector('.marketplace-media')?.click()}else{switchView('list')}};this.preview.classList.add('show');
+      img.src=x.cover_image_url||'/listia-site-isotipo-v4.svg?v=11';img.alt='';title.textContent=x.title||'';meta.textContent=[money(x.price,x.currency),x.location_text||x.city||''].filter(Boolean).join(' · ');button.textContent=copy().view;button.onclick=()=>{const cards=[...document.querySelectorAll('#marketplaceGrid .marketplace-card')];const card=cards[index];if(card){card.querySelector('.marketplace-media')?.click()}else{switchView('list')}};this.preview.classList.add('show');
     }
   }
 
@@ -120,7 +124,7 @@
     if(!screen||!filters||!panel||!search||document.getElementById('marketplaceV8Toolbar'))return false;
     const t=copy(),toolbar=document.createElement('div');toolbar.id='marketplaceV8Toolbar';toolbar.className='marketplace-v8-toolbar';
     const searchRow=document.createElement('div');searchRow.className='marketplace-v8-search-row';const searchButton=document.createElement('button');searchButton.id='marketplaceV8SearchButton';searchButton.type='button';searchButton.className='marketplace-v8-search-button';searchButton.textContent=t.search;searchButton.onclick=runSearch;
-    search.parentNode.insertBefore(toolbar,filters);searchRow.append(search,searchButton);toolbar.append(searchRow);
+    filters.parentNode.insertBefore(toolbar,filters);searchRow.append(search,searchButton);toolbar.append(searchRow);
     search.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runSearch()}});
 
     const voice=document.createElement('section');voice.className='marketplace-v8-voice';voice.innerHTML='<div class="marketplace-v8-voice-orb" aria-hidden="true">✦</div><div class="marketplace-v8-voice-copy"><strong></strong><span></span></div><button class="marketplace-v8-voice-button" type="button"></button>';voice.querySelector('strong').textContent=t.voiceTitle;voice.querySelector('span').textContent=t.voiceHint;voice.querySelector('button').textContent=t.talk;voice.querySelector('button').onclick=startVoice;toolbar.append(voice);
