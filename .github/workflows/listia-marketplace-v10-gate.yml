@@ -130,25 +130,27 @@ jobs:
           base='https://app.listiaapp.com'
           deployed=0
           for i in $(seq 1 45); do
-            sw="$(curl -fsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
+            sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
             if grep -Fq 'listia-pwa-v0.27.7-marketplace-v14' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/" -o /tmp/root.html
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/marketplace?gate=$GITHUB_SHA" -o /tmp/marketplace.html
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" -o /tmp/gateway.js
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/marketplace-experience-v8.js?v=3&gate=$GITHUB_SHA" -o /tmp/experience.js
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" -o /tmp/voice.js
-          curl -fsS --connect-timeout 5 --max-time 20 "$base/manifest.webmanifest?v=13&gate=$GITHUB_SHA" -o /tmp/manifest.json
-          grep -Fq "version:'10.0.0'" /tmp/gateway.js
-          grep -Fq 'EDGE_PAGE_SIZE=30' /tmp/gateway.js
-          grep -Fq 'firewallPreserved:true' /tmp/gateway.js
-          grep -Fq 'marketplaceV8SearchButton' /tmp/experience.js
-          grep -Fq 'marketplace-v8-voice-button' /tmp/experience.js
-          grep -Fq 'data-marketplace-view="map"' /tmp/experience.js
-          grep -Fq 'registerAction' /tmp/voice.js
-          grep -Fq 'LISTIA' /tmp/marketplace.html
+          fetch(){ local url="$1" out="$2"; local code; code="$(curl -sS -L --connect-timeout 5 --max-time 20 -o "$out" -w '%{http_code}' "$url")"; echo "LIVE ${url} -> ${code}"; test "$code" = 200; }
+          need(){ local file="$1" marker="$2" label="$3"; if ! grep -Fq "$marker" "$file"; then echo "LIVE ASSERTION FAILED: ${label} missing marker: ${marker}"; head -c 500 "$file" || true; echo; exit 1; fi; }
+          fetch "$base/" /tmp/root.html
+          fetch "$base/marketplace?gate=$GITHUB_SHA" /tmp/marketplace.html
+          fetch "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" /tmp/gateway.js
+          fetch "$base/marketplace-experience-v8.js?v=3&gate=$GITHUB_SHA" /tmp/experience.js
+          fetch "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" /tmp/voice.js
+          fetch "$base/manifest.webmanifest?v=13&gate=$GITHUB_SHA" /tmp/manifest.json
+          need /tmp/gateway.js "version:'10.0.0'" 'gateway version'
+          need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'
+          need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'
+          need /tmp/experience.js 'marketplaceV8SearchButton' 'Buscar UI'
+          need /tmp/experience.js 'marketplace-v8-voice-button' 'voice UI'
+          need /tmp/experience.js 'data-marketplace-view="map"' 'map/list toggle'
+          need /tmp/voice.js 'registerAction' 'voice action registry'
+          need /tmp/marketplace.html 'LISTIA' '/marketplace shell'
           python3 - <<'PY'
           import json
           m=json.load(open('/tmp/manifest.json'))
@@ -163,8 +165,10 @@ jobs:
           set -Eeuo pipefail
           base='https://app.listiaapp.com'
           code=$(curl -sS -o /tmp/no-origin.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
+          echo "No-origin protected feed -> ${code}"
           test "$code" = '403'
           code=$(curl -sS -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
+          echo "Trusted-origin protected feed -> ${code}"
           test "$code" = '200'
           python3 - <<'PY'
           import json
@@ -173,5 +177,6 @@ jobs:
           print(f'Protected feed OK rows={len(rows)}')
           PY
           code=$(curl -sS -o /tmp/interest.json -w '%{http_code}' -X POST "$base/api/interest" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{}')
+          echo "Unauthenticated protected interest -> ${code}"
           test "$code" = '401'
           echo 'Marketplace firewall and protected interest endpoint OK'
