@@ -122,7 +122,7 @@ jobs:
             exit 1
           fi
 
-      - name: Commit LISTIA PWA icon v11
+      - name: Commit and push LISTIA PWA icon v11 safely
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -131,5 +131,18 @@ jobs:
           git add public/config.js public/sw.js public/index.html public/listia-site-isotipo-v4.svg public/manifest*.webmanifest public/APP_ICON_VERSION.txt public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png
           git diff --cached --quiet && exit 0
           git commit -m 'Apply LISTIA brand-color app icon v11'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            echo "Push attempt ${attempt}/5"
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo 'Concurrent update caused a real rebase conflict; refusing to overwrite main.' >&2
+              exit 1
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 2))
+          done
+          echo 'Could not push icon v11 after five safe retries.' >&2
+          exit 1
