@@ -28,8 +28,9 @@ jobs:
           const config=fs.readFileSync('public/config.js','utf8');
           const sw=fs.readFileSync('public/sw.js','utf8');
           const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
-          const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
+          const cache=sw.match(/const CACHE="listia-pwa-v(\d+\.\d+\.\d+)(?:-[^"]+)?"/);
           if(!app||!cache) throw new Error(`Missing release metadata app=${app?.[1]} cache=${cache?.[1]}`);
-          if(app[1]!==cache[1]) throw new Error(`PWA release mismatch: BOOTSTRAP_VERSION=${app[1]} service-worker-cache=${cache[1]}`);
-          console.log(`PWA release lock OK: ${app[1]}`);
+          if(app[1]!==cache[1]) throw new Error(`PWA release mismatch: BOOTSTRAP_VERSION=${app[1]} service-worker-release=${cache[1]}`);
+          if(!sw.includes('marketplace-v14')) throw new Error('Expected Marketplace runtime cache generation v14');
+          console.log(`PWA release lock OK: release=${app[1]} cache-generation=marketplace-v14`);
           NODE
