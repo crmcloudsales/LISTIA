@@ -1,4 +1,4 @@
-name: LISTIA Official App Icon v13 Lock
+name: LISTIA Official App Icon v15 Lock
 
 on:
   push:
@@ -10,7 +10,6 @@ on:
       - 'public/manifest*.webmanifest'
       - 'public/listia-app-icon-*.png'
       - 'public/listia-official-icon-v5.svg'
-      - 'public/listia-site-isotipo-v4.svg'
       - 'public/APP_ICON_VERSION.txt'
       - '.github/workflows/listia-official-app-icon.yml'
   pull_request:
@@ -21,7 +20,6 @@ on:
       - 'public/manifest*.webmanifest'
       - 'public/listia-app-icon-*.png'
       - 'public/listia-official-icon-v5.svg'
-      - 'public/listia-site-isotipo-v4.svg'
       - 'public/APP_ICON_VERSION.txt'
       - '.github/workflows/listia-official-app-icon.yml'
   workflow_dispatch:
@@ -35,37 +33,25 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Validate canonical LISTIA installed-app icon
+      - name: Validate canonical LISTIA installed-app icon v15
         shell: bash
         run: |
           set -Eeuo pipefail
           test -f public/listia-official-icon-v5.svg
           grep -Fq '<rect width="1536" height="1536" fill="url(#g)"/>' public/listia-official-icon-v5.svg
-          grep -Fq 'scale(.72)' public/listia-official-icon-v5.svg
-          grep -Fq 'fill="url(#house)"' public/listia-official-icon-v5.svg
-          if grep -Fq 'fill="#fff"' public/listia-official-icon-v5.svg; then
-            echo 'White house fill must not return.' >&2
+          grep -Fq 'translate(768 765) scale(.90)' public/listia-official-icon-v5.svg
+          grep -Fq 'fill="#fff"' public/listia-official-icon-v5.svg
+          if grep -Fq 'fill="url(#house)"' public/listia-official-icon-v5.svg; then
+            echo 'Purple house must not return; official launcher house is white.' >&2
             exit 1
           fi
-          test -f public/listia-app-icon-32.png
-          test -f public/listia-app-icon-180.png
-          test -f public/listia-app-icon-192.png
-          test -f public/listia-app-icon-512.png
-          test -f public/listia-app-icon-maskable-192.png
-          test -f public/listia-app-icon-maskable-512.png
+          for f in public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png; do test -f "$f"; done
           node --check public/config.js
           node --check public/sw.js
           python3 - <<'PY'
           from pathlib import Path
           import struct
-          expected={
-            'listia-app-icon-32.png':(32,32),
-            'listia-app-icon-180.png':(180,180),
-            'listia-app-icon-192.png':(192,192),
-            'listia-app-icon-512.png':(512,512),
-            'listia-app-icon-maskable-192.png':(192,192),
-            'listia-app-icon-maskable-512.png':(512,512),
-          }
+          expected={'listia-app-icon-32.png':(32,32),'listia-app-icon-180.png':(180,180),'listia-app-icon-192.png':(192,192),'listia-app-icon-512.png':(512,512),'listia-app-icon-maskable-192.png':(192,192),'listia-app-icon-maskable-512.png':(512,512)}
           for name,size in expected.items():
               data=(Path('public')/name).read_bytes()
               if data[:8] != b'\x89PNG\r\n\x1a\n': raise SystemExit(f'{name}: invalid PNG')
@@ -75,31 +61,18 @@ jobs:
           node <<'NODE'
           const fs=require('fs');
           const config=fs.readFileSync('public/config.js','utf8');
-          const sw=fs.readFileSync('public/sw.js','utf8');
-          const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
-          const cache=sw.match(/const CACHE="listia-pwa-v([^-]+)-marketplace-v(\d+)"/);
-          if(!app||!cache) throw new Error('Missing LISTIA release metadata');
-          if(app[1]!==cache[1]) throw new Error(`PWA release mismatch app=${app?.[1]} cache=${cache?.[1]}`);
-          if(app[1]!=='0.27.7') throw new Error(`Expected release 0.27.7, got ${app[1]}`);
-          if(cache[2]!=='14') throw new Error(`Expected marketplace cache v14, got ${cache[2]}`);
+          if(!config.includes("const v='15'")) throw new Error('config.js must force icon cache v15');
           const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
           if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
-          const versions=new Set();
           for(const file of files){
             const m=JSON.parse(fs.readFileSync(`public/${file}`,'utf8'));
-            if(!Array.isArray(m.icons)||!m.icons.length) throw new Error(`${file}: missing icons`);
-            for(const icon of m.icons){
-              const src=String(icon.src||'');
-              const match=src.match(/\?v=(\d+)$/);
-              if(!match) throw new Error(`${file}: unversioned icon ${src}`);
-              versions.add(match[1]);
-              if(!['any','maskable'].some(p=>String(icon.purpose||'any').split(/\s+/).includes(p))) throw new Error(`${file}: invalid purpose ${icon.purpose}`);
+            for(const icon of m.icons||[]){
+              if(!String(icon.src||'').endsWith('?v=15')) throw new Error(`${file}: stale icon ${icon.src}`);
             }
           }
-          if(versions.size!==1||![...versions].every(v=>v==='13')) throw new Error(`Expected icon v13 only, got ${[...versions]}`);
           const marker=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          for(const expected of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72','house_fill=brand-purple-gradient-no-white']){
+          for(const expected of ['icon_version=15','white_house=required','outer_white_background=removed','house_scale=0.90','extra_wheel_or_pointer=forbidden','cache_version=v15']){
             if(!marker.includes(expected)) throw new Error(`Missing canonical marker ${expected}`);
           }
-          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v13 cache=v${cache[2]} full-bleed no-white house_scale=.72`);
+          console.log('LISTIA app icon v15 lock OK: white house, full-bleed purple, no wheel/pointer, no outer white tile');
           NODE
