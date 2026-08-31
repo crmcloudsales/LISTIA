@@ -7,7 +7,7 @@
   Cross-Origin-Resource-Policy: same-site
   Origin-Agent-Cluster: ?1
   X-Permitted-Cross-Domain-Policies: none
-  Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=(self), usb=(), bluetooth=(), serial=(), hid=(), clipboard-read=(), clipboard-write=(self), fullscreen=(self)
+  Permissions-Policy: camera=(), microphone=(self), geolocation=(self), payment=(self), usb=(), bluetooth=(), serial=(), hid=(), clipboard-read=(), clipboard-write=(self), fullscreen=(self)
   Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self' https://challenges.cloudflare.com https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com; connect-src 'self' https://challenges.cloudflare.com https://*.supabase.co https://api.stripe.com https://checkout.stripe.com https://link.com https://*.link.com; frame-src https://challenges.cloudflare.com https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://checkout.stripe.com https://link.com https://*.link.com https://www.openstreetmap.org https://maps.google.com https://www.google.com; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests;
   X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
