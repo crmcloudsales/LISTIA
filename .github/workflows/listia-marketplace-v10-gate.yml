@@ -33,7 +33,8 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v6
-      - name: Validate Marketplace v10 browser contracts
+
+      - name: Validate browser JavaScript syntax
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -43,41 +44,65 @@ jobs:
           node --check public/marketplace.js
           node --check public/listia-voice.js
           node --check public/sw.js
+
+      - name: Validate secure map gateway and route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
           node <<'NODE'
           const fs=require('fs');
-          const gateway=fs.readFileSync('public/marketplace-gateway-v9.js','utf8');
+          const text=fs.readFileSync('public/marketplace-gateway-v9.js','utf8');
+          const need=s=>{if(!text.includes(s))throw new Error(`gateway missing ${s}`)};
+          for(const s of ["version:'10.0.0'",'EDGE_PAGE_SIZE=30','EDGE_MAX_OFFSET=5000','delete clean.mode','firewallPreserved:true','/marketplace','mode===\'map\'','voice']) need(s);
+          console.log('Secure Marketplace gateway OK');
+          NODE
+
+      - name: Validate Marketplace UI and voice contracts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const fs=require('fs');
           const assistant=fs.readFileSync('public/marketplace-assistant.js','utf8');
           const experience=fs.readFileSync('public/marketplace-experience-v8.js','utf8');
           const base=fs.readFileSync('public/marketplace.js','utf8');
           const voice=fs.readFileSync('public/listia-voice.js','utf8');
-          const worker=fs.readFileSync('listia-app-worker/index.js','utf8');
-          const sw=fs.readFileSync('public/sw.js','utf8');
-          const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          const need=(text,needle,label)=>{if(!text.includes(needle))throw new Error(`${label}: missing ${needle}`)};
-
-          for(const s of ["version:'10.0.0'",'EDGE_PAGE_SIZE=30','EDGE_MAX_OFFSET=5000','delete clean.mode','firewallPreserved:true',"/^\\/marketplace\\/?$/i",'mode===\'map\'']) need(gateway,s,'gateway');
+          const need=(text,s,label)=>{if(!text.includes(s))throw new Error(`${label} missing ${s}`)};
           need(assistant,'!window.LISTIA_MARKETPLACE_EXPERIENCE&&isMarketplaceIntent','legacy voice deferral');
-          for(const s of ['marketplaceV8SearchButton','marketplace-v8-voice-button','data-marketplace-view="list"','data-marketplace-view="map"','marketplaceV8NearButton','marketplaceV8Map']) need(experience,s,'experience UI');
-          if(!/(hasta|under|up to)/i.test(experience)) throw new Error('experience: max-budget natural-language parser missing');
+          for(const s of ['marketplaceV8SearchButton','marketplace-v8-voice-button','data-marketplace-view="list"','data-marketplace-view="map"','marketplaceV8NearButton','marketplaceV8Map']) need(experience,s,'experience');
+          if(!/(hasta|under|up to)/i.test(experience)) throw new Error('experience missing max-budget language parser');
           for(const s of ['registerAction','SpeechRecognition','speechSynthesis']) need(voice,s,'voice');
           for(const s of ['marketplace-interest-button','sendInterestClick']) need(base,s,'interest CTA');
-
-          const feedSet=worker.match(/const FEED_KEYS=new Set\(\[([^\]]+)\]\)/s);
-          if(!feedSet) throw new Error('worker: FEED_KEYS not found');
-          const feedKeys=feedSet[1];
-          for(const s of ["'p_limit'","'p_offset'","'p_q'","'p_operation'","'p_property_type'","'p_min_price'","'p_max_price'","'p_bedrooms'","'p_lat'","'p_lng'"]) need(feedKeys,s,'worker feed firewall');
-          if(feedKeys.includes("'mode'")) throw new Error('worker firewall must not accept client mode');
-          for(const s of ['TURNSTILE_VERIFY','MARKETPLACE_EDGE_PROOF','unexpected_parameter','export default']) need(worker,s,'worker security');
-
-          need(sw,'listia-pwa-v0.27.7-marketplace-v14','PWA cache');
-          for(const s of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72']) need(icon,s,'icon canonical state');
-          console.log('Marketplace v10 static contract OK');
+          console.log('Marketplace UI + voice + interest contracts OK');
           NODE
 
-      - name: Validate manifest icon consistency
+      - name: Validate Marketplace firewall contract
         shell: bash
         run: |
           set -Eeuo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const worker=fs.readFileSync('listia-app-worker/index.js','utf8');
+          const set=worker.match(/const FEED_KEYS=new Set\(\[([^\]]+)\]\)/s);
+          if(!set) throw new Error('FEED_KEYS missing');
+          const keys=set[1];
+          for(const s of ["'p_limit'","'p_offset'","'p_q'","'p_operation'","'p_property_type'","'p_min_price'","'p_max_price'","'p_bedrooms'","'p_lat'","'p_lng'"]) if(!keys.includes(s)) throw new Error(`feed firewall missing ${s}`);
+          if(keys.includes("'mode'")) throw new Error('client mode must stay outside firewall contract');
+          for(const s of ['TURNSTILE_VERIFY','MARKETPLACE_EDGE_PROOF','unexpected_parameter','export default']) if(!worker.includes(s)) throw new Error(`worker security missing ${s}`);
+          console.log('Marketplace firewall contract preserved');
+          NODE
+
+      - name: Validate PWA cache and icon state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const sw=fs.readFileSync('public/sw.js','utf8');
+          const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
+          if(!sw.includes('listia-pwa-v0.27.7-marketplace-v14')) throw new Error('PWA cache v14 missing');
+          for(const s of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
+          NODE
           python3 - <<'PY'
           import json,glob
           files=glob.glob('public/manifest*.webmanifest')
@@ -89,7 +114,7 @@ jobs:
               assert any('maskable' in str(i.get('purpose','')) for i in icons), f'{path}: no maskable icon'
               for icon in icons:
                   assert str(icon.get('src','')).endswith('?v=13'), f'{path}: non-v13 icon {icon}'
-          print('Manifest icon consistency OK')
+          print('PWA cache + icon v13 contract OK')
           PY
 
   live-production:
@@ -110,7 +135,6 @@ jobs:
             sleep 10
           done
           test "$deployed" = 1
-
           curl -fsS --connect-timeout 5 --max-time 20 "$base/" -o /tmp/root.html
           curl -fsS --connect-timeout 5 --max-time 20 "$base/marketplace?gate=$GITHUB_SHA" -o /tmp/marketplace.html
           curl -fsS --connect-timeout 5 --max-time 20 "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" -o /tmp/gateway.js
@@ -140,7 +164,6 @@ jobs:
           base='https://app.listiaapp.com'
           code=$(curl -sS -o /tmp/no-origin.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
           test "$code" = '403'
-
           code=$(curl -sS -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
           test "$code" = '200'
           python3 - <<'PY'
@@ -149,7 +172,6 @@ jobs:
           assert isinstance(rows,list)
           print(f'Protected feed OK rows={len(rows)}')
           PY
-
           code=$(curl -sS -o /tmp/interest.json -w '%{http_code}' -X POST "$base/api/interest" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{}')
           test "$code" = '401'
           echo 'Marketplace firewall and protected interest endpoint OK'
