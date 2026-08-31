@@ -1,5 +1,5 @@
 LISTIA OFFICIAL APPLICATION ICON
-version=12
+version=13
 source=public/listia-official-icon-v5.svg
 scope=application-icon-site-favicon-and-pwa-cache
 house_scale=0.72
@@ -7,5 +7,5 @@ house_fill=brand-purple-gradient-no-white
 background=full-bleed-brand-purple-gradient-no-white
 padding_rule=preserve-complete-house-add-safe-space-no-crop
 brand_logo=listia-site-isotipo-v4.svg
-pwa_release=0.27.6
-cache_version=v12
+pwa_release=0.27.7
+cache_version=v13
