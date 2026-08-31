@@ -100,7 +100,7 @@ jobs:
           const fs=require('fs');
           const sw=fs.readFileSync('public/sw.js','utf8');
           const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          if(!sw.includes('listia-pwa-v0.27.7-marketplace-v14')) throw new Error('PWA cache v14 missing');
+          if(!sw.includes('listia-pwa-v0.27.8-marketplace-v14')) throw new Error('PWA cache v14 missing');
           for(const s of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
           NODE
           python3 - <<'PY'
@@ -131,7 +131,7 @@ jobs:
           deployed=0
           for i in $(seq 1 45); do
             sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
-            if grep -Fq 'listia-pwa-v0.27.7-marketplace-v14' <<<"$sw"; then deployed=1; break; fi
+            if grep -Fq 'listia-pwa-v0.27.8-marketplace-v14' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
