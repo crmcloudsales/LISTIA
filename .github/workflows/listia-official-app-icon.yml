@@ -1,8 +1,19 @@
-name: LISTIA Official App Icon v11 Lock
+name: LISTIA Official App Icon v13 Lock
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'public/index.html'
+      - 'public/manifest*.webmanifest'
+      - 'public/listia-app-icon-*.png'
+      - 'public/listia-official-icon-v5.svg'
+      - 'public/listia-site-isotipo-v4.svg'
+      - 'public/APP_ICON_VERSION.txt'
+      - '.github/workflows/listia-official-app-icon.yml'
+  pull_request:
     paths:
       - 'public/config.js'
       - 'public/sw.js'
@@ -24,11 +35,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Validate brand-color LISTIA installed-app icon
+      - name: Validate canonical LISTIA installed-app icon
         shell: bash
         run: |
           set -Eeuo pipefail
           test -f public/listia-official-icon-v5.svg
+          grep -Fq '<rect width="1536" height="1536" fill="url(#g)"/>' public/listia-official-icon-v5.svg
           grep -Fq 'scale(.72)' public/listia-official-icon-v5.svg
           grep -Fq 'fill="url(#house)"' public/listia-official-icon-v5.svg
           if grep -Fq 'fill="#fff"' public/listia-official-icon-v5.svg; then
@@ -65,10 +77,11 @@ jobs:
           const config=fs.readFileSync('public/config.js','utf8');
           const sw=fs.readFileSync('public/sw.js','utf8');
           const app=config.match(/BOOTSTRAP_VERSION:"([^"]+)"/);
-          const cache=sw.match(/const CACHE="listia-pwa-v([^"]+)"/);
+          const cache=sw.match(/const CACHE="listia-pwa-v([^-]+)-marketplace-v(\d+)"/);
           if(!app||!cache) throw new Error('Missing LISTIA release metadata');
           if(app[1]!==cache[1]) throw new Error(`PWA release mismatch app=${app?.[1]} cache=${cache?.[1]}`);
-          if(app[1]!=='0.27.5') throw new Error(`Expected release 0.27.5, got ${app[1]}`);
+          if(app[1]!=='0.27.7') throw new Error(`Expected release 0.27.7, got ${app[1]}`);
+          if(cache[2]!=='14') throw new Error(`Expected marketplace cache v14, got ${cache[2]}`);
           const files=fs.readdirSync('public').filter(f=>/^manifest.*\.webmanifest$/.test(f));
           if(files.length<12) throw new Error(`Expected at least 12 manifests, found ${files.length}`);
           const versions=new Set();
@@ -80,11 +93,13 @@ jobs:
               const match=src.match(/\?v=(\d+)$/);
               if(!match) throw new Error(`${file}: unversioned icon ${src}`);
               versions.add(match[1]);
+              if(!['any','maskable'].some(p=>String(icon.purpose||'any').split(/\s+/).includes(p))) throw new Error(`${file}: invalid purpose ${icon.purpose}`);
             }
           }
-          if(versions.size!==1||![...versions].every(v=>v==='11')) throw new Error(`Expected icon v11 only, got ${[...versions]}`);
+          if(versions.size!==1||![...versions].every(v=>v==='13')) throw new Error(`Expected icon v13 only, got ${[...versions]}`);
           const marker=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          if(!marker.includes('house_scale=0.72')) throw new Error('Corrected house padding marker missing');
-          if(!marker.includes('house_fill=brand-purple-gradient-no-white')) throw new Error('Brand-color house marker missing');
-          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v11 house_scale=.72 no-white-house`);
+          for(const expected of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72','house_fill=brand-purple-gradient-no-white']){
+            if(!marker.includes(expected)) throw new Error(`Missing canonical marker ${expected}`);
+          }
+          console.log(`LISTIA app icon lock OK release=${app[1]} icon=v13 cache=v${cache[2]} full-bleed no-white house_scale=.72`);
           NODE
