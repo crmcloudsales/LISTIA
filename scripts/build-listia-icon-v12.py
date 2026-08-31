@@ -6,6 +6,8 @@ import cairosvg
 ROOT=Path(__file__).resolve().parents[1]
 PUB=ROOT/'public'
 SVG=PUB/'listia-official-icon-v5.svg'
+ICON_VERSION='15'
+DRIVE_SOURCE='1v-MeZmwDa6EBR-vo1T7d9m_hk3jTnceB'
 if not SVG.exists(): raise SystemExit('missing official icon SVG')
 
 def render(name,size):
@@ -15,15 +17,31 @@ for name,size in [
     ('listia-app-icon-32.png',32),('listia-app-icon-180.png',180),('listia-app-icon-192.png',192),('listia-app-icon-512.png',512),
     ('listia-app-icon-maskable-192.png',192),('listia-app-icon-maskable-512.png',512)]: render(name,size)
 
-# Rotate every manifest/icon reference to v12.
+# Rotate every manifest icon reference to v15 so Android requests fresh launcher assets.
 for p in PUB.glob('manifest*.webmanifest'):
-    s=p.read_text(encoding='utf-8');s=re.sub(r'(listia-app-icon[^"?]*\.png)\?v=\d+',r'\1?v=12',s);p.write_text(s,encoding='utf-8')
+    s=p.read_text(encoding='utf-8')
+    s=re.sub(r'(listia-app-icon[^"?]*\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
+    p.write_text(s,encoding='utf-8')
 
-idx=PUB/'index.html';s=idx.read_text(encoding='utf-8');s=re.sub(r'(manifest-[a-zA-Z0-9-]+\.webmanifest)\?v=\d+',r'\1?v=12',s);s=re.sub(r'(listia-app-icon-(?:180|32)\.png)\?v=\d+',r'\1?v=12',s);idx.write_text(s,encoding='utf-8')
+idx=PUB/'index.html'
+s=idx.read_text(encoding='utf-8')
+s=re.sub(r'(manifest(?:-[a-zA-Z0-9-]+)?\.webmanifest)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
+s=re.sub(r'(listia-app-icon-(?:180|32)\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
+idx.write_text(s,encoding='utf-8')
 
-sw=PUB/'sw.js';s=sw.read_text(encoding='utf-8');s=re.sub(r'const CACHE="listia-pwa-v[^"]+"','const CACHE="listia-pwa-v0.27.6-marketplace-v12"',s);s=s.replace('/marketplace.js?v=2','/marketplace.js?v=9').replace('/marketplace-experience-v8.css?v=1','/marketplace-experience-v8.css?v=2').replace('/marketplace-experience-v8.js?v=1','/marketplace-experience-v8.js?v=2');
-if '/marketplace-gateway-v9.js?v=1' not in s:s=s.replace('"/marketplace-assistant.js?v=2",','"/marketplace-assistant.js?v=2","/marketplace-gateway-v9.js?v=1",')
-s=re.sub(r'\?v=11', '?v=12', s);sw.write_text(s,encoding='utf-8')
+config=PUB/'config.js'
+s=config.read_text(encoding='utf-8')
+s=re.sub(r"const v='\d+'",f"const v='{ICON_VERSION}'",s,count=1)
+config.write_text(s,encoding='utf-8')
 
-(PUB/'APP_ICON_VERSION.txt').write_text('''LISTIA OFFICIAL APPLICATION ICON\nversion=12\nsource=public/listia-official-icon-v5.svg\nscope=application-icon-site-favicon-and-pwa-cache\nhouse_scale=0.72\nhouse_fill=brand-purple-gradient-no-white\nbackground=full-bleed-brand-purple-gradient-no-white\npadding_rule=preserve-complete-house-add-safe-space-no-crop\nbrand_logo=listia-site-isotipo-v4.svg\npwa_release=0.27.6\ncache_version=v12\n''',encoding='utf-8')
-print('LISTIA icon v12 assets generated from official purple SVG')
+sw=PUB/'sw.js'
+s=sw.read_text(encoding='utf-8')
+s=re.sub(r'(listia-app-icon[^"?]*\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
+s=re.sub(r'(const CACHE="listia-pwa-v[^\"]+-marketplace-v)\d+(\")',rf'\g<1>{ICON_VERSION}\2',s)
+sw.write_text(s,encoding='utf-8')
+
+release='unknown'
+m=re.search(r'BOOTSTRAP_VERSION:"([^"]+)"',config.read_text(encoding='utf-8'))
+if m: release=m.group(1)
+(PUB/'APP_ICON_VERSION.txt').write_text(f'''LISTIA OFFICIAL APPLICATION ICON\nversion={ICON_VERSION}\nicon_version={ICON_VERSION}\nsource=Google Drive file {DRIVE_SOURCE}\nscope=application-icon-launcher-favicon-apple-touch-and-pwa\nrelease={release}\npwa_release={release}\nartwork=purple rounded square with white house\nwhite_house=required\nouter_white_background=removed\nhouse_scale=0.90\nhouse_vertical_adjustment=-3px_source\nextra_wheel_or_pointer=forbidden\ninternal_isotipo=listia-site-isotipo-v4.svg\ninternal_isotipo_change=none\ncache_version=v{ICON_VERSION}\n''',encoding='utf-8')
+print(f'LISTIA icon v{ICON_VERSION} generated: full-bleed purple, centered white house, no outer white tile')
