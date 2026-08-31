@@ -41,9 +41,9 @@ jobs:
           fi
           [[ -n "$ruleset" ]] || exit 3
 
-          # Verified crawlers/search bots are intentionally excluded. Customer-facing API
-          # requests from normal clients are burst-limited without challenging ordinary browsing.
-          expression='(not cf.client.bot and ((http.host eq "brain.listiaapp.com" and http.request.method eq "POST") or (http.request.uri.path eq "/api/interest" and http.request.method eq "POST") or (http.request.uri.path eq "/api/marketplace/feed" and http.request.method eq "POST")))'
+          # Search-engine crawlers verified by Cloudflare stay excluded. Browser/API bursts are
+          # limited without challenging or slowing normal human browsing.
+          expression='(not cf.client.bot and ((http.host eq "brain.listiaapp.com" and http.request.method eq "POST") or (http.request.uri.path eq "/api/interest" and http.request.method eq "POST") or (http.request.uri.path eq "/api/marketplace/feed" and http.request.method eq "POST") or (http.request.uri.path eq "/marketplace/api/feed" and http.request.method eq "POST")))'
           payload=$(jq -nc --arg d "$RULE_DESC" --arg e "$expression" '{description:$d,expression:$e,action:"block",ratelimit:{characteristics:["cf.colo.id","ip.src"],period:10,requests_per_period:10,mitigation_timeout:10},enabled:true}')
 
           current=$(mktemp)
@@ -58,8 +58,8 @@ jobs:
           [[ "$wcode" =~ ^20 ]] && jq -e '.success == true' "$out" >/dev/null || { jq '{success,errors}' "$out"; exit 4; }
 
           echo '### LISTIA sensitive endpoint rate limiting' >> "$GITHUB_STEP_SUMMARY"
-          echo '- AI gateway + Marketplace feed + lead endpoint covered' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Verified bots excluded from throttling' >> "$GITHUB_STEP_SUMMARY"
+          echo '- AI gateway + private/public Marketplace feed proxies + lead endpoint covered' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Verified search crawlers excluded from throttling' >> "$GITHUB_STEP_SUMMARY"
           echo '- Threshold: 10 requests / 10 seconds / IP+colo' >> "$GITHUB_STEP_SUMMARY"
           echo '- Mitigation: 10 seconds' >> "$GITHUB_STEP_SUMMARY"
 
@@ -72,8 +72,8 @@ jobs:
           zone=$(jq -r '.result[0].id // empty' "$z")
           r=$(mktemp)
           curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${zone}/rulesets/phases/http_ratelimit/entrypoint" > "$r"
-          jq -e --arg d "$RULE_DESC" '.result.rules[]? | select(.description==$d and .enabled==true and .ratelimit.requests_per_period==10 and .ratelimit.period==10 and (.expression|contains("not cf.client.bot")) and (.expression|contains("/api/interest")) and (.expression|contains("/api/marketplace/feed")))' "$r" >/dev/null
-          for url in 'https://app.listiaapp.com/' 'https://listiaapp.com/'; do
+          jq -e --arg d "$RULE_DESC" '.result.rules[]? | select(.description==$d and .enabled==true and .ratelimit.requests_per_period==10 and .ratelimit.period==10 and (.expression|contains("not cf.client.bot")) and (.expression|contains("/api/interest")) and (.expression|contains("/api/marketplace/feed")) and (.expression|contains("/marketplace/api/feed")))' "$r" >/dev/null
+          for url in 'https://app.listiaapp.com/' 'https://listiaapp.com/' 'https://listiaapp.com/marketplace'; do
             code=$(curl -sS -L -o /tmp/normal -w '%{http_code}' "$url")
             [[ "$code" == 200 ]] || exit 5
           done
