@@ -9,7 +9,26 @@
     }
   }
 
+  function ensureMarketplaceMapAssets() {
+    if (!document.getElementById('listiaQrooMapStyles')) {
+      const link = document.createElement('link');
+      link.id = 'listiaQrooMapStyles';
+      link.rel = 'stylesheet';
+      link.href = '/marketplace-qroo-map.css?v=2';
+      document.head.append(link);
+    }
+    if (!document.getElementById('listiaQrooMapScript')) {
+      const script = document.createElement('script');
+      script.id = 'listiaQrooMapScript';
+      script.src = '/marketplace-qroo-map.js?v=2';
+      script.async = false;
+      document.head.append(script);
+    }
+  }
+
   ready(() => {
+    ensureMarketplaceMapAssets();
+
     const businessForm = document.getElementById('businessForm');
     if (businessForm) {
       businessForm.addEventListener('submit', async event => {
@@ -37,8 +56,6 @@
           const user = await getCurrentUser(session);
           const existing = await getUserOrganization(session, user.id);
           if (existing) {
-            // Never jump directly to Office just because the organization exists.
-            // Resume from the persisted onboarding step instead.
             await routeAuthenticated(session);
             return;
           }
@@ -99,8 +116,6 @@
               body: { organization_id: org.id, action: 'complete' }
             });
           } else {
-            // Google is optional. Completing Discovery without a Google connection
-            // must advance onboarding instead of calling a Google-only function.
             await updateOnboardingState(session, org.id, {
               current_step: 5,
               completed_steps: [1, 2, 3, 4],
