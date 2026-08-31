@@ -1,11 +1,17 @@
 LISTIA OFFICIAL APPLICATION ICON
 version=13
+icon_version=13
 source=public/listia-official-icon-v5.svg
+icon_source=listia-official-icon-v5.svg
 scope=application-icon-site-favicon-and-pwa-cache
+release=0.27.7
+pwa_release=0.27.7
 house_scale=0.72
 house_fill=brand-purple-gradient-no-white
 background=full-bleed-brand-purple-gradient-no-white
+background_mode=full_bleed_gradient
+white_background=forbidden
 padding_rule=preserve-complete-house-add-safe-space-no-crop
 brand_logo=listia-site-isotipo-v4.svg
-pwa_release=0.27.7
 cache_version=v13
+runtime_cache=marketplace-v14
