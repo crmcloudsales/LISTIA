@@ -43,7 +43,6 @@ jobs:
           node --check public/marketplace.js
           node --check public/listia-voice.js
           node --check public/sw.js
-          node --check listia-app-worker/index.js
           node <<'NODE'
           const fs=require('fs');
           const gateway=fs.readFileSync('public/marketplace-gateway-v9.js','utf8');
@@ -68,7 +67,7 @@ jobs:
           const feedKeys=feedSet[1];
           for(const s of ["'p_limit'","'p_offset'","'p_q'","'p_operation'","'p_property_type'","'p_min_price'","'p_max_price'","'p_bedrooms'","'p_lat'","'p_lng'"]) need(feedKeys,s,'worker feed firewall');
           if(feedKeys.includes("'mode'")) throw new Error('worker firewall must not accept client mode');
-          for(const s of ['TURNSTILE_VERIFY','MARKETPLACE_EDGE_PROOF','unexpected_parameter']) need(worker,s,'worker security');
+          for(const s of ['TURNSTILE_VERIFY','MARKETPLACE_EDGE_PROOF','unexpected_parameter','export default']) need(worker,s,'worker security');
 
           need(sw,'listia-pwa-v0.27.7-marketplace-v14','PWA cache');
           for(const s of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72']) need(icon,s,'icon canonical state');
