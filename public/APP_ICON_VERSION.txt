@@ -1,13 +1,16 @@
 LISTIA OFFICIAL APPLICATION ICON
-version=14
-icon_version=14
+version=15
+icon_version=15
 source=Google Drive file 1v-MeZmwDa6EBR-vo1T7d9m_hk3jTnceB
 scope=application-icon-launcher-favicon-apple-touch-and-pwa
-release=0.27.10
-pwa_release=0.27.10
+release=0.27.8
+pwa_release=0.27.8
 artwork=purple rounded square with white house
 white_house=required
 outer_white_background=removed
+house_scale=0.90
+house_vertical_adjustment=-3px_source
+extra_wheel_or_pointer=forbidden
 internal_isotipo=listia-site-isotipo-v4.svg
 internal_isotipo_change=none
-cache_version=v14
+cache_version=v15
