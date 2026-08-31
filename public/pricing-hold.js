@@ -16,7 +16,11 @@ function neutralize(){
  }
  return true;
 }
-let tries=0;const boot=()=>{if(!neutralize()&&tries++<60)setTimeout(boot,200)};
+let tries=0;
+const boot=()=>{
+ if(neutralize())return;
+ if(tries++<60)setTimeout(boot,200);
+};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-new MutationObserver(()=>neutralize()).observe(document.documentElement,{subtree:true,childList:true});
+window.addEventListener('listia:languagechange',()=>setTimeout(neutralize,0));
 })();
