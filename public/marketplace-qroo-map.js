@@ -21,11 +21,11 @@ async function request(params){
 const getClusters=()=>request({mode:'clusters',limit:'100'});
 const getMicrozones=(place='')=>request({mode:'microzones',limit:'24',operation:intelligenceState.operation,currency:intelligenceState.currency,...(place?{place}:{})});
 function radius(n,max){const v=Math.max(1,Number(n)||1),m=Math.max(1,max||1);return 5+15*Math.sqrt(v/m)}
-function searchPlace(place){
- selectedPlace=place||'';
- window.dispatchEvent(new CustomEvent('listia:qroo-place-selected',{detail:{place:selectedPlace}}));
+function searchMarket(term,statsPlace=term){
+ selectedPlace=statsPlace||'';
+ window.dispatchEvent(new CustomEvent('listia:qroo-place-selected',{detail:{place:selectedPlace,term:term||''}}));
  const input=document.getElementById('marketplaceSearch');
- if(input){input.value=place;input.dispatchEvent(new Event('input',{bubbles:true}));return}
+ if(input){input.value=term||'';input.dispatchEvent(new Event('input',{bubbles:true}));return}
  if(window.LISTIA_MARKETPLACE?.reload)window.LISTIA_MARKETPLACE.reload();
 }
 function confidenceLabel(v){
@@ -43,7 +43,7 @@ function renderIntelligence(root,rows){
   const card=document.createElement('button');card.type='button';card.className='qroo-intel-card';
   const ppm=Number(x.median_price_per_m2);const med=Number(x.median_price);
   card.innerHTML=`<span class="qroo-intel-place">${esc(x.microzone||x.canonical_place)}</span><small>${esc(x.canonical_place||'')} · ${operationLabel(x.operation_type)} · ${esc(x.currency||'')}</small><div class="qroo-intel-metrics"><span><b>${fmt(x.listings)}</b>${isEs()?' anuncios':' listings'}</span><span><b>${fmt(x.sources)}</b>${isEs()?' fuentes':' sources'}</span><span><b>${med>0?money(med,x.currency):'—'}</b>${isEs()?' mediana':' median'}</span><span><b>${ppm>0?`${money(ppm,x.currency)}/m²`:'—'}</b>${isEs()?' mediana/m²':' median/m²'}</span></div><em class="confidence-${esc(x.metric_confidence)}">${isEs()?'Confianza ':'Confidence '}${confidenceLabel(x.metric_confidence)} · n=${fmt(x.price_m2_samples)}</em>`;
-  card.addEventListener('click',()=>searchPlace(x.microzone||x.canonical_place));grid.append(card);
+  card.addEventListener('click',()=>searchMarket(x.microzone||x.canonical_place,x.canonical_place));grid.append(card);
  });
  box.querySelectorAll('[data-op]').forEach(b=>b.addEventListener('click',async()=>{intelligenceState.operation=b.dataset.op;await refreshIntelligence(root)}));
  box.querySelectorAll('[data-currency]').forEach(b=>b.addEventListener('click',async()=>{intelligenceState.currency=b.dataset.currency;await refreshIntelligence(root)}));
@@ -62,7 +62,7 @@ function draw(root,rows){
   const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('class','qroo-map-dot');c.setAttribute('cx',String(p.x));c.setAttribute('cy',String(p.y));c.setAttribute('r',String(r));
   const count=document.createElementNS('http://www.w3.org/2000/svg','text');count.setAttribute('class','qroo-map-count');count.setAttribute('x',String(p.x));count.setAttribute('y',String(p.y));count.textContent=Number(x.listings)>=1000?`${(Number(x.listings)/1000).toFixed(1)}k`:String(x.listings);
   const label=document.createElementNS('http://www.w3.org/2000/svg','text');label.setAttribute('class','qroo-map-label');label.setAttribute('x',String(Math.min(92,p.x+r+1.5)));label.setAttribute('y',String(Math.max(5,p.y-1)));label.textContent=x.canonical_place;
-  const activate=()=>searchPlace(x.canonical_place);g.addEventListener('click',activate);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate()}});g.append(c,count,label);svg.append(g);
+  const activate=()=>searchMarket(x.canonical_place,x.canonical_place);g.addEventListener('click',activate);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate()}});g.append(c,count,label);svg.append(g);
   const b=document.createElement('button');b.type='button';b.className='qroo-place';b.innerHTML=`<strong>${esc(x.canonical_place)}</strong><span>${esc(x.municipality||'')}</span><b>${fmt(x.listings)}</b>`;b.addEventListener('click',activate);side.append(b);
  });
  refreshIntelligence(root);
