@@ -1,0 +1,46 @@
+/* LISTIA Marketplace Experience v8 — search + voice + map. */
+#screen-marketplace .marketplace-panel{max-width:1180px}
+#screen-marketplace .marketplace-head{margin-bottom:14px}
+#screen-marketplace .marketplace-head-copy h1{letter-spacing:-.035em}
+.marketplace-v8-toolbar{display:grid;gap:12px;margin:12px 0 14px}
+.marketplace-v8-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:stretch}
+.marketplace-v8-search-row #marketplaceSearch{min-height:52px;border-radius:16px;padding:0 16px;font-size:16px}
+.marketplace-v8-search-button{min-width:118px;min-height:52px;border:0;border-radius:16px;padding:0 22px;font:800 16px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:linear-gradient(135deg,#7334ee,#9a39f7);box-shadow:0 10px 28px rgba(117,50,236,.24);cursor:pointer}
+.marketplace-v8-search-button:active{transform:translateY(1px)}
+.marketplace-v8-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.marketplace-v8-view-toggle{display:inline-flex;padding:4px;border-radius:14px;background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.09)}
+.marketplace-v8-view-toggle button{border:0;background:transparent;color:inherit;min-height:38px;padding:0 14px;border-radius:10px;font-weight:800;cursor:pointer;opacity:.68}
+.marketplace-v8-view-toggle button.active{background:rgba(255,255,255,.13);opacity:1;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.marketplace-v8-map-meta{font-size:13px;opacity:.72}
+.marketplace-v8-voice{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid rgba(173,112,255,.25);border-radius:18px;background:linear-gradient(135deg,rgba(115,52,238,.13),rgba(10,11,17,.7));box-shadow:inset 0 1px rgba(255,255,255,.04)}
+.marketplace-v8-voice-orb{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#c78cff,#8c3ef1 58%,#5a1fae);box-shadow:0 0 0 7px rgba(139,62,241,.09);font-size:19px;color:#fff}
+.marketplace-v8-voice-copy{display:grid;gap:3px;min-width:0}
+.marketplace-v8-voice-copy strong{font-size:14px}
+.marketplace-v8-voice-copy span{font-size:12px;opacity:.72;white-space:normal}
+.marketplace-v8-voice-button{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.08);color:inherit;border-radius:13px;min-height:42px;padding:0 14px;font-weight:800;cursor:pointer}
+#screen-marketplace .marketplace-filters{margin-top:4px}
+#screen-marketplace .marketplace-assistant-card{display:none!important}
+.marketplace-v8-map-shell{position:relative;display:none;overflow:hidden;height:min(66vh,620px);min-height:390px;border-radius:22px;border:1px solid rgba(255,255,255,.1);background:#171923;margin-top:12px;isolation:isolate;touch-action:none}
+.marketplace-map-mode .marketplace-v8-map-shell{display:block}
+.marketplace-map-mode #marketplaceGrid,.marketplace-map-mode #marketplaceLoadMore{display:none!important}
+.marketplace-v8-map-tiles,.marketplace-v8-map-markers{position:absolute;inset:0;overflow:hidden}
+.marketplace-v8-map-tiles img{position:absolute;width:256px;height:256px;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;background:#e9e7df}
+.marketplace-v8-map-markers{pointer-events:none}
+.marketplace-v8-marker{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;border:0;cursor:pointer;display:grid;place-items:center;min-width:36px;height:36px;padding:0 9px;border-radius:18px;background:#7c3aed;color:#fff;font:800 12px/1 system-ui;box-shadow:0 5px 16px rgba(37,20,70,.32),0 0 0 2px rgba(255,255,255,.85);white-space:nowrap}
+.marketplace-v8-marker.cluster{background:#12131a;min-width:42px}
+.marketplace-v8-marker.sale:before,.marketplace-v8-marker.rent:before{content:"";width:7px;height:7px;border-radius:50%;background:#fff;margin-right:5px;display:inline-block;vertical-align:1px}
+.marketplace-v8-map-controls{position:absolute;top:12px;right:12px;z-index:5;display:grid;gap:6px}
+.marketplace-v8-map-controls button{width:42px;height:42px;border:1px solid rgba(0,0,0,.1);border-radius:13px;background:rgba(255,255,255,.95);color:#17121f;font-size:22px;font-weight:800;box-shadow:0 3px 12px rgba(0,0,0,.16);cursor:pointer}
+.marketplace-v8-map-attribution{position:absolute;right:8px;bottom:7px;z-index:3;background:rgba(255,255,255,.85);color:#222;padding:3px 6px;border-radius:6px;font-size:10px;pointer-events:none}
+.marketplace-v8-map-preview{position:absolute;left:12px;right:12px;bottom:13px;z-index:6;display:none;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;border-radius:16px;background:rgba(18,19,26,.95);color:#fff;box-shadow:0 8px 30px rgba(0,0,0,.32);backdrop-filter:blur(12px)}
+.marketplace-v8-map-preview.show{display:grid}
+.marketplace-v8-map-preview img{width:58px;height:50px;border-radius:11px;object-fit:cover;background:#292b36}
+.marketplace-v8-map-preview-copy{display:grid;gap:3px;min-width:0}
+.marketplace-v8-map-preview-copy strong,.marketplace-v8-map-preview-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.marketplace-v8-map-preview-copy strong{font-size:13px}
+.marketplace-v8-map-preview-copy span{font-size:12px;opacity:.78}
+.marketplace-v8-map-preview button{border:0;border-radius:11px;min-height:38px;padding:0 12px;background:#8d42f3;color:#fff;font-weight:800;cursor:pointer}
+.marketplace-v8-card-highlight{outline:2px solid rgba(151,72,255,.8);outline-offset:3px;animation:listiaMapHighlight 1.4s ease}
+@keyframes listiaMapHighlight{0%,100%{box-shadow:inherit}45%{box-shadow:0 0 0 8px rgba(148,69,255,.16)}}
+@media(min-width:900px){.marketplace-map-mode .marketplace-v8-map-shell{height:620px}.marketplace-v8-toolbar{grid-template-columns:minmax(0,1fr);}.marketplace-v8-voice{padding:14px 16px}}
+@media(max-width:640px){#screen-marketplace .marketplace-panel{padding-left:14px;padding-right:14px}.marketplace-v8-search-row{grid-template-columns:minmax(0,1fr) 96px}.marketplace-v8-search-button{min-width:96px;padding:0 14px}.marketplace-v8-voice{grid-template-columns:42px minmax(0,1fr)}.marketplace-v8-voice-button{grid-column:1/-1;width:100%}.marketplace-v8-actions{align-items:flex-start}.marketplace-v8-map-shell{height:58vh;min-height:380px;border-radius:18px}.marketplace-v8-map-preview{grid-template-columns:50px minmax(0,1fr) auto}.marketplace-v8-map-preview img{width:50px;height:46px}}
