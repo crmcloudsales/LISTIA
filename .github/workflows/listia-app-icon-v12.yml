@@ -1,0 +1,56 @@
+name: LISTIA App Icon v12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build-listia-icon-v12.py'
+      - '.github/workflows/listia-app-icon-v12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-app-icon-v12
+  cancel-in-progress: true
+
+jobs:
+  build-icon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate full-bleed purple PWA icons
+        run: |
+          python -m pip install --disable-pip-version-check cairosvg
+          python scripts/build-listia-icon-v12.py
+      - name: Verify no white/transparent corner background and icon dimensions
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          for name,size in [('listia-app-icon-32.png',32),('listia-app-icon-180.png',180),('listia-app-icon-192.png',192),('listia-app-icon-512.png',512),('listia-app-icon-maskable-192.png',192),('listia-app-icon-maskable-512.png',512)]:
+              im=Image.open(Path('public')/name).convert('RGBA')
+              assert im.size==(size,size),(name,im.size)
+              for xy in [(0,0),(size-1,0),(0,size-1),(size-1,size-1),(size//2,size//2)]:
+                  r,g,b,a=im.getpixel(xy)
+                  assert a==255,(name,xy,'transparent')
+                  assert not (r>245 and g>245 and b>245),(name,xy,'white')
+          print('Icon v12 full-bleed verification passed')
+          PY
+          grep -Fq 'cache_version=v12' public/APP_ICON_VERSION.txt
+          grep -Fq 'listia-pwa-v0.27.6-marketplace-v12' public/sw.js
+      - name: Commit generated icon release
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png public/manifest*.webmanifest public/index.html public/sw.js public/APP_ICON_VERSION.txt
+          git commit -m 'Release LISTIA application icon v12 without white background' || exit 0
+          git push origin main
