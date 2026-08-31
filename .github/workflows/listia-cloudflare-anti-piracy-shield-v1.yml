@@ -56,10 +56,21 @@ jobs:
           echo '- Reconnaissance signatures expanded' >> "$GITHUB_STEP_SUMMARY"
           echo '- Marketplace API scraper fingerprints expanded without blocking verified search crawlers' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify WAF blocks and normal traffic
+      - name: Verify WAF persistence and normal traffic
         shell: bash
         run: |
           set -Eeuo pipefail
+          z=$(mktemp)
+          curl -fsS --get -H "Authorization: Bearer ${CF_TOKEN}" --data-urlencode "name=${ZONE_NAME}" --data-urlencode "account.id=${CF_ACCOUNT_ID}" 'https://api.cloudflare.com/client/v4/zones' > "$z"
+          ZONE_ID=$(jq -r '.result[0].id // empty' "$z")
+          persisted=$(mktemp)
+          curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_custom/entrypoint" > "$persisted"
+          jq -e '.result.rules[]? | select(.description=="LISTIA P3 5/5 - Offensive scanner user agents" and .enabled==true and (.expression|contains("ffuf")) and (.expression|contains("python-requests")) and (.expression|contains("/marketplace/api/feed")))' "$persisted" >/dev/null
+          echo '- Cloudflare ruleset persistence: verified' >> "$GITHUB_STEP_SUMMARY"
+
+          # Give edge propagation a short bounded window. The authoritative ruleset
+          # verification above is the source of truth; external smoke is additive.
+          sleep 12
           normal=$(curl -sS -L -o /tmp/normal -w '%{http_code}' https://app.listiaapp.com/)
           [[ "$normal" == 200 ]] || exit 10
           for spec in \
@@ -69,7 +80,7 @@ jobs:
             'https://listiaapp.com/marketplace/api/feed|python-requests/2.32'; do
             url=${spec%%|*}; ua=${spec##*|}
             code=$(curl -sS -A "$ua" -o /tmp/probe -w '%{http_code}' "$url" || true)
-            [[ "$code" == 403 ]] || { echo "WAF did not block $url with $ua: $code"; exit 11; }
+            [[ "$code" == 403 ]] || { echo "WAF did not block $url with $ua after propagation window: $code"; exit 11; }
           done
           for url in 'https://listiaapp.com/' 'https://listiaapp.com/marketplace' 'https://app.listiaapp.com/'; do
             code=$(curl -sS -L -o /tmp/normal -w '%{http_code}' "$url")
