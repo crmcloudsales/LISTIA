@@ -1,0 +1,60 @@
+name: LISTIA Real Estate Search Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/listia-real-estate-search-import.yml"
+      - ".github/workflows/listia-real-estate-search-gate.yml"
+      - "scripts/prepare-real-estate-search-import.py"
+      - "scripts/push-marketplace-search-private-ingest.py"
+      - "supabase/functions/marketplace-search-private-ingest/**"
+      - "supabase/migrations/20260831183004_add_marketplace_search_ingestion_and_observed_market_intelligence.sql"
+      - "docs/LISTIA_REAL_ESTATE_SEARCH_INGESTION.md"
+      - "ops/real-estate-search-import.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Compile Python workflow scripts
+        run: |
+          python -m py_compile scripts/prepare-real-estate-search-import.py
+          python -m py_compile scripts/push-marketplace-search-private-ingest.py
+      - name: Parse import workflow YAML
+        shell: python
+        run: |
+          import pathlib, yaml
+          p=pathlib.Path('.github/workflows/listia-real-estate-search-import.yml')
+          data=yaml.safe_load(p.read_text(encoding='utf-8'))
+          assert data.get('name') == 'LISTIA Real Estate Search Import'
+          # YAML 1.1 may decode the key `on` as True; support both representations.
+          triggers=data.get('on', data.get(True))
+          assert isinstance(triggers, dict) and 'workflow_dispatch' in triggers
+          perms=data.get('permissions') or {}
+          assert perms.get('id-token') == 'write'
+          print('workflow_yaml_ok')
+      - name: Verify OIDC boundary and fail-closed publication policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'const AUDIENCE = "listia-marketplace-search-ingest"' supabase/functions/marketplace-search-private-ingest/index.ts
+          grep -F 'const REPOSITORY = "crmcloudsales/LISTIA"' supabase/functions/marketplace-search-private-ingest/index.ts
+          grep -F 'listia-real-estate-search-import.yml@refs/heads/main' supabase/functions/marketplace-search-private-ingest/index.ts
+          grep -F "v_rights_basis in ('authorized_feed','licensed_partner')" supabase/migrations/20260831183004_add_marketplace_search_ingestion_and_observed_market_intelligence.sql
+          grep -F "grant execute on function public.ingest_marketplace_search_batch(text,text,jsonb) to service_role" supabase/migrations/20260831183004_add_marketplace_search_ingestion_and_observed_market_intelligence.sql
+          grep -F "revoke all on private.marketplace_listing_observations from public, anon, authenticated" supabase/migrations/20260831183004_add_marketplace_search_ingestion_and_observed_market_intelligence.sql
+          grep -F "listia-market-observed-daily" supabase/migrations/20260831183004_add_marketplace_search_ingestion_and_observed_market_intelligence.sql
+          grep -F 'GOOGLE_WRAPPERS = {"google.com", "www.google.com", "share.google"}' scripts/prepare-real-estate-search-import.py
+          echo 'oidc_and_data_governance_ok'
