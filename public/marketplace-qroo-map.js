@@ -20,6 +20,7 @@ async function request(params){
 }
 const getClusters=()=>request({mode:'clusters',limit:'100'});
 const getMicrozones=(place='')=>request({mode:'microzones',limit:'24',operation:intelligenceState.operation,currency:intelligenceState.currency,...(place?{place}:{})});
+const getTrends=(place='')=>place?request({mode:'trends',limit:'180',operation:intelligenceState.operation,currency:intelligenceState.currency,place}):Promise.resolve([]);
 function radius(n,max){const v=Math.max(1,Number(n)||1),m=Math.max(1,max||1);return 5+15*Math.sqrt(v/m)}
 function searchMarket(term,statsPlace=term){
  selectedPlace=statsPlace||'';
@@ -34,10 +35,23 @@ function confidenceLabel(v){
  return isEs()?'Indicativa':'Indicative';
 }
 function operationLabel(v){return v==='rent'?(isEs()?'Renta':'Rent'):(isEs()?'Venta':'Sale')}
-function renderIntelligence(root,rows){
+function pct(a,b){if(!Number.isFinite(a)||!Number.isFinite(b)||b===0)return null;return ((a-b)/b)*100}
+function trendText(v){if(v===null)return '—';const sign=v>0?'+':'';return `${sign}${v.toFixed(1)}%`}
+function renderTrend(box,rows){
+ const trend=box.querySelector('.qroo-trend-status');if(!trend)return;
+ if(!selectedPlace){trend.innerHTML=`<strong>${isEs()?'Seguimiento histórico activo':'Historical tracking active'}</strong><span>${isEs()?'Baseline iniciado el 31 ago 2026. Selecciona una ciudad para ver su evolución.':'Baseline started Aug 31, 2026. Select a city to see its evolution.'}</span>`;return}
+ if(!rows.length){trend.innerHTML=`<strong>${esc(selectedPlace)}</strong><span>${isEs()?'Aún no hay snapshot histórico para estos filtros.':'No historical snapshot is available for these filters yet.'}</span>`;return}
+ const first=rows[0],last=rows[rows.length-1];
+ if(rows.length<2){trend.innerHTML=`<strong>${esc(selectedPlace)} · ${operationLabel(last.operation_type)} · ${esc(last.currency)}</strong><span>${isEs()?'Seguimiento iniciado':'Tracking started'} ${esc(last.snapshot_date)} · ${fmt(last.inventory_count)} ${isEs()?'propiedades':'properties'} · ${money(last.median_price_per_m2,last.currency)}/m²</span>`;return}
+ const inv=pct(Number(last.inventory_count),Number(first.inventory_count));
+ const ppm=pct(Number(last.median_price_per_m2),Number(first.median_price_per_m2));
+ trend.innerHTML=`<strong>${esc(selectedPlace)} · ${operationLabel(last.operation_type)} · ${esc(last.currency)}</strong><span>${esc(first.snapshot_date)} → ${esc(last.snapshot_date)} · ${isEs()?'Inventario':'Inventory'} ${trendText(inv)} · ${isEs()?'Precio/m²':'Price/m²'} ${trendText(ppm)}</span>`;
+}
+function renderIntelligence(root,rows,trends=[]){
  const box=root.querySelector('.qroo-intelligence');if(!box)return;
  const placeTitle=selectedPlace?` · ${esc(selectedPlace)}`:'';
- box.innerHTML=`<div class="qroo-intel-head"><div><div class="qroo-map-kicker">LISTIA MARKET INTELLIGENCE</div><h3>${isEs()?'Microzonas observadas':'Observed microzones'}${placeTitle}</h3><p>${isEs()?'Las métricas separan venta/renta y moneda. Son observaciones del inventario disponible, no avalúos.':'Metrics separate sale/rent and currency. They are observed listing-market data, not appraisals.'}</p></div><div class="qroo-intel-controls" role="group" aria-label="Market intelligence filters"><button type="button" data-op="sale" class="${intelligenceState.operation==='sale'?'active':''}">${isEs()?'Venta':'Sale'}</button><button type="button" data-op="rent" class="${intelligenceState.operation==='rent'?'active':''}">${isEs()?'Renta':'Rent'}</button><button type="button" data-currency="MXN" class="${intelligenceState.currency==='MXN'?'active':''}">MXN</button><button type="button" data-currency="USD" class="${intelligenceState.currency==='USD'?'active':''}">USD</button></div></div><div class="qroo-intel-grid"></div>`;
+ box.innerHTML=`<div class="qroo-intel-head"><div><div class="qroo-map-kicker">LISTIA MARKET INTELLIGENCE</div><h3>${isEs()?'Microzonas observadas':'Observed microzones'}${placeTitle}</h3><p>${isEs()?'Las métricas separan venta/renta y moneda. Son observaciones del inventario disponible, no avalúos.':'Metrics separate sale/rent and currency. They are observed listing-market data, not appraisals.'}</p></div><div class="qroo-intel-controls" role="group" aria-label="Market intelligence filters"><button type="button" data-op="sale" class="${intelligenceState.operation==='sale'?'active':''}">${isEs()?'Venta':'Sale'}</button><button type="button" data-op="rent" class="${intelligenceState.operation==='rent'?'active':''}">${isEs()?'Renta':'Rent'}</button><button type="button" data-currency="MXN" class="${intelligenceState.currency==='MXN'?'active':''}">MXN</button><button type="button" data-currency="USD" class="${intelligenceState.currency==='USD'?'active':''}">USD</button></div></div><div class="qroo-trend-status"></div><div class="qroo-intel-grid"></div>`;
+ renderTrend(box,trends);
  const grid=box.querySelector('.qroo-intel-grid');
  if(!rows.length){grid.innerHTML=`<div class="qroo-intel-empty">${isEs()?'No hay una muestra suficiente para estos filtros.':'There is not enough observed inventory for these filters.'}</div>`}else rows.slice(0,12).forEach(x=>{
   const card=document.createElement('button');card.type='button';card.className='qroo-intel-card';
@@ -50,7 +64,7 @@ function renderIntelligence(root,rows){
 }
 async function refreshIntelligence(root){
  const box=root.querySelector('.qroo-intelligence');if(box)box.innerHTML=`<div class="qroo-map-loading">${isEs()?'Actualizando inteligencia de mercado…':'Updating market intelligence…'}</div>`;
- try{renderIntelligence(root,await getMicrozones(selectedPlace))}catch(e){console.error('LISTIA QROO intelligence',e);if(box)box.innerHTML=`<div class="qroo-map-error">${isEs()?'La inteligencia por microzona no está disponible temporalmente.':'Microzone intelligence is temporarily unavailable.'}</div>`}
+ try{const [microzones,trends]=await Promise.all([getMicrozones(selectedPlace),getTrends(selectedPlace)]);renderIntelligence(root,microzones,trends)}catch(e){console.error('LISTIA QROO intelligence',e);if(box)box.innerHTML=`<div class="qroo-map-error">${isEs()?'La inteligencia por microzona no está disponible temporalmente.':'Microzone intelligence is temporarily unavailable.'}</div>`}
 }
 function draw(root,rows){
  const total=rows.reduce((a,x)=>a+(Number(x.listings)||0),0);const max=Math.max(...rows.map(x=>Number(x.listings)||0),1);
