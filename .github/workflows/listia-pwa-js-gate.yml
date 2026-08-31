@@ -60,6 +60,9 @@ jobs:
             public/marketplace.js \
             public/marketplace-extra-locales.js \
             public/marketplace-assistant.js \
+            public/marketplace-feed-enhancements.js \
+            public/marketplace-experience-v8.js \
+            public/marketplace-interest-gateway.js \
             public/marketplace-saved.js \
             public/marketplace-alerts.js \
             public/marketplace-saved-manager.js \
