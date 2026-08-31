@@ -1,6 +1,6 @@
 LISTIA COMMERCIAL + MARKETPLACE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-31T07:42:30Z
-source_commit=7a74d1fa678dda91e9b169ecb6f0bf0e38335ad7
+verified_at_utc=2026-08-31T07:47:42Z
+source_commit=a3cb2965675fd89af7284d11a3ad6bf92f41ff6d
 marketplace_live=true
 marketplace_url=https://listiaapp.com/marketplace
 marketplace_map=true
