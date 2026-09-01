@@ -1,0 +1,127 @@
+name: LISTIA PWA Full Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-pwa-full-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Audit HTML structure and local assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlparse
+          import re, collections
+
+          root=Path('public')
+          html=(root/'index.html').read_text(encoding='utf-8')
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.ids=[]; self.refs=[]; self.scripts=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if a.get('id'): self.ids.append(a['id'])
+                  for key in ('src','href'):
+                      v=a.get(key)
+                      if v and v.startswith('/') and not v.startswith('//'):
+                          self.refs.append(v)
+                  if tag=='script' and a.get('src'): self.scripts.append(a['src'])
+          p=P(); p.feed(html)
+          dup=[k for k,v in collections.Counter(p.ids).items() if v>1]
+          assert not dup, f'Duplicate DOM ids: {dup}'
+          required=['screen-login','screen-signup','screen-forgot','screen-reset','screen-onboarding','screen-plan','screen-google','screen-checkpoint','screen-marketplace']
+          missing=[x for x in required if x not in p.ids]
+          assert not missing, f'Missing required screens: {missing}'
+          bad=[]
+          for ref in sorted(set(p.refs)):
+              path=urlparse(ref).path.lstrip('/')
+              if not path or path.endswith('/'): continue
+              if not (root/path).exists(): bad.append(ref)
+          assert not bad, 'Missing local assets referenced by index.html: '+', '.join(bad)
+          assert 'US$97' not in html and 'US$147' not in html and '>Free<' not in html and '>Premium<' not in html
+          print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}')
+          Path('/tmp/index-scripts.txt').write_text('\n'.join(urlparse(x).path.lstrip('/') for x in p.scripts if urlparse(x).path.endswith('.js')),encoding='utf-8')
+          PY
+
+      - name: Validate JavaScript loaded by the PWA
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          while IFS= read -r f; do
+            test -f "public/$f" || { echo "Missing script public/$f"; exit 1; }
+            node --check "public/$f"
+          done < /tmp/index-scripts.txt
+          node --check public/sw.js
+          echo 'Loaded JavaScript syntax OK'
+
+      - name: Audit manifests and canonical app identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import json,glob,re
+          files=glob.glob('public/manifest*.webmanifest')
+          assert len(files)>=12, f'Expected >=12 manifests, found {len(files)}'
+          for p in files:
+              d=json.load(open(p,encoding='utf-8'))
+              assert d.get('name')=='Listia', f'{p}: name must be Listia'
+              assert d.get('short_name')=='Listia', f'{p}: short_name must be Listia'
+              assert d.get('display')=='standalone', f'{p}: display not standalone'
+              assert d.get('start_url'), f'{p}: missing start_url'
+              icons=d.get('icons') or []
+              assert any(i.get('sizes')=='192x192' for i in icons), f'{p}: missing 192 icon'
+              assert any(i.get('sizes')=='512x512' for i in icons), f'{p}: missing 512 icon'
+              assert any('maskable' in str(i.get('purpose','')) for i in icons), f'{p}: missing maskable icon'
+              assert all(re.search(r'\?v=16$',str(i.get('src',''))) for i in icons), f'{p}: stale icon version'
+          print('Manifest identity OK')
+          PY
+
+      - name: Audit Service Worker precache references
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlparse
+          import re
+          s=Path('public/sw.js').read_text(encoding='utf-8')
+          assert 'listia-pwa-v0.27.12-pwa-audit' in s
+          refs=re.findall(r'"(/[^"]+)"',s)
+          missing=[]
+          for ref in refs:
+              path=urlparse(ref).path.lstrip('/')
+              if not path or path.endswith('/'): continue
+              if path.startswith('?'): continue
+              p=Path('public')/path
+              if not p.exists(): missing.append(ref)
+          assert not missing, 'Missing SW precache assets: '+', '.join(sorted(set(missing)))
+          assert '?v=13' not in s, 'Stale v13 cache references remain'
+          print(f'Service Worker refs OK count={len(set(refs))}')
+          PY
+
+      - name: Marketplace mobile contracts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq '100dvh' public/marketplace-pro-mobile.css
+          grep -Fq 'marketplace-pro-tabs' public/marketplace-qroo-map.js
+          grep -Fq 'marketplace-pro-voice' public/marketplace-qroo-map.js
+          grep -Fq 'qroo-intel-chart' public/marketplace-qroo-map.js
+          node --check public/marketplace-qroo-map.js
+          node --check public/marketplace.js
+          node --check public/listia-voice.js
+          echo 'Marketplace mobile contracts OK'
