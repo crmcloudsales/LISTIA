@@ -25,7 +25,7 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           from urllib.parse import urlparse
-          import re, collections
+          import collections
 
           root=Path('public')
           html=(root/'index.html').read_text(encoding='utf-8')
@@ -43,9 +43,12 @@ jobs:
           p=P(); p.feed(html)
           dup=[k for k,v in collections.Counter(p.ids).items() if v>1]
           assert not dup, f'Duplicate DOM ids: {dup}'
-          required=['screen-login','screen-signup','screen-forgot','screen-reset','screen-onboarding','screen-plan','screen-google','screen-checkpoint','screen-marketplace']
+          required=['screen-login','screen-signup','screen-forgot','screen-reset','screen-onboarding','screen-plan','screen-google','screen-checkpoint']
           missing=[x for x in required if x not in p.ids]
-          assert not missing, f'Missing required screens: {missing}'
+          assert not missing, f'Missing required static screens: {missing}'
+          market=(root/'marketplace.js').read_text(encoding='utf-8')
+          for marker in ["s.id='screen-marketplace'","d.id='screen-marketplace-detail'","main.append(s)","main.append(d)"]:
+              assert marker in market, f'Marketplace dynamic screen contract missing: {marker}'
           bad=[]
           for ref in sorted(set(p.refs)):
               path=urlparse(ref).path.lstrip('/')
@@ -53,7 +56,7 @@ jobs:
               if not (root/path).exists(): bad.append(ref)
           assert not bad, 'Missing local assets referenced by index.html: '+', '.join(bad)
           assert 'US$97' not in html and 'US$147' not in html and '>Free<' not in html and '>Premium<' not in html
-          print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}')
+          print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}; marketplace screens are dynamic')
           Path('/tmp/index-scripts.txt').write_text('\n'.join(urlparse(x).path.lstrip('/') for x in p.scripts if urlparse(x).path.endswith('.js')),encoding='utf-8')
           PY
 
@@ -105,7 +108,6 @@ jobs:
           for ref in refs:
               path=urlparse(ref).path.lstrip('/')
               if not path or path.endswith('/'): continue
-              if path.startswith('?'): continue
               p=Path('public')/path
               if not p.exists(): missing.append(ref)
           assert not missing, 'Missing SW precache assets: '+', '.join(sorted(set(missing)))
