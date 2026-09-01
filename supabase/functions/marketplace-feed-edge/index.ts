@@ -17,6 +17,18 @@ Deno.serve(async(req:Request)=>{
   if(len>4096)return json({error:'payload_too_large'},413)
   const body=await req.json().catch(()=>null) as any
   if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_json'},400)
+  const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}})
+
+  if(clean(body.mode,20)==='detail'){
+    const slug=clean(body.slug,180)||null
+    const id=clean(body.id,80)||null
+    if(!slug&&!id)return json({error:'listing_required'},400)
+    const {data,error}=await admin.rpc('marketplace_public_listing_detail',{p_slug:slug,p_id:id})
+    if(error)return json({error:'detail_unavailable'},502)
+    const row=Array.isArray(data)?data[0]:null
+    return row?json(row):json({error:'not_found'},404)
+  }
+
   const params={
     p_limit:Math.min(Math.max(Number(body.p_limit)||24,1),30),
     p_offset:Math.min(Math.max(Number(body.p_offset)||0,0),5000),
@@ -27,7 +39,6 @@ Deno.serve(async(req:Request)=>{
     p_max_price:Number.isFinite(Number(body.p_max_price))?Number(body.p_max_price):null,
     p_bedrooms:Number.isFinite(Number(body.p_bedrooms))?Number(body.p_bedrooms):null
   }
-  const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}})
   const {data,error}=await admin.rpc('marketplace_public_feed_edge',params)
   if(error)return json({error:'feed_unavailable'},502)
   return json(Array.isArray(data)?data:[])
