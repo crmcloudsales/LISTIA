@@ -9,7 +9,7 @@ function neutralize(){
  screen.querySelectorAll('.plan-card').forEach(n=>n.hidden=true);
  screen.querySelectorAll('.plan-price').forEach(n=>n.remove());
  const input=document.getElementById('selectedPlan');if(input)input.value='free';
- const form=document.getElementById('planForm');
+ const checkpoint=document.querySelector('[data-i18n="checkpoint.plan"]');if(checkpoint){checkpoint.removeAttribute('data-i18n');checkpoint.textContent='Configuration saved'}; const intakeNote=document.getElementById('intakePlanNote');if(intakeNote){intakeNote.hidden=true;intakeNote.textContent=''}; const form=document.getElementById('planForm');
  if(form&&!form.querySelector('.listia-pricing-hold-note')){
   const note=document.createElement('div');note.className='permission-note listia-pricing-hold-note';note.innerHTML='<strong>Precios pendientes de análisis.</strong><span>LISTIA no muestra ni aplica precios, markups o cargos de suscripción en esta etapa.</span>';
   const submit=form.querySelector('button[type="submit"]');form.insertBefore(note,submit||null);
