@@ -1,0 +1,83 @@
+name: LISTIA PWA Behavior Fix v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-pwa-behavior-fix-v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Apply behavior fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('public/marketplace.js')
+          s=p.read_text(encoding='utf-8')
+          old="media.tabIndex=0;media.setAttribute('role','button');media.onclick=()=>detail(x);media.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();detail(x)}};"
+          assert old in s, 'Marketplace media interaction contract changed'
+          s=s.replace(old,'',1)
+          old2="title.tabIndex=0;title.onclick=()=>detail(x);title.onkeydown=e=>{if(e.key==='Enter'){detail(x)}};"
+          assert old2 in s, 'Marketplace title interaction contract changed'
+          s=s.replace(old2,'',1)
+          p.write_text(s,encoding='utf-8')
+
+          css=Path('public/marketplace.css')
+          c=css.read_text(encoding='utf-8')
+          c=c.replace('.marketplace-media[role=button],.marketplace-title{cursor:pointer}','')
+          c=c.replace('.marketplace-media:focus-visible,.marketplace-title:focus-visible,.marketplace-gallery-thumb:focus-visible{outline:3px solid #7b3fff;outline-offset:3px}', '.marketplace-gallery-thumb:focus-visible{outline:3px solid #7b3fff;outline-offset:3px}')
+          css.write_text(c,encoding='utf-8')
+
+          ph=Path('public/pricing-hold.js')
+          h=ph.read_text(encoding='utf-8')
+          needle=" const form=document.getElementById('planForm');"
+          add=""" const checkpoint=document.querySelector('[data-i18n=\"checkpoint.plan\"]');if(checkpoint){checkpoint.removeAttribute('data-i18n');checkpoint.textContent='✓ Configuración guardada'}
+ const intakeNote=document.getElementById('intakePlanNote');if(intakeNote){intakeNote.hidden=true;intakeNote.textContent=''}
+"""
+          assert needle in h, 'pricing-hold anchor missing'
+          if '✓ Configuración guardada' not in h:
+              h=h.replace(needle,add+needle,1)
+          ph.write_text(h,encoding='utf-8')
+
+          idx=Path('public/index.html')
+          html=idx.read_text(encoding='utf-8')
+          html=html.replace('<span data-i18n="checkpoint.plan">✓ Plan seleccionado</span>','<span>✓ Configuración guardada</span>')
+          idx.write_text(html,encoding='utf-8')
+          PY
+
+      - name: Validate behavior fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check public/marketplace.js
+          node --check public/pricing-hold.js
+          ! grep -Fq "media.onclick=()=>detail(x)" public/marketplace.js
+          ! grep -Fq "title.onclick=()=>detail(x)" public/marketplace.js
+          grep -Fq 'interest.onclick=()=>interestClick(x,interest)' public/marketplace.js
+          ! grep -Fq '✓ Plan seleccionado' public/index.html
+          grep -Fq '✓ Configuración guardada' public/index.html
+          grep -Fq 'intakeNote.hidden=true' public/pricing-hold.js
+          echo 'Marketplace CTA and pricing-hold behavior OK'
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'LISTIA PWA Behavior Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/marketplace.js public/marketplace.css public/pricing-hold.js public/index.html
+          git commit -m 'fix(pwa): make Me interesa exclusive property CTA and neutralize plan residue'
+          git push origin HEAD:main
