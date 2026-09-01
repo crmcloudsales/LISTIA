@@ -7,9 +7,9 @@
 <meta content="#6D35F2" name="theme-color"/>
 <meta content="noindex,nofollow" name="robots"/>
 <meta content="LISTIA — Real Estate with AI." name="description"/>
-<link href="/manifest-en.webmanifest?v=15" id="appManifest" rel="manifest"/>
-<link href="/listia-app-icon-180.png?v=15" rel="apple-touch-icon" sizes="180x180"/>
-<link href="/listia-app-icon-32.png?v=15" rel="icon" sizes="32x32" type="image/png"/>
+<link href="/manifest-en.webmanifest?v=16" id="appManifest" rel="manifest"/>
+<link href="/listia-app-icon-180.png?v=16" rel="apple-touch-icon" sizes="180x180"/>
+<link href="/listia-app-icon-32.png?v=16" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/styles.css?v=0.9.3" rel="stylesheet"/>
 <title>Listia</title>
 </head>
@@ -142,34 +142,14 @@
 <section aria-labelledby="planTitle" class="screen" id="screen-plan">
 <div class="panel onboarding-panel">
 <div class="progress"><span style="width:40%"></span></div>
-<span class="eyebrow" data-i18n="plan.step">CONFIGURACIÓN · 2 DE 5</span>
-<h1 data-i18n="plan.title" id="planTitle">Elige cómo empezar</h1>
-<p class="sub" data-i18n="plan.subtitle">Puedes cambiar de plan después. Seleccionar Pro o Premium aquí no activa ningún cobro todavía.</p>
-<p class="context-line"><span data-i18n="plan.configuring"></span> <strong id="planBusinessName">tu negocio</strong></p>
+<span class="eyebrow">CONFIGURACIÓN · 2 DE 5</span>
+<h1 id="planTitle">Continúa configurando LISTIA</h1>
+<p class="sub">Los planes y precios todavía no están definidos. Puedes continuar preparando tu cuenta sin seleccionar ni pagar un plan.</p>
+<p class="context-line"><span>Configurando</span> <strong id="planBusinessName">tu negocio</strong></p>
 <form id="planForm" novalidate="">
 <input id="selectedPlan" type="hidden" value="free"/>
-<button aria-pressed="true" class="plan-card selected" data-plan="free" type="button">
-<span class="plan-copy">
-<strong>Free</strong>
-<small data-i18n="plan.free_desc">Empieza a trabajar con LISTIA y paga solo el uso variable cuando aplique.</small>
-</span>
-<span class="plan-price"><b>US$0</b><small data-i18n="common.month">/mes</small></span>
-</button>
-<button aria-pressed="false" class="plan-card" data-plan="pro" type="button">
-<span class="plan-copy">
-<strong>Pro</strong>
-<small data-i18n="plan.pro_desc">Para un profesional inmobiliario que quiere automatizar su operación.</small>
-</span>
-<span class="plan-price"><b>US$97</b><small data-i18n="common.month">/mes</small></span>
-</button>
-<button aria-pressed="false" class="plan-card" data-plan="premium" type="button">
-<span class="plan-copy">
-<strong>Premium</strong>
-<small data-i18n="plan.premium_desc">Incluye 2 usuarios y la tarifa de uso más baja.</small>
-</span>
-<span class="plan-price"><b>US$147</b><small data-i18n="common.month">/mes</small></span>
-</button>
-<button class="primary full" data-i18n="common.continue" type="submit">Continuar</button>
+<div class="permission-note"><strong>Tu configuración se conserva.</strong><span>Podrás elegir una opción comercial cuando LISTIA publique oficialmente sus planes.</span></div>
+<button class="primary full" type="submit">Continuar</button>
 </form>
 </div>
 </section>
