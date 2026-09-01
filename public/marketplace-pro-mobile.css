@@ -1,5 +1,5 @@
 /* LISTIA Marketplace PRO mobile shell — app-only visual layer */
-.qroo-map-kicker,.qroo-map-count,.qroo-intel-head p,.qroo-intel-controls button,.qroo-trend-status strong,.qroo-trend-status span,.qroo-intel-card>small,.qroo-intel-metrics span,.qroo-intel-card em{font-size:12px!important}
+.qroo-map-kicker,.qroo-map-count,.qroo-map-label,.qroo-intel-head p,.qroo-intel-controls button,.qroo-trend-status strong,.qroo-trend-status span,.qroo-intel-card>small,.qroo-intel-metrics span,.qroo-intel-card em{font-size:12px!important}
 .marketplace-pro-toolbar{display:none}
 .qroo-intel-chart{display:grid;gap:8px;margin:10px 0 12px;padding:10px;border:1px solid #ece8f4;border-radius:14px;background:#faf8ff}.qroo-intel-chart-title{font-size:12px;font-weight:850;color:#4b4358}.qroo-intel-bar{display:grid;grid-template-columns:86px 1fr 32px;gap:7px;align-items:center;font-size:12px;color:#4f4859}.qroo-intel-bar-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qroo-intel-track{height:8px;border-radius:999px;background:#ece7f4;overflow:hidden}.qroo-intel-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#6d35f2,#a05dff)}.qroo-intel-bar b{text-align:right;font-size:12px}
 @media(max-width:650px){
@@ -65,16 +65,20 @@ html,body{overflow:hidden!important;height:100%;height:100dvh}
 #screen-marketplace.active.marketplace-pro-intel .qroo-intel-card em{margin-top:8px}
 #screen-marketplace-detail.active{height:100%;max-width:none!important;overflow:hidden}
 #screen-marketplace-detail.active .marketplace-panel{height:100%;overflow:hidden;padding:8px!important;border-radius:18px}
-#screen-marketplace-detail.active .marketplace-detail{height:100%;overflow:hidden;display:flex;flex-direction:column;gap:7px}
-#screen-marketplace-detail.active .marketplace-detail-gallery{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) 62px;overflow:hidden}
+#screen-marketplace-detail.active .marketplace-detail{height:100%;overflow:hidden;display:flex;flex-direction:column;gap:6px}
+#screen-marketplace-detail.active .marketplace-detail-gallery{flex:0 0 46%;min-height:0;grid-template-rows:minmax(0,1fr) 58px;overflow:hidden}
 #screen-marketplace-detail.active .marketplace-detail-media{height:100%;aspect-ratio:auto!important;border-radius:14px}
-#screen-marketplace-detail.active .marketplace-gallery-rail{height:62px;overflow-x:auto;overflow-y:hidden}
-#screen-marketplace-detail.active .marketplace-gallery-thumb{height:56px;flex-basis:72px}
+#screen-marketplace-detail.active .marketplace-gallery-rail{height:58px;overflow-x:auto;overflow-y:hidden}
+#screen-marketplace-detail.active .marketplace-gallery-thumb{height:52px;flex-basis:68px}
 #screen-marketplace-detail.active .marketplace-detail-title{font-size:18px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#screen-marketplace-detail.active .marketplace-detail-copy,#screen-marketplace-detail.active .marketplace-map{display:none!important}
-#screen-marketplace-detail.active .marketplace-detail-grid{display:flex;gap:5px;overflow-x:auto}
-#screen-marketplace-detail.active .marketplace-detail-stat{flex:0 0 auto;padding:7px 9px}
+#screen-marketplace-detail.active .marketplace-detail-copy{display:none!important}
+#screen-marketplace-detail.active .marketplace-detail-grid{display:flex;gap:5px;overflow-x:auto;flex:0 0 auto}
+#screen-marketplace-detail.active .marketplace-detail-stat{flex:0 0 auto;padding:6px 8px}
 #screen-marketplace-detail.active .marketplace-detail-stat span,#screen-marketplace-detail.active .marketplace-detail-stat strong{font-size:12px}
-#screen-marketplace-detail.active .marketplace-detail-cta{margin-top:auto;padding:5px 0}
+#screen-marketplace-detail.active .marketplace-map{display:grid!important;flex:0 0 100px;margin:0!important;gap:3px;overflow:hidden}
+#screen-marketplace-detail.active .marketplace-map h2,#screen-marketplace-detail.active .marketplace-map>strong{font-size:12px!important;margin:0}
+#screen-marketplace-detail.active .marketplace-map iframe{height:78px!important;border-radius:10px}
+#screen-marketplace-detail.active .listia-map-note{display:none}
+#screen-marketplace-detail.active .marketplace-detail-cta{margin-top:auto;padding:4px 0}
 #screen-marketplace-detail.active .marketplace-detail-cta .marketplace-interest-button{min-height:44px;font-size:13px}
 }
