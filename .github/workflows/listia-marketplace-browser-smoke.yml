@@ -20,6 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Diagnose QROO edge upstream
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          url='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo?mode=clusters&limit=3'
+          code=$(curl -sS -D /tmp/qroo-direct.headers -o /tmp/qroo-direct.body -w '%{http_code}' "$url" || true)
+          echo "QROO_DIRECT_STATUS=$code"
+          echo 'QROO_DIRECT_HEADERS:'
+          cat /tmp/qroo-direct.headers || true
+          echo 'QROO_DIRECT_BODY:'
+          head -c 3000 /tmp/qroo-direct.body || true
+          echo
+
       - name: Install Playwright Chromium
         shell: bash
         run: |
