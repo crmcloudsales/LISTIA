@@ -24,7 +24,7 @@ jobs:
           npm install playwright@latest >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
 
-      - name: Diagnose mobile Marketplace runtime
+      - name: Capture Marketplace automatic request payloads
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -35,51 +35,24 @@ jobs:
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
             const page=await context.newPage();
-            const feed=[]; const errors=[];
-            page.on('response',async r=>{
-              if(!r.url().includes('/api/marketplace/feed'))return;
-              let body=null;try{body=await r.json()}catch{}
-              feed.push({status:r.status(),url:r.url(),isArray:Array.isArray(body),length:Array.isArray(body)?body.length:null,total:Array.isArray(body)&&body[0]?body[0].total_count:null,keys:Array.isArray(body)&&body[0]?Object.keys(body[0]).slice(0,30):[]});
-            });
+            const reqs=[]; const resps=[]; const errors=[];
+            page.on('request',r=>{if(r.url().includes('/api/marketplace/feed'))reqs.push({url:r.url(),method:r.method(),postData:r.postData()})});
+            page.on('response',async r=>{if(!r.url().includes('/api/marketplace/feed'))return;let body=null;try{body=await r.json()}catch{}resps.push({status:r.status(),length:Array.isArray(body)?body.length:null,total:Array.isArray(body)&&body[0]?body[0].total_count:null})});
             page.on('pageerror',e=>errors.push('pageerror:'+String(e)));
             page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push('console-'+m.type()+':'+m.text())});
-            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=2',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=3',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForTimeout(14000);
-            const state=await page.evaluate(()=>({
-              href:location.href,
-              active:document.querySelector('#screen-marketplace')?.classList.contains('active')||false,
-              cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,
-              gridHTML:document.querySelector('#marketplaceGrid')?.innerHTML?.slice(0,1000)||'',
-              countText:document.querySelector('.marketplace-count')?.textContent?.trim()||'',
-              baseCount:document.querySelector('#marketplaceCount')?.textContent?.trim()||'',
-              published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:null,
-              apiKeys:window.LISTIA_MARKETPLACE?Object.keys(window.LISTIA_MARKETPLACE):[],
-              bodyText:(document.body?.innerText||'').slice(0,1700),
-              viewport:{w:innerWidth,h:innerHeight,scrollH:document.documentElement.scrollHeight},
-              proTabs:[...document.querySelectorAll('.marketplace-pro-tabs button')].map(x=>x.textContent?.trim())
-            }));
-            console.log('LIST_STATE='+JSON.stringify(state));
-            console.log('FEED_RESPONSES='+JSON.stringify(feed));
-            console.log('PAGE_ERRORS='+JSON.stringify(errors.slice(0,40)));
-
-            const direct=await page.evaluate(async()=>{
-              try{
-                const r=await fetch('/api/marketplace/feed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({p_limit:3,p_offset:0}),cache:'no-store'});
-                const j=await r.json();return {status:r.status,isArray:Array.isArray(j),length:Array.isArray(j)?j.length:null,total:Array.isArray(j)&&j[0]?j[0].total_count:null,first:Array.isArray(j)&&j[0]?{id:j[0].id,title:j[0].title}:null};
-              }catch(e){return {error:String(e)}}
-            });
-            console.log('DIRECT_FETCH='+JSON.stringify(direct));
-
-            if(windowNotAvailable=false){}
-            if(state.cards===0&&state.apiKeys.includes('reload')){
-              await page.evaluate(()=>window.LISTIA_MARKETPLACE.reload());
-              await page.waitForTimeout(7000);
-            }
-            const after=await page.evaluate(()=>({cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,count:document.querySelector('#marketplaceCount')?.textContent?.trim()||'',published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:null,gridHTML:document.querySelector('#marketplaceGrid')?.innerHTML?.slice(0,800)||''}));
-            console.log('AFTER_RELOAD='+JSON.stringify(after));
+            const filters=await page.evaluate(()=>Object.fromEntries(['marketplaceSearch','marketplaceOperation','marketplaceType','marketplaceBedrooms','marketplaceMin','marketplaceMax'].map(id=>[id,document.getElementById(id)?.value??null])));
+            console.log('FILTER_VALUES='+JSON.stringify(filters));
+            console.log('AUTO_REQUESTS='+JSON.stringify(reqs));
+            console.log('AUTO_RESPONSES='+JSON.stringify(resps));
+            console.log('PAGE_ERRORS='+JSON.stringify(errors.slice(0,30)));
+            const direct=await page.evaluate(async()=>{const r=await fetch('/api/marketplace/feed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({p_limit:3,p_offset:0}),cache:'no-store'});const j=await r.json();return {status:r.status,length:Array.isArray(j)?j.length:null,total:Array.isArray(j)&&j[0]?j[0].total_count:null}});
+            console.log('DIRECT='+JSON.stringify(direct));
             await browser.close();
-            if(!direct||direct.status!==200||!direct.isArray||direct.length<1)throw new Error('Direct in-page Marketplace feed is not healthy');
-            if(after.cards<1)throw new Error('Marketplace still renders zero cards after explicit reload');
+            if(!direct||direct.status!==200||direct.length<1)throw new Error('Direct feed unhealthy');
+            if(!reqs.length)throw new Error('No automatic Marketplace request captured');
+            process.exit(1);
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
           node smoke.js
