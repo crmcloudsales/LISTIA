@@ -17,42 +17,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Normalize PWA identity
+      - name: Wire canonical LISTIA bootstrap
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import json,glob,re
-          for path in glob.glob('public/manifest*.webmanifest'):
-              p=Path(path)
-              d=json.loads(p.read_text(encoding='utf-8'))
-              d['name']='Listia'
-              d['short_name']='Listia'
-              for icon in d.get('icons') or []:
-                  src=str(icon.get('src',''))
-                  icon['src']=re.sub(r'\?v=\d+$','?v=16',src)
-              p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
+          index=Path('public/index.html')
+          html=index.read_text(encoding='utf-8')
+          tag='<script defer="" src="/listia-bootstrap.js?v=1"></script>'
+          if tag not in html:
+              anchor='<script defer="" src="/app.js"></script>'
+              assert anchor in html, 'app.js anchor missing'
+              html=html.replace(anchor,anchor+'\n'+tag,1)
+              index.write_text(html,encoding='utf-8')
+
+          sw=Path('public/sw.js')
+          s=sw.read_text(encoding='utf-8')
+          s=s.replace('listia-pwa-v0.27.12-pwa-audit','listia-pwa-v0.27.13-bootstrap')
+          if '"/listia-bootstrap.js?v=1"' not in s:
+              s=s.replace('"/i18n-extra.js",','"/listia-bootstrap.js?v=1","/i18n-extra.js",',1)
+          s=s.replace('"/marketplace.js?v=9"','"/marketplace.js?v=10"')
+          s=s.replace('"/marketplace-qroo-map.js?v=1"','"/marketplace-qroo-map.js?v=2"')
+          sw.write_text(s,encoding='utf-8')
           PY
 
-      - name: Validate canonical PWA identity
+      - name: Validate bootstrap wiring
         shell: bash
         run: |
           set -Eeuo pipefail
-          python3 - <<'PY'
-          import json,glob,re
-          files=glob.glob('public/manifest*.webmanifest')
-          assert len(files)>=12
-          for p in files:
-              d=json.load(open(p,encoding='utf-8'))
-              assert d.get('name')=='Listia', p
-              assert d.get('short_name')=='Listia', p
-              assert d.get('display')=='standalone', p
-              icons=d.get('icons') or []
-              assert icons, p
-              assert all(re.search(r'\?v=16$',str(i.get('src',''))) for i in icons), p
-          print('All manifest identities are canonical Listia')
-          PY
+          grep -Fq '/listia-bootstrap.js?v=1' public/index.html
+          grep -Fq 'listia-pwa-v0.27.13-bootstrap' public/sw.js
+          grep -Fq '"/listia-bootstrap.js?v=1"' public/sw.js
+          grep -Fq '"/marketplace.js?v=10"' public/sw.js
+          grep -Fq '"/marketplace-qroo-map.js?v=2"' public/sw.js
+          node --check public/listia-bootstrap.js
+          node --check public/sw.js
+          for f in marketplace.js listia-voice.js runtime.js account-center.js office-modules.js; do test -f "public/$f"; done
+          echo 'Canonical bootstrap wiring OK'
 
       - name: Commit fixes
         shell: bash
@@ -61,6 +63,6 @@ jobs:
           if git diff --quiet; then exit 0; fi
           git config user.name 'LISTIA PWA Audit Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/manifest*.webmanifest
-          git commit -m 'fix(pwa): normalize Listia identity across manifests'
+          git add public/index.html public/sw.js
+          git commit -m 'fix(pwa): execute advanced modules through canonical bootstrap'
           git push origin HEAD:main
