@@ -3,7 +3,10 @@ const ALLOWED_HOSTNAMES=new Set(['app.listiaapp.com','listiaapp.com','www.listia
 const TURNSTILE_VERIFY='https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const SUPABASE_INTEREST='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-interest-auth';
 const SUPABASE_FEED='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-feed-edge';
+const SUPABASE_DEMAND='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-demand-event';
 const FEED_KEYS=new Set(['p_limit','p_offset','p_q','p_operation','p_property_type','p_min_price','p_max_price','p_bedrooms','p_lat','p_lng']);
+const DEMAND_EVENTS=new Set(['listing_view','search','voice_search','map_view','property_open','save','share','contact_click','whatsapp_click','inquiry']);
+const DEMAND_KEYS=new Set(['event_name','session_id','listing_id','query_text','metadata']);
 const headers={
   'content-type':'application/json;charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-site','cross-origin-opener-policy':'same-origin','origin-agent-cluster':'?1','x-permitted-cross-domain-policies':'none','permissions-policy':'camera=(), microphone=(), geolocation=()','x-robots-tag':'noindex, nofollow, noarchive, nosnippet, noimageindex','content-security-policy':"default-src 'none'; frame-ancestors 'none'",'strict-transport-security':'max-age=31536000; includeSubDomains; preload'
 };
@@ -36,6 +39,23 @@ async function handleFeed(req,env){
   if(!upstream)return json({error:'upstream_unavailable'},503,cors(req));
   const text=await upstream.text();return new Response(text,{status:upstream.status,headers:{...headers,...cors(req),'content-type':upstream.headers.get('content-type')||headers['content-type']}});
 }
+async function handleDemand(req,env){
+  if(req.method==='OPTIONS')return empty(204,cors(req));
+  if(req.method!=='POST')return json({error:'method_not_allowed'},405,{'allow':'POST, OPTIONS',...cors(req)});
+  if(!trustedOrigin(req))return json({error:'origin_not_allowed'},403,cors(req));
+  if(!jsonContent(req))return json({error:'json_required'},415,cors(req));
+  const len=Number(req.headers.get('content-length')||0);if(len>5000)return json({error:'payload_too_large'},413,cors(req));
+  const body=await req.json().catch(()=>null);if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_json'},400,cors(req));
+  if(Object.keys(body).some(k=>!DEMAND_KEYS.has(k)))return json({error:'unexpected_parameter'},400,cors(req));
+  if(!DEMAND_EVENTS.has(String(body.event_name||'')))return json({error:'invalid_event'},400,cors(req));
+  if(String(body.session_id||'').length<8||String(body.session_id||'').length>180)return json({error:'invalid_session'},400,cors(req));
+  if(body.listing_id!=null&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.listing_id)))return json({error:'invalid_listing'},400,cors(req));
+  if(body.query_text!=null&&String(body.query_text).length>400)return json({error:'query_too_long'},400,cors(req));
+  if(!env.MARKETPLACE_EDGE_PROOF)return json({error:'firewall_not_configured'},503,cors(req));
+  const upstream=await fetch(SUPABASE_DEMAND,{method:'POST',headers:{'content-type':'application/json','x-listia-edge-proof':env.MARKETPLACE_EDGE_PROOF,'x-listia-client-ip':clientIp(req),'x-listia-client-ua':String(req.headers.get('user-agent')||'').slice(0,300)},body:JSON.stringify(body)}).catch(()=>null);
+  if(!upstream)return json({error:'upstream_unavailable'},503,cors(req));
+  const text=await upstream.text();return new Response(text,{status:upstream.status,headers:{...headers,...cors(req),'content-type':upstream.headers.get('content-type')||headers['content-type']}});
+}
 async function handleInterest(req,env){
   if(req.method==='OPTIONS')return empty(204,cors(req));
   if(req.method!=='POST')return json({error:'method_not_allowed'},405,{'allow':'POST, OPTIONS',...cors(req)});
@@ -62,6 +82,7 @@ export default {async fetch(req,env){
     const cf=req.cf||{};const lat=Number(cf.latitude),lng=Number(cf.longitude);return json({latitude:Number.isFinite(lat)?lat:null,longitude:Number.isFinite(lng)?lng:null,city:cf.city||null,region:cf.region||null,country:cf.country||null,source:'cloudflare_approximate'},200,cors(req));
   }
   if(url.pathname==='/api/marketplace/feed')return handleFeed(req,env);
+  if(url.pathname==='/api/marketplace/events')return handleDemand(req,env);
   if(url.pathname==='/api/interest')return handleInterest(req,env);
   return env.ASSETS.fetch(req);
 }};
