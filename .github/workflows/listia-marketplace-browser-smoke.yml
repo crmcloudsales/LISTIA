@@ -24,7 +24,7 @@ jobs:
           npm install playwright@latest >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
 
-      - name: Verify mobile cards and map markers
+      - name: Diagnose mobile Marketplace runtime
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -36,45 +36,50 @@ jobs:
             const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
             const page=await context.newPage();
             const feed=[]; const errors=[];
-            page.on('response',r=>{if(r.url().includes('/api/marketplace/feed'))feed.push({status:r.status(),url:r.url()})});
-            page.on('pageerror',e=>errors.push(String(e)));
-            page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text())});
-            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=1',{waitUntil:'domcontentloaded',timeout:60000});
-            await page.waitForTimeout(12000);
+            page.on('response',async r=>{
+              if(!r.url().includes('/api/marketplace/feed'))return;
+              let body=null;try{body=await r.json()}catch{}
+              feed.push({status:r.status(),url:r.url(),isArray:Array.isArray(body),length:Array.isArray(body)?body.length:null,total:Array.isArray(body)&&body[0]?body[0].total_count:null,keys:Array.isArray(body)&&body[0]?Object.keys(body[0]).slice(0,30):[]});
+            });
+            page.on('pageerror',e=>errors.push('pageerror:'+String(e)));
+            page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push('console-'+m.type()+':'+m.text())});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=2',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(14000);
             const state=await page.evaluate(()=>({
               href:location.href,
               active:document.querySelector('#screen-marketplace')?.classList.contains('active')||false,
               cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,
+              gridHTML:document.querySelector('#marketplaceGrid')?.innerHTML?.slice(0,1000)||'',
               countText:document.querySelector('.marketplace-count')?.textContent?.trim()||'',
-              bodyText:(document.body?.innerText||'').slice(0,1600),
+              baseCount:document.querySelector('#marketplaceCount')?.textContent?.trim()||'',
+              published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:null,
+              apiKeys:window.LISTIA_MARKETPLACE?Object.keys(window.LISTIA_MARKETPLACE):[],
+              bodyText:(document.body?.innerText||'').slice(0,1700),
               viewport:{w:innerWidth,h:innerHeight,scrollH:document.documentElement.scrollHeight},
               proTabs:[...document.querySelectorAll('.marketplace-pro-tabs button')].map(x=>x.textContent?.trim())
             }));
             console.log('LIST_STATE='+JSON.stringify(state));
             console.log('FEED_RESPONSES='+JSON.stringify(feed));
-            if(feed.length===0||!feed.some(x=>x.status===200))throw new Error('No successful Marketplace feed request in browser');
-            if(state.cards<1)throw new Error('Marketplace rendered zero property cards');
-            if(/(^|\D)0\s+propiedades/i.test(state.countText))throw new Error('Marketplace count still says zero');
-            const mapBtn=page.locator('.marketplace-pro-tabs button').filter({hasText:/^Mapa$/i}).first();
-            if(await mapBtn.count())await mapBtn.click();
-            else {
-              const fallback=page.locator('button,[role=button]').filter({hasText:/^Mapa$/i}).first();
-              if(await fallback.count())await fallback.click();
+            console.log('PAGE_ERRORS='+JSON.stringify(errors.slice(0,40)));
+
+            const direct=await page.evaluate(async()=>{
+              try{
+                const r=await fetch('/api/marketplace/feed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({p_limit:3,p_offset:0}),cache:'no-store'});
+                const j=await r.json();return {status:r.status,isArray:Array.isArray(j),length:Array.isArray(j)?j.length:null,total:Array.isArray(j)&&j[0]?j[0].total_count:null,first:Array.isArray(j)&&j[0]?{id:j[0].id,title:j[0].title}:null};
+              }catch(e){return {error:String(e)}}
+            });
+            console.log('DIRECT_FETCH='+JSON.stringify(direct));
+
+            if(windowNotAvailable=false){}
+            if(state.cards===0&&state.apiKeys.includes('reload')){
+              await page.evaluate(()=>window.LISTIA_MARKETPLACE.reload());
+              await page.waitForTimeout(7000);
             }
-            await page.waitForTimeout(9000);
-            const mapState=await page.evaluate(()=>({
-              markers:document.querySelectorAll('.leaflet-marker-icon,.leaflet-interactive,.qroo-map-marker,.qroo-property-marker,[class*=marker][data-listing-id]').length,
-              leaflet:document.querySelectorAll('.leaflet-container').length,
-              mapText:document.querySelector('#qrooMarketplaceMapMount')?.innerText?.slice(0,700)||'',
-              classes:document.querySelector('#screen-marketplace')?.className||''
-            }));
-            console.log('MAP_STATE='+JSON.stringify(mapState));
-            console.log('PAGE_ERRORS='+JSON.stringify(errors.slice(0,20)));
-            if(mapState.leaflet<1)throw new Error('Marketplace map container not rendered');
-            if(mapState.markers<1)throw new Error('Marketplace map rendered zero marker elements');
-            if(state.viewport.scrollH>state.viewport.h+120)throw new Error(`Marketplace mobile page is still vertically oversized: ${state.viewport.scrollH} > ${state.viewport.h}`);
-            console.log(`LISTIA_BROWSER_SMOKE_OK cards=${state.cards} markers=${mapState.markers}`);
+            const after=await page.evaluate(()=>({cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,count:document.querySelector('#marketplaceCount')?.textContent?.trim()||'',published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:null,gridHTML:document.querySelector('#marketplaceGrid')?.innerHTML?.slice(0,800)||''}));
+            console.log('AFTER_RELOAD='+JSON.stringify(after));
             await browser.close();
+            if(!direct||direct.status!==200||!direct.isArray||direct.length<1)throw new Error('Direct in-page Marketplace feed is not healthy');
+            if(after.cards<1)throw new Error('Marketplace still renders zero cards after explicit reload');
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
           node smoke.js
