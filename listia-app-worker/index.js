@@ -17,8 +17,6 @@ function clientIp(req){return req.headers.get('cf-connecting-ip')||req.headers.g
 function trustedOrigin(req){const origin=req.headers.get('origin')||'',sec=req.headers.get('sec-fetch-site')||'';return !!origin&&ALLOWED_ORIGINS.has(origin)&&(!sec||sec==='same-origin'||sec==='same-site')}
 function browserCaller(req){if(trustedOrigin(req))return true;const sec=req.headers.get('sec-fetch-site')||'';if(sec&&sec!=='same-origin'&&sec!=='same-site')return false;const ref=req.headers.get('referer')||'';if(!ref)return sec==='same-origin'||sec==='same-site';try{return ALLOWED_HOSTNAMES.has(new URL(ref).hostname.toLowerCase())}catch{return false}}
 function jsonContent(req){return (req.headers.get('content-type')||'').toLowerCase().includes('application/json')}
-const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
-async function sha256(value){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(value||'')))))}
 async function verifyHuman(req,env,token){
   if(!token||token.length<20||!env.TURNSTILE_SECRET)return {ok:false,reason:'missing_human_verification'};
   const form=new FormData();form.set('secret',env.TURNSTILE_SECRET);form.set('response',token);const ip=clientIp(req);if(ip)form.set('remoteip',ip);
@@ -78,12 +76,6 @@ export default {async fetch(req,env){
   const url=new URL(req.url);
   if(url.pathname==='/api/security/turnstile-config'){
     if(req.method!=='GET')return json({error:'method_not_allowed'},405);if(!env.TURNSTILE_SITE_KEY)return json({error:'turnstile_not_configured'},503);return json({sitekey:env.TURNSTILE_SITE_KEY},200,{'cache-control':'public, max-age=3600'});
-  }
-  if(url.pathname==='/api/marketplace/firewall-digest'){
-    if(req.method!=='GET')return json({error:'method_not_allowed'},405,{'allow':'GET'});
-    if(!trustedOrigin(req))return json({error:'origin_not_allowed'},403,cors(req));
-    if(!env.MARKETPLACE_EDGE_PROOF)return json({error:'firewall_not_configured'},503,cors(req));
-    return json({sha256:await sha256(env.MARKETPLACE_EDGE_PROOF)},200,cors(req));
   }
   if(url.pathname==='/api/marketplace/location'){
     if(req.method==='OPTIONS')return empty(204,cors(req));if(req.method!=='GET')return json({error:'method_not_allowed'},405,{'allow':'GET, OPTIONS',...cors(req)});if(!browserCaller(req))return json({error:'origin_not_allowed'},403,cors(req));
