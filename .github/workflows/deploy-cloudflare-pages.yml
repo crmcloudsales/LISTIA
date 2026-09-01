@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'public/**'
+      - 'listia-app-worker/index.js'
       - 'wrangler-listia-app.jsonc'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
