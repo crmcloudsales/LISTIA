@@ -1,0 +1,80 @@
+name: LISTIA Marketplace Browser Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-marketplace-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install Playwright Chromium
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p /tmp/listia-browser-smoke && cd /tmp/listia-browser-smoke
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Verify mobile cards and map markers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /tmp/listia-browser-smoke
+          cat > smoke.js <<'NODE'
+          const { chromium, devices } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
+            const page=await context.newPage();
+            const feed=[]; const errors=[];
+            page.on('response',r=>{if(r.url().includes('/api/marketplace/feed'))feed.push({status:r.status(),url:r.url()})});
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text())});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=1',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(12000);
+            const state=await page.evaluate(()=>({
+              href:location.href,
+              active:document.querySelector('#screen-marketplace')?.classList.contains('active')||false,
+              cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,
+              countText:document.querySelector('.marketplace-count')?.textContent?.trim()||'',
+              bodyText:(document.body?.innerText||'').slice(0,1600),
+              viewport:{w:innerWidth,h:innerHeight,scrollH:document.documentElement.scrollHeight},
+              proTabs:[...document.querySelectorAll('.marketplace-pro-tabs button')].map(x=>x.textContent?.trim())
+            }));
+            console.log('LIST_STATE='+JSON.stringify(state));
+            console.log('FEED_RESPONSES='+JSON.stringify(feed));
+            if(feed.length===0||!feed.some(x=>x.status===200))throw new Error('No successful Marketplace feed request in browser');
+            if(state.cards<1)throw new Error('Marketplace rendered zero property cards');
+            if(/(^|\D)0\s+propiedades/i.test(state.countText))throw new Error('Marketplace count still says zero');
+            const mapBtn=page.locator('.marketplace-pro-tabs button').filter({hasText:/^Mapa$/i}).first();
+            if(await mapBtn.count())await mapBtn.click();
+            else {
+              const fallback=page.locator('button,[role=button]').filter({hasText:/^Mapa$/i}).first();
+              if(await fallback.count())await fallback.click();
+            }
+            await page.waitForTimeout(9000);
+            const mapState=await page.evaluate(()=>({
+              markers:document.querySelectorAll('.leaflet-marker-icon,.leaflet-interactive,.qroo-map-marker,.qroo-property-marker,[class*=marker][data-listing-id]').length,
+              leaflet:document.querySelectorAll('.leaflet-container').length,
+              mapText:document.querySelector('#qrooMarketplaceMapMount')?.innerText?.slice(0,700)||'',
+              classes:document.querySelector('#screen-marketplace')?.className||''
+            }));
+            console.log('MAP_STATE='+JSON.stringify(mapState));
+            console.log('PAGE_ERRORS='+JSON.stringify(errors.slice(0,20)));
+            if(mapState.leaflet<1)throw new Error('Marketplace map container not rendered');
+            if(mapState.markers<1)throw new Error('Marketplace map rendered zero marker elements');
+            if(state.viewport.scrollH>state.viewport.h+120)throw new Error(`Marketplace mobile page is still vertically oversized: ${state.viewport.scrollH} > ${state.viewport.h}`);
+            console.log(`LISTIA_BROWSER_SMOKE_OK cards=${state.cards} markers=${mapState.markers}`);
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node smoke.js
