@@ -5,7 +5,9 @@
 
   const nativeFetch=window.fetch.bind(window);
   const RPC_MARKERS=['/rest/v1/rpc/marketplace_public_feed','/rest/v1/rpc/marketplace_public_feed_v2','/rest/v1/rpc/marketplace_public_feed_v3'];
+  const QROO_MARK='/functions/v1/marketplace-map-qroo';
   const API_FEED='/api/marketplace/feed';
+  const QROO_API='/api/marketplace/qroo';
   const GEO_KEY='listia_marketplace_geo_v1';
   const EDGE_PAGE_SIZE=30;
   const EDGE_MAX_OFFSET=5000;
@@ -46,6 +48,10 @@
 
   window.fetch=async function(input,init={}){
     const raw=rawUrl(input);
+    if(raw.includes(QROO_MARK)){
+      let search='';try{search=new URL(raw,location.href).search}catch{}
+      return nativeFetch(`${QROO_API}${search}`,{method:'GET',headers:{accept:'application/json'},cache:'no-store',credentials:'same-origin'});
+    }
     if(raw.includes(API_FEED)){
       const body=await bodyFor(input,init);
       if(body?.mode==='map')return fullMap(body);
@@ -70,7 +76,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>openMarketplace(),{once:true});else openMarketplace();
   window.addEventListener('popstate',()=>openMarketplace());
 
-  window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_GEO||geo,approximate,usePrecise:precise,refresh:approximate,disableNear:()=>{window.LISTIA_MARKETPLACE_NEAR_ACTIVE=false}};
-  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.2',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
+  window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_NEAR_ACTIVE?(window.LISTIA_MARKETPLACE_GEO||geo):null,approximate,usePrecise:precise,refresh:approximate,disableNear:()=>{window.LISTIA_MARKETPLACE_NEAR_ACTIVE=false}};
+  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.3',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
   window.LISTIA_MARKETPLACE_GATEWAY_CONTRACT='EDGE_PAGE_SIZE=30';
 })();
