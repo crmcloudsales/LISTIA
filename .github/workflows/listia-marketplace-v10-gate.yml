@@ -42,6 +42,7 @@ jobs:
           node --check public/marketplace-assistant.js
           node --check public/marketplace-experience-v8.js
           node --check public/marketplace.js
+          node --check public/marketplace-qroo-map.js
           node --check public/listia-voice.js
           node --check public/sw.js
 
@@ -66,6 +67,7 @@ jobs:
           const assistant=fs.readFileSync('public/marketplace-assistant.js','utf8');
           const experience=fs.readFileSync('public/marketplace-experience-v8.js','utf8');
           const base=fs.readFileSync('public/marketplace.js','utf8');
+          const qroo=fs.readFileSync('public/marketplace-qroo-map.js','utf8');
           const voice=fs.readFileSync('public/listia-voice.js','utf8');
           const need=(text,s,label)=>{if(!text.includes(s))throw new Error(`${label} missing ${s}`)};
           need(assistant,'!window.LISTIA_MARKETPLACE_EXPERIENCE&&isMarketplaceIntent','legacy voice deferral');
@@ -73,6 +75,7 @@ jobs:
           if(!/(hasta|under|up to)/i.test(experience)) throw new Error('experience missing max-budget language parser');
           for(const s of ['registerAction','SpeechRecognition','speechSynthesis']) need(voice,s,'voice');
           for(const s of ['marketplace-interest-button','sendInterestClick']) need(base,s,'interest CTA');
+          for(const s of ['marketplace-pro-tabs','marketplace-pro-voice','qroo-intel-chart']) need(qroo,s,'marketplace pro shell');
           console.log('Marketplace UI + voice + interest contracts OK');
           NODE
 
@@ -100,7 +103,8 @@ jobs:
           const fs=require('fs');
           const sw=fs.readFileSync('public/sw.js','utf8');
           const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          if(!sw.includes('listia-pwa-v0.27.10-icon-v14')) throw new Error('Current PWA cache marker missing');
+          if(!sw.includes('listia-pwa-v0.27.11-marketplace-pro')) throw new Error('Current PWA cache marker missing');
+          if(!sw.includes('/marketplace-pro-mobile.css?v=1')) throw new Error('Marketplace PRO stylesheet missing from cache');
           for(const s of ['icon_version=15','outer_white_background=removed','white_house=required','extra_wheel_or_pointer=forbidden']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
           NODE
           python3 - <<'PY'
@@ -132,7 +136,7 @@ jobs:
           deployed=0
           for i in $(seq 1 45); do
             sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
-            if grep -Fq 'listia-pwa-v0.27.10-icon-v14' <<<"$sw"; then deployed=1; break; fi
+            if grep -Fq 'listia-pwa-v0.27.11-marketplace-pro' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
@@ -142,6 +146,8 @@ jobs:
           fetch "$base/marketplace?gate=$GITHUB_SHA" /tmp/marketplace.html
           fetch "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" /tmp/gateway.js
           fetch "$base/marketplace-experience-v8.js?v=3&gate=$GITHUB_SHA" /tmp/experience.js
+          fetch "$base/marketplace-qroo-map.js?v=1&gate=$GITHUB_SHA" /tmp/qroo.js
+          fetch "$base/marketplace-pro-mobile.css?v=1&gate=$GITHUB_SHA" /tmp/pro.css
           fetch "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" /tmp/voice.js
           fetch "$base/manifest.webmanifest?v=16&gate=$GITHUB_SHA" /tmp/manifest.json
           need /tmp/gateway.js "version:'10.0.0'" 'gateway version'
@@ -150,6 +156,9 @@ jobs:
           need /tmp/experience.js 'marketplaceV8SearchButton' 'Buscar UI'
           need /tmp/experience.js 'marketplace-v8-voice-button' 'voice UI'
           need /tmp/experience.js 'data-marketplace-view="map"' 'map/list toggle'
+          need /tmp/qroo.js 'marketplace-pro-tabs' 'PRO mobile tabs'
+          need /tmp/qroo.js 'qroo-intel-chart' 'Market Intelligence chart'
+          need /tmp/pro.css '100dvh' 'no-scroll mobile viewport'
           need /tmp/voice.js 'registerAction' 'voice action registry'
           need /tmp/marketplace.html 'LISTIA' '/marketplace shell'
           python3 - <<'PY'
