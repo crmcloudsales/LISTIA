@@ -4,7 +4,9 @@ const TURNSTILE_VERIFY='https://challenges.cloudflare.com/turnstile/v0/siteverif
 const SUPABASE_INTEREST='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-interest-auth';
 const SUPABASE_FEED='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-feed-edge';
 const SUPABASE_DEMAND='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-demand-event';
+const SUPABASE_QROO_MAP='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo';
 const FEED_KEYS=new Set(['p_limit','p_offset','p_q','p_operation','p_property_type','p_min_price','p_max_price','p_bedrooms','p_lat','p_lng']);
+const QROO_KEYS=new Set(['mode','municipality','place','operation','property_type','currency','confidence','min_price','max_price','min_bedrooms','limit']);
 const DEMAND_EVENTS=new Set(['listing_view','search','voice_search','map_view','property_open','save','share','contact_click','whatsapp_click','inquiry']);
 const DEMAND_KEYS=new Set(['event_name','session_id','listing_id','query_text','metadata']);
 const headers={
@@ -36,6 +38,16 @@ async function handleFeed(req,env){
   if(Object.keys(body).some(k=>!FEED_KEYS.has(k)))return json({error:'unexpected_parameter'},400,cors(req));
   if(!env.MARKETPLACE_EDGE_PROOF)return json({error:'firewall_not_configured'},503,cors(req));
   const upstream=await fetch(SUPABASE_FEED,{method:'POST',headers:{'content-type':'application/json','x-listia-edge-proof':env.MARKETPLACE_EDGE_PROOF,'x-listia-client-ip':clientIp(req)},body:JSON.stringify(body)}).catch(()=>null);
+  if(!upstream)return json({error:'upstream_unavailable'},503,cors(req));
+  const text=await upstream.text();return new Response(text,{status:upstream.status,headers:{...headers,...cors(req),'content-type':upstream.headers.get('content-type')||headers['content-type']}});
+}
+async function handleQroo(req){
+  if(req.method==='OPTIONS')return empty(204,cors(req));
+  if(req.method!=='GET')return json({error:'method_not_allowed'},405,{'allow':'GET, OPTIONS',...cors(req)});
+  if(!browserCaller(req))return json({error:'origin_not_allowed'},403,cors(req));
+  const url=new URL(req.url),params=new URLSearchParams();
+  for(const [k,v] of url.searchParams){if(!QROO_KEYS.has(k))return json({error:'unexpected_parameter'},400,cors(req));if(String(v).length>160)return json({error:'parameter_too_long'},400,cors(req));params.append(k,v)}
+  const upstream=await fetch(`${SUPABASE_QROO_MAP}?${params.toString()}`,{method:'GET',headers:{accept:'application/json'},cache:'no-store'}).catch(()=>null);
   if(!upstream)return json({error:'upstream_unavailable'},503,cors(req));
   const text=await upstream.text();return new Response(text,{status:upstream.status,headers:{...headers,...cors(req),'content-type':upstream.headers.get('content-type')||headers['content-type']}});
 }
@@ -82,6 +94,7 @@ export default {async fetch(req,env){
     const cf=req.cf||{};const lat=Number(cf.latitude),lng=Number(cf.longitude);return json({latitude:Number.isFinite(lat)?lat:null,longitude:Number.isFinite(lng)?lng:null,city:cf.city||null,region:cf.region||null,country:cf.country||null,source:'cloudflare_approximate'},200,cors(req));
   }
   if(url.pathname==='/api/marketplace/feed'||url.pathname==='/marketplace/api/feed')return handleFeed(req,env);
+  if(url.pathname==='/api/marketplace/qroo')return handleQroo(req);
   if(url.pathname==='/api/marketplace/events')return handleDemand(req,env);
   if(url.pathname==='/api/interest')return handleInterest(req,env);
   return env.ASSETS.fetch(req);
