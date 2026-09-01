@@ -1,0 +1,32 @@
+name: LISTIA PWA Live DOM Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-pwa-live-dom-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch production document and modules
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fLsS --connect-timeout 10 --max-time 30 'https://app.listiaapp.com/?audit=modules' -o /tmp/index.html
+          echo '--- SCRIPT TAGS LIVE ---'
+          grep -Eo '<script[^>]+src="[^"]+"[^>]*>' /tmp/index.html || true
+          echo '--- CORE CHECK ---'
+          for s in config.js app.js i18n.js; do grep -Fq "$s" /tmp/index.html || { echo "MISSING LIVE CORE: $s"; exit 1; }; done
+          echo '--- ADVANCED MODULE CHECK ---'
+          missing=0
+          for s in marketplace.js listia-voice.js runtime.js account-center.js office-modules.js; do
+            if grep -Fq "$s" /tmp/index.html; then echo "LIVE MODULE OK: $s"; else echo "LIVE MODULE MISSING: $s"; missing=1; fi
+          done
+          test "$missing" = 0
