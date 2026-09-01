@@ -58,13 +58,6 @@ jobs:
           for name in ['192','512','maskable-192','maskable-512','180','32']:
               s = s.replace(f'/listia-app-icon-{name}.png?v=15',f'/listia-app-icon-{name}.png?v=16')
           sw.write_text(s, encoding='utf-8')
-
-          gate = Path('.github/workflows/listia-marketplace-v10-gate.yml')
-          g = gate.read_text(encoding='utf-8')
-          g = g.replace('listia-pwa-v0.27.11-marketplace-pro','listia-pwa-v0.27.12-pwa-audit')
-          g = g.replace("          need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'\n",'')
-          g = g.replace("          need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'\n",'')
-          gate.write_text(g, encoding='utf-8')
           PY
 
       - name: Validate patched app
@@ -94,6 +87,6 @@ jobs:
           if git diff --quiet; then exit 0; fi
           git config user.name 'LISTIA PWA Audit Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/index.html public/sw.js .github/workflows/listia-marketplace-v10-gate.yml
-          git commit -m 'fix(pwa): align manifests remove stale pricing and harden live gate'
+          git add public/index.html public/sw.js
+          git commit -m 'fix(pwa): align manifests and remove stale pricing'
           git push origin HEAD:main
