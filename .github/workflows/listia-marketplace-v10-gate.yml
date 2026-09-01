@@ -100,11 +100,11 @@ jobs:
           const fs=require('fs');
           const sw=fs.readFileSync('public/sw.js','utf8');
           const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          if(!sw.includes('listia-pwa-v0.27.9-marketplace-v14')) throw new Error('PWA cache v14 missing');
-          for(const s of ['release=0.27.7','icon_version=13','background_mode=full_bleed_gradient','white_background=forbidden','house_scale=0.72']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
+          if(!sw.includes('listia-pwa-v0.27.10-icon-v14')) throw new Error('Current PWA cache marker missing');
+          for(const s of ['icon_version=15','outer_white_background=removed','white_house=required','extra_wheel_or_pointer=forbidden']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
           NODE
           python3 - <<'PY'
-          import json,glob
+          import json,glob,re
           files=glob.glob('public/manifest*.webmanifest')
           assert len(files)>=12, f'Expected >=12 manifests, got {len(files)}'
           for path in files:
@@ -113,8 +113,9 @@ jobs:
               assert icons, f'{path}: no icons'
               assert any('maskable' in str(i.get('purpose','')) for i in icons), f'{path}: no maskable icon'
               for icon in icons:
-                  assert str(icon.get('src','')).endswith('?v=13'), f'{path}: non-v13 icon {icon}'
-          print('PWA cache + icon v13 contract OK')
+                  src=str(icon.get('src',''))
+                  assert re.search(r'\?v=(15|16)$',src), f'{path}: stale icon cache ref {icon}'
+          print('PWA cache + white-tile-free icon contract OK')
           PY
 
   live-production:
@@ -131,7 +132,7 @@ jobs:
           deployed=0
           for i in $(seq 1 45); do
             sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
-            if grep -Fq 'listia-pwa-v0.27.9-marketplace-v14' <<<"$sw"; then deployed=1; break; fi
+            if grep -Fq 'listia-pwa-v0.27.10-icon-v14' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
@@ -142,7 +143,7 @@ jobs:
           fetch "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" /tmp/gateway.js
           fetch "$base/marketplace-experience-v8.js?v=3&gate=$GITHUB_SHA" /tmp/experience.js
           fetch "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" /tmp/voice.js
-          fetch "$base/manifest.webmanifest?v=13&gate=$GITHUB_SHA" /tmp/manifest.json
+          fetch "$base/manifest.webmanifest?v=16&gate=$GITHUB_SHA" /tmp/manifest.json
           need /tmp/gateway.js "version:'10.0.0'" 'gateway version'
           need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'
           need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'
@@ -152,10 +153,11 @@ jobs:
           need /tmp/voice.js 'registerAction' 'voice action registry'
           need /tmp/marketplace.html 'LISTIA' '/marketplace shell'
           python3 - <<'PY'
-          import json
+          import json,re
           m=json.load(open('/tmp/manifest.json'))
-          assert any('maskable' in str(i.get('purpose','')) for i in m.get('icons',[]))
-          assert all(str(i.get('src','')).endswith('?v=13') for i in m.get('icons',[]))
+          icons=m.get('icons',[])
+          assert any('maskable' in str(i.get('purpose','')) for i in icons)
+          assert all(re.search(r'\?v=(15|16)$',str(i.get('src',''))) for i in icons)
           print('Live PWA assets OK')
           PY
 
