@@ -15,13 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Read QROO edge response
+      - name: Verify QROO edge responses
         shell: bash
         run: |
           set -Eeuo pipefail
-          url='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo?mode=clusters&limit=3'
-          code=$(curl -sS -o /tmp/body -w '%{http_code}' "$url" || true)
-          echo "STATUS=$code"
-          cat /tmp/body
-          echo
-          test "$code" = 200
+          check(){
+            name="$1"; url="$2";
+            code=$(curl -sS -o "/tmp/$name.body" -w '%{http_code}' "$url" || true)
+            echo "$name STATUS=$code"
+            head -c 2000 "/tmp/$name.body"; echo
+            test "$code" = 200
+          }
+          check clusters 'https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo?mode=clusters&limit=3'
+          check microzones 'https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo?mode=microzones&limit=3&operation=sale&currency=MXN'
