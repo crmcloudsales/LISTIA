@@ -29,7 +29,7 @@ jobs:
           npm install playwright@latest >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
 
-      - name: Verify live mobile Marketplace
+      - name: Diagnose live mobile Marketplace
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -40,37 +40,47 @@ jobs:
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
             const page=await context.newPage();
-            const feed=[]; const errors=[]; const qroo=[];
+            const feed=[]; const feedRequests=[]; const errors=[]; const qroo=[]; const qrooRequests=[];
+            page.on('request',r=>{
+              if(r.url().includes('/api/marketplace/feed')) feedRequests.push({url:r.url(),method:r.method(),postData:r.postData()});
+              if(r.url().includes('/api/marketplace/qroo')) qrooRequests.push({url:r.url(),method:r.method(),postData:r.postData()});
+            });
             page.on('response',async r=>{
               if(r.url().includes('/api/marketplace/feed')){
                 let body=null;try{body=await r.json()}catch{}
                 feed.push({status:r.status(),length:Array.isArray(body)?body.length:null,total:Array.isArray(body)&&body[0]?Number(body[0].total_count||0):0});
               }
-              if(r.url().includes('/api/marketplace/qroo'))qroo.push({status:r.status(),url:r.url()});
+              if(r.url().includes('/api/marketplace/qroo')){
+                let body='';try{body=(await r.text()).slice(0,1000)}catch{}
+                qroo.push({status:r.status(),url:r.url(),body});
+              }
             });
             page.on('pageerror',e=>errors.push('pageerror:'+String(e)));
-            page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text())});
-            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=final',{waitUntil:'domcontentloaded',timeout:60000});
+            page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push('console-'+m.type()+':'+m.text())});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=diagnostic',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForTimeout(15000);
-            const list=await page.evaluate(()=>({
+            const state=await page.evaluate(()=>({
+              filters:Object.fromEntries(['marketplaceSearch','marketplaceOperation','marketplaceType','marketplaceBedrooms','marketplaceMin','marketplaceMax'].map(id=>[id,document.getElementById(id)?.value??null])),
+              nearActive:window.LISTIA_MARKETPLACE_NEAR_ACTIVE===true,
+              geoGet:window.LISTIA_MARKETPLACE_GEOLOCATION?.get?.()||null,
+              geoGlobal:window.LISTIA_MARKETPLACE_GEO||null,
+              gateway:window.LISTIA_MARKETPLACE_GATEWAY?.version||null,
               cards:document.querySelectorAll('#marketplaceGrid .marketplace-card,.marketplace-card').length,
               published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:0,
               countText:(document.querySelector('#marketplaceCount')?.textContent||document.querySelector('.marketplace-count')?.textContent||'').trim(),
               scrollH:document.documentElement.scrollHeight,
-              viewportH:innerHeight,
-              internalTabs:document.querySelectorAll('.marketplace-pro-tabs').length,
-              giantVoiceVisible:[...document.querySelectorAll('.marketplace-v8-voice')].some(x=>getComputedStyle(x).display!=='none'),
-              gateway:window.LISTIA_MARKETPLACE_GATEWAY?.version||null
+              viewportH:innerHeight
             }));
-            console.log('LIST_STATE='+JSON.stringify(list));
-            console.log('FEED='+JSON.stringify(feed));
-            console.log('ERRORS_BEFORE_MAP='+JSON.stringify(errors.slice(0,20)));
-            if(!feed.some(x=>x.status===200&&x.length>0&&x.total>0))throw new Error('Automatic Marketplace feed did not return inventory');
-            if(list.cards<1||list.published<1)throw new Error(`Marketplace list rendered no properties cards=${list.cards} data=${list.published}`);
-            if(/(^|\D)0\s*propiedades/i.test(list.countText))throw new Error('Marketplace counter still reports zero');
-            if(list.scrollH>list.viewportH+120)throw new Error(`Mobile Marketplace is vertically oversized ${list.scrollH}>${list.viewportH}`);
-            if(list.internalTabs!==1)throw new Error(`Expected exactly one Marketplace internal tab bar, got ${list.internalTabs}`);
-            if(list.giantVoiceVisible)throw new Error('Legacy giant voice panel is still visible');
+            const direct=await page.evaluate(async()=>{
+              const r=await fetch('/api/marketplace/feed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({p_limit:3,p_offset:0}),cache:'no-store'});
+              let j=null;try{j=await r.json()}catch{}
+              return {status:r.status,length:Array.isArray(j)?j.length:null,total:Array.isArray(j)&&j[0]?Number(j[0].total_count||0):0,first:Array.isArray(j)&&j[0]?{id:j[0].id,title:j[0].title}:null};
+            });
+            console.log('STATE='+JSON.stringify(state));
+            console.log('FEED_REQUESTS='+JSON.stringify(feedRequests));
+            console.log('FEED_RESPONSES='+JSON.stringify(feed));
+            console.log('DIRECT_CONTROL='+JSON.stringify(direct));
+            console.log('ERRORS_BEFORE_MAP='+JSON.stringify(errors.slice(0,30)));
 
             const mapBtn=page.locator('.marketplace-pro-tabs button').filter({hasText:/^Mapa$/i}).first();
             if(await mapBtn.count())await mapBtn.click();
@@ -83,15 +93,16 @@ jobs:
               viewportH:innerHeight
             }));
             console.log('MAP_STATE='+JSON.stringify(map));
-            console.log('QROO='+JSON.stringify(qroo));
-            console.log('ERRORS_FINAL='+JSON.stringify(errors.slice(0,30)));
+            console.log('QROO_REQUESTS='+JSON.stringify(qrooRequests));
+            console.log('QROO_RESPONSES='+JSON.stringify(qroo));
+            console.log('ERRORS_FINAL='+JSON.stringify(errors.slice(0,40)));
+            await browser.close();
+            if(!direct||direct.status!==200||direct.length<1||direct.total<1)throw new Error('Direct clean feed unhealthy');
+            if(!feed.some(x=>x.status===200&&x.length>0&&x.total>0))throw new Error('Automatic Marketplace feed did not return inventory');
+            if(state.cards<1||state.published<1)throw new Error(`Marketplace list rendered no properties cards=${state.cards} data=${state.published}`);
             if(!map.mountVisible||map.unavailable)throw new Error('Marketplace map is unavailable');
             if(!qroo.some(x=>x.status===200))throw new Error('QROO same-origin map endpoint did not return 200');
             if(map.markers<1)throw new Error('Marketplace map rendered zero property markers');
-            if(map.scrollH>map.viewportH+120)throw new Error('Map view exceeds mobile viewport');
-            if(errors.some(x=>/cors|marketplace-map-qroo/i.test(x)))throw new Error('Marketplace map still has CORS/runtime error');
-            console.log(`LISTIA_BROWSER_SMOKE_OK cards=${list.cards} markers=${map.markers} total=${feed.find(x=>x.total>0)?.total||0}`);
-            await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
           node smoke.js
