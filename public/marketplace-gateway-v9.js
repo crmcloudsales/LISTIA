@@ -19,11 +19,11 @@
   if(geo)window.LISTIA_MARKETPLACE_GEO=geo;
 
   async function approximate(){try{const r=await nativeFetch('/api/marketplace/location',{cache:'no-store'});if(!r.ok)return geo;const x=await r.json();return save(x)||geo}catch{return geo}}
-  async function precise(){if(!navigator.geolocation)return geo;return new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>resolve(save({latitude:p.coords.latitude,longitude:p.coords.longitude,source:'browser_precise'})||geo),()=>resolve(geo),{enableHighAccuracy:false,timeout:7000,maximumAge:300000}))}
+  async function precise(){window.LISTIA_MARKETPLACE_NEAR_ACTIVE=true;if(!navigator.geolocation)return geo;return new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>resolve(save({latitude:p.coords.latitude,longitude:p.coords.longitude,source:'browser_precise'})||geo),()=>resolve(geo),{enableHighAccuracy:false,timeout:7000,maximumAge:300000}))}
   approximate();
 
   async function bodyFor(input,init){if(init?.body){try{return JSON.parse(String(init.body))}catch{return {}}}if(input instanceof Request){try{return JSON.parse(await input.clone().text())}catch{return {}}}return {}}
-  function preserveExplicitGeo(body){const out={...body};if(!valid(out.p_lat,out.p_lng)){delete out.p_lat;delete out.p_lng}return out}
+  function preserveExplicitGeo(body){const out={...body};if(!window.LISTIA_MARKETPLACE_NEAR_ACTIVE||!valid(out.p_lat,out.p_lng)){delete out.p_lat;delete out.p_lng}return out}
   const jsonResponse=rows=>new Response(JSON.stringify(rows),{status:200,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store'}});
 
   async function fullMap(body){
@@ -70,7 +70,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>openMarketplace(),{once:true});else openMarketplace();
   window.addEventListener('popstate',()=>openMarketplace());
 
-  window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_GEO||geo,approximate,usePrecise:precise,refresh:approximate};
-  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.1',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
+  window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_GEO||geo,approximate,usePrecise:precise,refresh:approximate,disableNear:()=>{window.LISTIA_MARKETPLACE_NEAR_ACTIVE=false}};
+  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.2',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
   window.LISTIA_MARKETPLACE_GATEWAY_CONTRACT='EDGE_PAGE_SIZE=30';
 })();
