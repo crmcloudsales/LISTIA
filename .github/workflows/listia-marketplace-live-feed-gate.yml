@@ -1,0 +1,62 @@
+name: LISTIA Marketplace Live Feed Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/marketplace*.js'
+      - 'public/marketplace*.css'
+      - 'public/listia-bootstrap.js'
+      - 'public/sw.js'
+      - 'listia-app-worker/index.js'
+      - '.github/workflows/listia-marketplace-live-feed-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for exact Marketplace build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base='https://app.listiaapp.com'
+          ready=0
+          for i in $(seq 1 50); do
+            gateway="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/marketplace-gateway-v9.js?gate=$GITHUB_SHA" || true)"
+            runtime="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/marketplace-native-runtime-v1.js?gate=$GITHUB_SHA" || true)"
+            mobile="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/marketplace-native-mobile-v1.css?gate=$GITHUB_SHA" || true)"
+            if grep -Fq 'EDGE_PAGE_SIZE=30' <<<"$gateway" && grep -Fq 'LISTIA_MARKETPLACE_NATIVE_RUNTIME_V1' <<<"$runtime" && grep -Fq '100dvh' <<<"$mobile"; then
+              ready=1
+              break
+            fi
+            sleep 6
+          done
+          test "$ready" = 1
+          echo 'Exact Marketplace runtime is live'
+
+      - name: Verify protected feed is non-empty
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base='https://app.listiaapp.com'
+          code=$(curl -sS -o /tmp/no-origin.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
+          echo "No-origin feed -> ${code}"
+          test "$code" = '403'
+          code=$(curl -sS -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{"p_limit":24,"p_offset":0}')
+          echo "Trusted-origin feed -> ${code}"
+          test "$code" = '200'
+          python3 - <<'PY'
+          import json
+          rows=json.load(open('/tmp/feed.json'))
+          assert isinstance(rows,list), type(rows)
+          assert len(rows)>0, 'Marketplace feed returned zero rows'
+          total=int(rows[0].get('total_count') or 0)
+          assert total>0, f'Invalid total_count={total}'
+          assert rows[0].get('id'), 'First listing has no id'
+          print(f'LIVE MARKETPLACE FEED OK rows={len(rows)} total_count={total}')
+          PY
