@@ -23,14 +23,14 @@
   approximate();
 
   async function bodyFor(input,init){if(init?.body){try{return JSON.parse(String(init.body))}catch{return {}}}if(input instanceof Request){try{return JSON.parse(await input.clone().text())}catch{return {}}}return {}}
-  function withGeo(body){const g=window.LISTIA_MARKETPLACE_GEO||geo;if(g&&valid(g.latitude,g.longitude)){body.p_lat=Number(g.latitude);body.p_lng=Number(g.longitude)}return body}
+  function preserveExplicitGeo(body){const out={...body};if(!valid(out.p_lat,out.p_lng)){delete out.p_lat;delete out.p_lng}return out}
   const jsonResponse=rows=>new Response(JSON.stringify(rows),{status:200,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store'}});
 
   async function fullMap(body){
     const requested=Math.min(Math.max(Number(body.p_limit)||MAP_REQUEST_MAX,1),MAP_REQUEST_MAX);
     const start=Math.min(Math.max(Number(body.p_offset)||0,0),EDGE_MAX_OFFSET);
     if(start>=EDGE_MAX_OFFSET)return jsonResponse([]);
-    const clean=withGeo({...body});delete clean.mode;
+    const clean=preserveExplicitGeo({...body});delete clean.mode;
     const out=[];let offset=start,total=Infinity;
     while(out.length<requested&&offset<EDGE_MAX_OFFSET&&offset<total){
       const size=Math.min(EDGE_PAGE_SIZE,requested-out.length,EDGE_MAX_OFFSET-offset);
@@ -49,10 +49,10 @@
     if(raw.includes(API_FEED)){
       const body=await bodyFor(input,init);
       if(body?.mode==='map')return fullMap(body);
-      return nativeFetch(API_FEED,{...init,method:init?.method||'POST',headers:{...(init?.headers||{}),'content-type':'application/json'},body:JSON.stringify(withGeo(body)),cache:'no-store',credentials:'same-origin'});
+      return nativeFetch(API_FEED,{...init,method:init?.method||'POST',headers:{...(init?.headers||{}),'content-type':'application/json'},body:JSON.stringify(preserveExplicitGeo(body)),cache:'no-store',credentials:'same-origin'});
     }
     if(RPC_MARKERS.some(m=>raw.includes(m))){
-      const body=withGeo(await bodyFor(input,init));
+      const body=preserveExplicitGeo(await bodyFor(input,init));
       return nativeFetch(API_FEED,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store',credentials:'same-origin'});
     }
     return nativeFetch(input,init);
@@ -71,6 +71,6 @@
   window.addEventListener('popstate',()=>openMarketplace());
 
   window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_GEO||geo,approximate,usePrecise:precise,refresh:approximate};
-  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.0',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
+  window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.1',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
   window.LISTIA_MARKETPLACE_GATEWAY_CONTRACT='EDGE_PAGE_SIZE=30';
 })();
