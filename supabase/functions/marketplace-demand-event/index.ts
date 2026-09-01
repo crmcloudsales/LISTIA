@@ -1,42 +1,9 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { MARKETPLACE_EDGE_PROOF_SHA256 } from './firewall-proof.ts'
-
-const SUPABASE_URL=Deno.env.get('SUPABASE_URL')!
-const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const ALLOWED=new Set(['listing_view','search','voice_search','map_view','property_open','save','share','contact_click','whatsapp_click','inquiry'])
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY'}})
-const clean=(v:unknown,n:number)=>String(v??'').trim().slice(0,n)
-const hex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')
+const SUPABASE_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ALLOWED=new Set(['listing_view','search','voice_search','map_view','property_open','save','share','contact_click','whatsapp_click','inquiry']);
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY'}}),clean=(v:unknown,n:number)=>String(v??'').trim().slice(0,n),hex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 async function sha256(v:string){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))))}
 async function edgeVerified(req:Request){const proof=req.headers.get('x-listia-edge-proof')||'';return proof.length>=32&&(await sha256(proof))===MARKETPLACE_EDGE_PROOF_SHA256}
-
-Deno.serve(async(req:Request)=>{
-  if(req.method!=='POST')return json({error:'method_not_allowed'},405)
-  if(!(await edgeVerified(req)))return json({error:'edge_firewall_required'},403)
-  const len=Number(req.headers.get('content-length')||0);if(len>5000)return json({error:'payload_too_large'},413)
-  const body=await req.json().catch(()=>null) as any
-  if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_json'},400)
-  const event=clean(body.event_name,40).toLowerCase();if(!ALLOWED.has(event))return json({error:'invalid_event'},400)
-  const session=clean(body.session_id,180);if(session.length<8)return json({error:'session_required'},400)
-  const ip=clean(req.headers.get('x-listia-client-ip'),120)||'unknown'
-  const ua=clean(req.headers.get('user-agent'),300)
-  const sessionHash=await sha256(`marketplace-session:${session}`)
-  const clientHash=await sha256(`marketplace-client:${ip}:${ua}`)
-  const listingRaw=clean(body.listing_id,80)
-  const listingId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingRaw)?listingRaw:null
-  if(listingRaw&&!listingId)return json({error:'invalid_listing'},400)
-  const query=clean(body.query_text,400)||null
-  const metadata=body.metadata&&typeof body.metadata==='object'&&!Array.isArray(body.metadata)?body.metadata:{}
-  const safeMeta:Record<string,unknown>={}
-  for(const k of ['view','operation','property_type','bedrooms','language','surface','action']){
-    const v=metadata[k]
-    if(typeof v==='string')safeMeta[k]=clean(v,80)
-    else if(typeof v==='number'&&Number.isFinite(v))safeMeta[k]=v
-    else if(typeof v==='boolean')safeMeta[k]=v
-  }
-  const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}})
-  const {data,error}=await admin.rpc('ingest_marketplace_demand_event_internal',{p_event_name:event,p_listing_id:listingId,p_session_hash:sessionHash,p_client_hash:clientHash,p_query_text:query,p_metadata:safeMeta,p_is_test:body.is_test===true})
-  if(error){const m=String(error.message||'');if(m.includes('rate_limited'))return json({error:'rate_limited'},429);if(m.includes('listing_not_found'))return json({error:'listing_not_found'},404);return json({error:'event_rejected'},400)}
-  return json({ok:true,event_id:data})
-})
+Deno.serve(async(req:Request)=>{if(req.method!=='POST')return json({error:'method_not_allowed'},405);if(!(await edgeVerified(req)))return json({error:'edge_firewall_required'},403);const len=Number(req.headers.get('content-length')||0);if(len>5000)return json({error:'payload_too_large'},413);const body=await req.json().catch(()=>null) as any;if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_json'},400);const event=clean(body.event_name,40).toLowerCase();if(!ALLOWED.has(event))return json({error:'invalid_event'},400);const session=clean(body.session_id,180);if(session.length<8)return json({error:'session_required'},400);const ip=clean(req.headers.get('x-listia-client-ip'),120)||'unknown',ua=clean(req.headers.get('x-listia-client-ua')||req.headers.get('user-agent'),300);const sessionHash=await sha256(`marketplace-session:${session}`),clientHash=await sha256(`marketplace-client:${ip}:${ua}`);const listingRaw=clean(body.listing_id,80),listingId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingRaw)?listingRaw:null;if(listingRaw&&!listingId)return json({error:'invalid_listing'},400);const query=clean(body.query_text,400)||null,metadata=body.metadata&&typeof body.metadata==='object'&&!Array.isArray(body.metadata)?body.metadata:{},safeMeta:Record<string,unknown>={};for(const k of ['view','operation','property_type','bedrooms','language','surface','action']){const v=metadata[k];if(typeof v==='string')safeMeta[k]=clean(v,80);else if(typeof v==='number'&&Number.isFinite(v))safeMeta[k]=v;else if(typeof v==='boolean')safeMeta[k]=v}const admin=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});const {data,error}=await admin.rpc('ingest_marketplace_demand_event_internal',{p_event_name:event,p_listing_id:listingId,p_session_hash:sessionHash,p_client_hash:clientHash,p_query_text:query,p_metadata:safeMeta,p_is_test:false});if(error){const m=String(error.message||'');if(m.includes('rate_limited'))return json({error:'rate_limited'},429);if(m.includes('listing_not_found'))return json({error:'listing_not_found'},404);return json({error:'event_rejected'},400)}return json({ok:true,event_id:data})})
