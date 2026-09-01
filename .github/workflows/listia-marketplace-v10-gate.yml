@@ -150,7 +150,7 @@ jobs:
           fetch "$base/marketplace-pro-mobile.css?v=1&gate=$GITHUB_SHA" /tmp/pro.css
           fetch "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" /tmp/voice.js
           fetch "$base/manifest.webmanifest?v=16&gate=$GITHUB_SHA" /tmp/manifest.json
-          need /tmp/gateway.js "version:'10.0.0'" 'gateway version'
+          need /tmp/gateway.js '10.0.0' 'gateway version'
           need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'
           need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'
           need /tmp/experience.js 'marketplaceV8SearchButton' 'Buscar UI'
