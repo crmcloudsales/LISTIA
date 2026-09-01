@@ -30,23 +30,24 @@ jobs:
           text = text.replace('/manifest-en.webmanifest?v=15','/manifest-en.webmanifest?v=16')
           text = text.replace('/listia-app-icon-180.png?v=15','/listia-app-icon-180.png?v=16')
           text = text.replace('/listia-app-icon-32.png?v=15','/listia-app-icon-32.png?v=16')
-
           start = text.index('<section aria-labelledby="planTitle" class="screen" id="screen-plan">')
           end = text.index('</section>', start) + len('</section>')
-          replacement = '''<section aria-labelledby="planTitle" class="screen" id="screen-plan">
-<div class="panel onboarding-panel">
-<div class="progress"><span style="width:40%"></span></div>
-<span class="eyebrow">CONFIGURACIÓN · 2 DE 5</span>
-<h1 id="planTitle">Continúa configurando LISTIA</h1>
-<p class="sub">Los planes y precios todavía no están definidos. Puedes continuar preparando tu cuenta sin seleccionar ni pagar un plan.</p>
-<p class="context-line"><span>Configurando</span> <strong id="planBusinessName">tu negocio</strong></p>
-<form id="planForm" novalidate="">
-<input id="selectedPlan" type="hidden" value="free"/>
-<div class="permission-note"><strong>Tu configuración se conserva.</strong><span>Podrás elegir una opción comercial cuando LISTIA publique oficialmente sus planes.</span></div>
-<button class="primary full" type="submit">Continuar</button>
-</form>
-</div>
-</section>'''
+          replacement = '\n'.join([
+              '<section aria-labelledby="planTitle" class="screen" id="screen-plan">',
+              '<div class="panel onboarding-panel">',
+              '<div class="progress"><span style="width:40%"></span></div>',
+              '<span class="eyebrow">CONFIGURACIÓN · 2 DE 5</span>',
+              '<h1 id="planTitle">Continúa configurando LISTIA</h1>',
+              '<p class="sub">Los planes y precios todavía no están definidos. Puedes continuar preparando tu cuenta sin seleccionar ni pagar un plan.</p>',
+              '<p class="context-line"><span>Configurando</span> <strong id="planBusinessName">tu negocio</strong></p>',
+              '<form id="planForm" novalidate="">',
+              '<input id="selectedPlan" type="hidden" value="free"/>',
+              '<div class="permission-note"><strong>Tu configuración se conserva.</strong><span>Podrás elegir una opción comercial cuando LISTIA publique oficialmente sus planes.</span></div>',
+              '<button class="primary full" type="submit">Continuar</button>',
+              '</form>',
+              '</div>',
+              '</section>'
+          ])
           text = text[:start] + replacement + text[end:]
           index.write_text(text, encoding='utf-8')
 
@@ -54,12 +55,8 @@ jobs:
           s = sw.read_text(encoding='utf-8')
           s = s.replace('listia-pwa-v0.27.11-marketplace-pro','listia-pwa-v0.27.12-pwa-audit')
           s = re.sub(r'/manifest([a-z-]*)\.webmanifest\?v=13', r'/manifest\1.webmanifest?v=16', s)
-          s = s.replace('/listia-app-icon-192.png?v=15','/listia-app-icon-192.png?v=16')
-          s = s.replace('/listia-app-icon-512.png?v=15','/listia-app-icon-512.png?v=16')
-          s = s.replace('/listia-app-icon-maskable-192.png?v=15','/listia-app-icon-maskable-192.png?v=16')
-          s = s.replace('/listia-app-icon-maskable-512.png?v=15','/listia-app-icon-maskable-512.png?v=16')
-          s = s.replace('/listia-app-icon-180.png?v=15','/listia-app-icon-180.png?v=16')
-          s = s.replace('/listia-app-icon-32.png?v=15','/listia-app-icon-32.png?v=16')
+          for name in ['192','512','maskable-192','maskable-512','180','32']:
+              s = s.replace(f'/listia-app-icon-{name}.png?v=15',f'/listia-app-icon-{name}.png?v=16')
           sw.write_text(s, encoding='utf-8')
 
           gate = Path('.github/workflows/listia-marketplace-v10-gate.yml')
