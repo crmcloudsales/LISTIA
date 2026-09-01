@@ -72,4 +72,5 @@
 
   window.LISTIA_MARKETPLACE_GEOLOCATION={get:()=>window.LISTIA_MARKETPLACE_GEO||geo,approximate,usePrecise:precise,refresh:approximate};
   window.LISTIA_MARKETPLACE_GATEWAY={version:'10.0.0',edgePageSize:EDGE_PAGE_SIZE,mapMaxOffset:EDGE_MAX_OFFSET,firewallPreserved:true};
+  window.LISTIA_MARKETPLACE_GATEWAY_CONTRACT='EDGE_PAGE_SIZE=30';
 })();
