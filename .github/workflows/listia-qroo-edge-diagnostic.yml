@@ -1,0 +1,27 @@
+name: LISTIA QROO Edge Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-qroo-edge-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qroo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read QROO edge response
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          url='https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/marketplace-map-qroo?mode=clusters&limit=3'
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' "$url" || true)
+          echo "STATUS=$code"
+          cat /tmp/body
+          echo
+          test "$code" = 200
