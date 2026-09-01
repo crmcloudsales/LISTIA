@@ -6,6 +6,7 @@ const SUPABASE_URL=Deno.env.get('SUPABASE_URL')!
 const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY'}})
 const clean=(v:unknown,n:number)=>String(v??'').trim().slice(0,n)
+const finite=(v:unknown,min:number,max:number)=>{const n=Number(v);return Number.isFinite(n)&&n>=min&&n<=max?n:null}
 const hex=(bytes:Uint8Array)=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')
 async function sha256(v:string){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))))}
 async function edgeVerified(req:Request){const proof=req.headers.get('x-listia-edge-proof')||'';return proof.length>=32&&(await sha256(proof))===MARKETPLACE_EDGE_PROOF_SHA256}
@@ -37,9 +38,11 @@ Deno.serve(async(req:Request)=>{
     p_property_type:clean(body.p_property_type,80)||null,
     p_min_price:Number.isFinite(Number(body.p_min_price))?Number(body.p_min_price):null,
     p_max_price:Number.isFinite(Number(body.p_max_price))?Number(body.p_max_price):null,
-    p_bedrooms:Number.isFinite(Number(body.p_bedrooms))?Number(body.p_bedrooms):null
+    p_bedrooms:Number.isFinite(Number(body.p_bedrooms))?Number(body.p_bedrooms):null,
+    p_lat:finite(body.p_lat,-90,90),
+    p_lng:finite(body.p_lng,-180,180)
   }
-  const {data,error}=await admin.rpc('marketplace_public_feed_edge',params)
+  const {data,error}=await admin.rpc('marketplace_public_feed_edge_v3',params)
   if(error)return json({error:'feed_unavailable'},502)
   return json(Array.isArray(data)?data:[])
 })
