@@ -1,0 +1,80 @@
+/* LISTIA Marketplace PRO mobile shell — app-only visual layer */
+.qroo-map-kicker,.qroo-map-count,.qroo-intel-head p,.qroo-intel-controls button,.qroo-trend-status strong,.qroo-trend-status span,.qroo-intel-card>small,.qroo-intel-metrics span,.qroo-intel-card em{font-size:12px!important}
+.marketplace-pro-toolbar{display:none}
+.qroo-intel-chart{display:grid;gap:8px;margin:10px 0 12px;padding:10px;border:1px solid #ece8f4;border-radius:14px;background:#faf8ff}.qroo-intel-chart-title{font-size:12px;font-weight:850;color:#4b4358}.qroo-intel-bar{display:grid;grid-template-columns:86px 1fr 32px;gap:7px;align-items:center;font-size:12px;color:#4f4859}.qroo-intel-bar-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qroo-intel-track{height:8px;border-radius:999px;background:#ece7f4;overflow:hidden}.qroo-intel-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#6d35f2,#a05dff)}.qroo-intel-bar b{text-align:right;font-size:12px}
+@media(max-width:650px){
+html,body{overflow:hidden!important;height:100%;height:100dvh}
+.app-shell:has(#screen-marketplace.active){height:100dvh;min-height:0!important;overflow:hidden;justify-content:flex-start;padding:calc(4px + env(safe-area-inset-top)) 0 calc(70px + env(safe-area-inset-bottom))!important}
+.app-shell:has(#screen-marketplace.active) .brandbar{width:100%;max-width:none;min-height:54px;height:54px;padding:5px 10px;margin:0;flex:0 0 54px}
+.app-shell:has(#screen-marketplace.active) .brand-logo{width:76px;margin-left:2px}
+.app-shell:has(#screen-marketplace.active) .language-select{min-height:36px;height:36px;font-size:12px;padding:5px 7px}
+.app-shell:has(#screen-marketplace.active) .main{flex:1;min-height:0;padding:0 8px;display:block}
+#screen-marketplace.active{height:100%;max-width:none!important;min-height:0}
+#screen-marketplace.active .marketplace-panel{height:100%;min-height:0;padding:7px!important;border-radius:18px;display:flex;flex-direction:column;overflow:hidden;box-shadow:none}
+#screen-marketplace.active .back{width:32px;height:32px;top:7px;right:7px;font-size:18px;z-index:5}
+#screen-marketplace.active .marketplace-head{flex:0 0 auto;padding-right:36px;min-height:42px;align-items:center}
+#screen-marketplace.active .marketplace-kicker{font-size:12px;margin:0}
+#screen-marketplace.active .marketplace-head h1{font-size:20px!important;margin:2px 0 0!important;line-height:1.05}
+#screen-marketplace.active .marketplace-head .sub{display:none}
+#screen-marketplace.active .marketplace-filters{flex:0 0 42px;display:flex!important;gap:6px;margin:4px 0!important;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:0 1px}
+#screen-marketplace.active .marketplace-filters::-webkit-scrollbar{display:none}
+#screen-marketplace.active .marketplace-filters input,#screen-marketplace.active .marketplace-filters select{flex:0 0 112px;min-width:112px;min-height:40px;height:40px;padding:7px 9px;font-size:12px;border-radius:11px}
+#screen-marketplace.active #marketplaceSearch{flex-basis:190px;min-width:190px}
+#screen-marketplace.active .marketplace-count{flex:0 0 20px;height:20px;line-height:20px;margin:0!important;font-size:12px}
+.marketplace-pro-toolbar{display:grid;grid-template-columns:1fr auto;gap:6px;flex:0 0 42px;margin:2px 0 5px}
+.marketplace-pro-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:3px;border-radius:12px;background:#0d0d13;border:1px solid rgba(255,255,255,.07)}
+.marketplace-pro-tabs button,.marketplace-pro-voice{min-height:34px;border:0;border-radius:9px;font-size:12px;font-weight:850;color:#aaa6b2;background:transparent;padding:5px 7px;white-space:nowrap}
+.marketplace-pro-tabs button.active{background:linear-gradient(135deg,#814cff,#6228ed);color:#fff;box-shadow:0 6px 14px rgba(109,53,242,.2)}
+.marketplace-pro-voice{background:#1b1722;color:#cdbdff;border:1px solid rgba(159,131,255,.18);padding:5px 9px}
+#qrooMarketplaceMapMount{flex:1;min-height:0;overflow:hidden}
+#screen-marketplace.active #marketplaceLoadMore{display:none!important}
+#screen-marketplace.active.marketplace-pro-map #marketplaceGrid,#screen-marketplace.active.marketplace-pro-map .qroo-intelligence{display:none!important}
+#screen-marketplace.active.marketplace-pro-map .qroo-map-shell{height:100%;margin:0;border-radius:14px;display:block;overflow:hidden}
+#screen-marketplace.active.marketplace-pro-map .qroo-map-head,#screen-marketplace.active.marketplace-pro-map .qroo-map-side,#screen-marketplace.active.marketplace-pro-map .qroo-map-note{display:none!important}
+#screen-marketplace.active.marketplace-pro-map .qroo-map-layout{height:100%;display:block;border:0}
+#screen-marketplace.active.marketplace-pro-map .qroo-map-stage{height:100%;min-height:0!important}
+#screen-marketplace.active.marketplace-pro-list #qrooMarketplaceMapMount{display:none}
+#screen-marketplace.active.marketplace-pro-list #marketplaceGrid{flex:1;min-height:0;display:flex!important;gap:9px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;padding:1px 0 4px}
+#screen-marketplace.active.marketplace-pro-list #marketplaceGrid::-webkit-scrollbar{display:none}
+#screen-marketplace.active.marketplace-pro-list .marketplace-card{flex:0 0 min(86vw,340px);height:100%;min-height:0;scroll-snap-align:center;display:grid;grid-template-rows:minmax(0,1.05fr) auto;border-radius:16px}
+#screen-marketplace.active.marketplace-pro-list .marketplace-media{aspect-ratio:auto;min-height:0}
+#screen-marketplace.active.marketplace-pro-list .marketplace-body{padding:10px;gap:6px}
+#screen-marketplace.active.marketplace-pro-list .marketplace-title{font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#screen-marketplace.active.marketplace-pro-list .marketplace-price{font-size:17px}
+#screen-marketplace.active.marketplace-pro-list .marketplace-location,#screen-marketplace.active.marketplace-pro-list .marketplace-meta{font-size:12px;line-height:1.3}
+#screen-marketplace.active.marketplace-pro-list .marketplace-badge{font-size:12px!important;padding:5px 8px!important}
+#screen-marketplace.active.marketplace-pro-list .marketplace-interest-button{min-height:42px;font-size:13px;border-radius:12px}
+#screen-marketplace.active.marketplace-pro-intel #marketplaceGrid{display:none!important}
+#screen-marketplace.active.marketplace-pro-intel #qrooMarketplaceMapMount{display:block;height:100%}
+#screen-marketplace.active.marketplace-pro-intel .qroo-map-shell{height:100%;margin:0;border-radius:14px;overflow:hidden;background:#fff}
+#screen-marketplace.active.marketplace-pro-intel .qroo-map-head,#screen-marketplace.active.marketplace-pro-intel .qroo-map-layout,#screen-marketplace.active.marketplace-pro-intel .qroo-map-note{display:none!important}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intelligence{display:block!important;height:100%;overflow:hidden;padding:10px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-head{margin-bottom:7px;gap:7px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-head h3{font-size:18px;margin:2px 0}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-head p{display:none}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-controls{gap:4px;flex-wrap:nowrap;overflow-x:auto}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-controls button{padding:6px 9px;white-space:nowrap}
+#screen-marketplace.active.marketplace-pro-intel .qroo-trend-status{margin:0 0 7px;padding:7px 8px;gap:4px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-trend-status span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-grid{display:flex!important;gap:7px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;height:calc(100% - 180px)}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-grid::-webkit-scrollbar{display:none}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-card{flex:0 0 min(78vw,300px);height:100%;scroll-snap-align:center;padding:10px;overflow:hidden}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-place{font-size:14px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-metrics{gap:6px;margin-top:8px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-metrics b{font-size:12px}
+#screen-marketplace.active.marketplace-pro-intel .qroo-intel-card em{margin-top:8px}
+#screen-marketplace-detail.active{height:100%;max-width:none!important;overflow:hidden}
+#screen-marketplace-detail.active .marketplace-panel{height:100%;overflow:hidden;padding:8px!important;border-radius:18px}
+#screen-marketplace-detail.active .marketplace-detail{height:100%;overflow:hidden;display:flex;flex-direction:column;gap:7px}
+#screen-marketplace-detail.active .marketplace-detail-gallery{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) 62px;overflow:hidden}
+#screen-marketplace-detail.active .marketplace-detail-media{height:100%;aspect-ratio:auto!important;border-radius:14px}
+#screen-marketplace-detail.active .marketplace-gallery-rail{height:62px;overflow-x:auto;overflow-y:hidden}
+#screen-marketplace-detail.active .marketplace-gallery-thumb{height:56px;flex-basis:72px}
+#screen-marketplace-detail.active .marketplace-detail-title{font-size:18px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#screen-marketplace-detail.active .marketplace-detail-copy,#screen-marketplace-detail.active .marketplace-map{display:none!important}
+#screen-marketplace-detail.active .marketplace-detail-grid{display:flex;gap:5px;overflow-x:auto}
+#screen-marketplace-detail.active .marketplace-detail-stat{flex:0 0 auto;padding:7px 9px}
+#screen-marketplace-detail.active .marketplace-detail-stat span,#screen-marketplace-detail.active .marketplace-detail-stat strong{font-size:12px}
+#screen-marketplace-detail.active .marketplace-detail-cta{margin-top:auto;padding:5px 0}
+#screen-marketplace-detail.active .marketplace-detail-cta .marketplace-interest-button{min-height:44px;font-size:13px}
+}
