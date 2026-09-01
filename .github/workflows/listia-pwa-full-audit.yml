@@ -51,6 +51,7 @@ jobs:
               if path and not path.endswith('/') and not (root/path).exists(): bad.append(ref)
           assert not bad, 'Missing local assets referenced by index.html: '+', '.join(bad)
           assert 'US$97' not in html and 'US$147' not in html and '>Free<' not in html and '>Premium<' not in html
+          assert '/listia-bootstrap.js?v=1' in html, 'Canonical bootstrap is not wired into index.html'
           print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}; marketplace screens are dynamic')
           Path('/tmp/index-scripts.txt').write_text('\n'.join(urlparse(x).path.lstrip('/') for x in p.scripts if urlparse(x).path.endswith('.js')),encoding='utf-8')
           PY
@@ -61,7 +62,17 @@ jobs:
           set -Eeuo pipefail
           while IFS= read -r f; do test -f "public/$f" || { echo "Missing script public/$f"; exit 1; }; node --check "public/$f"; done < /tmp/index-scripts.txt
           node --check public/sw.js
-          echo 'Loaded JavaScript syntax OK'
+          node --check public/listia-bootstrap.js
+          python3 - <<'PY' >/tmp/bootstrap-js.txt
+          import re
+          s=open('public/listia-bootstrap.js',encoding='utf-8').read()
+          block=re.search(r'const JS=\[(.*?)\];',s,re.S)
+          assert block, 'Bootstrap JS list missing'
+          for x in re.findall(r"['\"](/[^'\"]+\.js(?:\?[^'\"]*)?)['\"]",block.group(1)):
+              print(x.split('?',1)[0].lstrip('/'))
+          PY
+          while IFS= read -r f; do test -f "public/$f" || { echo "Missing bootstrap module public/$f"; exit 1; }; node --check "public/$f"; done < /tmp/bootstrap-js.txt
+          echo 'Loaded and bootstrapped JavaScript syntax OK'
 
       - name: Audit manifests and canonical app identity
         shell: bash
@@ -92,13 +103,18 @@ jobs:
           from pathlib import Path
           from urllib.parse import urlparse
           import re
-          s=Path('public/sw.js').read_text(encoding='utf-8'); assert 'listia-pwa-v0.27.12-pwa-audit' in s
+          s=Path('public/sw.js').read_text(encoding='utf-8')
+          assert 'listia-pwa-v0.27.13-bootstrap' in s, 'Current cache marker missing'
           refs=re.findall(r'"(/[^"]+)"',s); missing=[]
           for ref in refs:
               path=urlparse(ref).path.lstrip('/')
               if path and not path.endswith('/') and not (Path('public')/path).exists(): missing.append(ref)
           assert not missing, 'Missing SW precache assets: '+', '.join(sorted(set(missing)))
-          assert '?v=13' not in s, 'Stale v13 cache references remain'
+          manifests=[r for r in refs if '.webmanifest' in r]
+          appicons=[r for r in refs if '/listia-app-icon-' in r]
+          assert manifests and all('?v=16' in r for r in manifests), 'Manifest cache version mismatch'
+          assert appicons and all('?v=16' in r for r in appicons), 'App icon cache version mismatch'
+          assert '/listia-bootstrap.js?v=1' in refs, 'Bootstrap not precached'
           print(f'Service Worker refs OK count={len(set(refs))}')
           PY
 
