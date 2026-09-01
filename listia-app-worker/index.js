@@ -81,7 +81,7 @@ export default {async fetch(req,env){
     if(req.method==='OPTIONS')return empty(204,cors(req));if(req.method!=='GET')return json({error:'method_not_allowed'},405,{'allow':'GET, OPTIONS',...cors(req)});if(!browserCaller(req))return json({error:'origin_not_allowed'},403,cors(req));
     const cf=req.cf||{};const lat=Number(cf.latitude),lng=Number(cf.longitude);return json({latitude:Number.isFinite(lat)?lat:null,longitude:Number.isFinite(lng)?lng:null,city:cf.city||null,region:cf.region||null,country:cf.country||null,source:'cloudflare_approximate'},200,cors(req));
   }
-  if(url.pathname==='/api/marketplace/feed')return handleFeed(req,env);
+  if(url.pathname==='/api/marketplace/feed'||url.pathname==='/marketplace/api/feed')return handleFeed(req,env);
   if(url.pathname==='/api/marketplace/events')return handleDemand(req,env);
   if(url.pathname==='/api/interest')return handleInterest(req,env);
   return env.ASSETS.fetch(req);
