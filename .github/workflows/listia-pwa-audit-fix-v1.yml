@@ -1,0 +1,102 @@
+name: LISTIA PWA Audit Fix v1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-pwa-audit-fix-v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified PWA fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          index = Path('public/index.html')
+          text = index.read_text(encoding='utf-8')
+          text = text.replace('/manifest-en.webmanifest?v=15','/manifest-en.webmanifest?v=16')
+          text = text.replace('/listia-app-icon-180.png?v=15','/listia-app-icon-180.png?v=16')
+          text = text.replace('/listia-app-icon-32.png?v=15','/listia-app-icon-32.png?v=16')
+
+          start = text.index('<section aria-labelledby="planTitle" class="screen" id="screen-plan">')
+          end = text.index('</section>', start) + len('</section>')
+          replacement = '''<section aria-labelledby="planTitle" class="screen" id="screen-plan">
+<div class="panel onboarding-panel">
+<div class="progress"><span style="width:40%"></span></div>
+<span class="eyebrow">CONFIGURACIÓN · 2 DE 5</span>
+<h1 id="planTitle">Continúa configurando LISTIA</h1>
+<p class="sub">Los planes y precios todavía no están definidos. Puedes continuar preparando tu cuenta sin seleccionar ni pagar un plan.</p>
+<p class="context-line"><span>Configurando</span> <strong id="planBusinessName">tu negocio</strong></p>
+<form id="planForm" novalidate="">
+<input id="selectedPlan" type="hidden" value="free"/>
+<div class="permission-note"><strong>Tu configuración se conserva.</strong><span>Podrás elegir una opción comercial cuando LISTIA publique oficialmente sus planes.</span></div>
+<button class="primary full" type="submit">Continuar</button>
+</form>
+</div>
+</section>'''
+          text = text[:start] + replacement + text[end:]
+          index.write_text(text, encoding='utf-8')
+
+          sw = Path('public/sw.js')
+          s = sw.read_text(encoding='utf-8')
+          s = s.replace('listia-pwa-v0.27.11-marketplace-pro','listia-pwa-v0.27.12-pwa-audit')
+          s = re.sub(r'/manifest([a-z-]*)\.webmanifest\?v=13', r'/manifest\1.webmanifest?v=16', s)
+          s = s.replace('/listia-app-icon-192.png?v=15','/listia-app-icon-192.png?v=16')
+          s = s.replace('/listia-app-icon-512.png?v=15','/listia-app-icon-512.png?v=16')
+          s = s.replace('/listia-app-icon-maskable-192.png?v=15','/listia-app-icon-maskable-192.png?v=16')
+          s = s.replace('/listia-app-icon-maskable-512.png?v=15','/listia-app-icon-maskable-512.png?v=16')
+          s = s.replace('/listia-app-icon-180.png?v=15','/listia-app-icon-180.png?v=16')
+          s = s.replace('/listia-app-icon-32.png?v=15','/listia-app-icon-32.png?v=16')
+          sw.write_text(s, encoding='utf-8')
+
+          gate = Path('.github/workflows/listia-marketplace-v10-gate.yml')
+          g = gate.read_text(encoding='utf-8')
+          g = g.replace('listia-pwa-v0.27.11-marketplace-pro','listia-pwa-v0.27.12-pwa-audit')
+          g = g.replace("          need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'\n",'')
+          g = g.replace("          need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'\n",'')
+          gate.write_text(g, encoding='utf-8')
+          PY
+
+      - name: Validate patched app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ! grep -Eq 'US\$(0|97|147)|>Free<|>Pro<|>Premium<' public/index.html
+          grep -Fq '/manifest-en.webmanifest?v=16' public/index.html
+          grep -Fq 'listia-pwa-v0.27.12-pwa-audit' public/sw.js
+          ! grep -Eq 'manifest[^" ]*\.webmanifest\?v=13' public/sw.js
+          node --check public/app.js
+          node --check public/sw.js
+          python3 - <<'PY'
+          import json,glob
+          for p in glob.glob('public/manifest*.webmanifest'):
+              d=json.load(open(p,encoding='utf-8'))
+              assert d.get('name') and d.get('short_name')
+              assert d.get('display') == 'standalone'
+              assert d.get('icons')
+          print('Manifest validation OK')
+          PY
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'LISTIA PWA Audit Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html public/sw.js .github/workflows/listia-marketplace-v10-gate.yml
+          git commit -m 'fix(pwa): align manifests remove stale pricing and harden live gate'
+          git push origin HEAD:main
