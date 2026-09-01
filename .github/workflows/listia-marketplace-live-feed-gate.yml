@@ -47,9 +47,23 @@ jobs:
           code=$(curl -sS -o /tmp/no-origin.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
           echo "No-origin feed -> ${code}"
           test "$code" = '403'
-          code=$(curl -sS -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{"p_limit":24,"p_offset":0}')
-          echo "Trusted-origin feed -> ${code}"
-          test "$code" = '200'
+          code=$(curl -sS -D /tmp/feed.headers -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" \
+            -H 'Origin: https://app.listiaapp.com' \
+            -H 'Referer: https://app.listiaapp.com/marketplace' \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Sec-Fetch-Mode: cors' \
+            -H 'Accept: application/json' \
+            -H 'User-Agent: Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36' \
+            -H 'content-type: application/json' \
+            --data '{"p_limit":24,"p_offset":0}')
+          echo "Browser-equivalent trusted feed -> ${code}"
+          if [ "$code" != '200' ]; then
+            echo '--- response headers ---'
+            cat /tmp/feed.headers || true
+            echo '--- response body ---'
+            cat /tmp/feed.json || true
+            exit 1
+          fi
           python3 - <<'PY'
           import json
           rows=json.load(open('/tmp/feed.json'))
