@@ -17,67 +17,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply verified PWA fixes
+      - name: Normalize PWA identity
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
-
-          index = Path('public/index.html')
-          text = index.read_text(encoding='utf-8')
-          text = text.replace('/manifest-en.webmanifest?v=15','/manifest-en.webmanifest?v=16')
-          text = text.replace('/listia-app-icon-180.png?v=15','/listia-app-icon-180.png?v=16')
-          text = text.replace('/listia-app-icon-32.png?v=15','/listia-app-icon-32.png?v=16')
-          start = text.index('<section aria-labelledby="planTitle" class="screen" id="screen-plan">')
-          end = text.index('</section>', start) + len('</section>')
-          replacement = '\n'.join([
-              '<section aria-labelledby="planTitle" class="screen" id="screen-plan">',
-              '<div class="panel onboarding-panel">',
-              '<div class="progress"><span style="width:40%"></span></div>',
-              '<span class="eyebrow">CONFIGURACIÓN · 2 DE 5</span>',
-              '<h1 id="planTitle">Continúa configurando LISTIA</h1>',
-              '<p class="sub">Los planes y precios todavía no están definidos. Puedes continuar preparando tu cuenta sin seleccionar ni pagar un plan.</p>',
-              '<p class="context-line"><span>Configurando</span> <strong id="planBusinessName">tu negocio</strong></p>',
-              '<form id="planForm" novalidate="">',
-              '<input id="selectedPlan" type="hidden" value="free"/>',
-              '<div class="permission-note"><strong>Tu configuración se conserva.</strong><span>Podrás elegir una opción comercial cuando LISTIA publique oficialmente sus planes.</span></div>',
-              '<button class="primary full" type="submit">Continuar</button>',
-              '</form>',
-              '</div>',
-              '</section>'
-          ])
-          text = text[:start] + replacement + text[end:]
-          index.write_text(text, encoding='utf-8')
-
-          sw = Path('public/sw.js')
-          s = sw.read_text(encoding='utf-8')
-          s = s.replace('listia-pwa-v0.27.11-marketplace-pro','listia-pwa-v0.27.12-pwa-audit')
-          s = re.sub(r'/manifest([a-z-]*)\.webmanifest\?v=13', r'/manifest\1.webmanifest?v=16', s)
-          for name in ['192','512','maskable-192','maskable-512','180','32']:
-              s = s.replace(f'/listia-app-icon-{name}.png?v=15',f'/listia-app-icon-{name}.png?v=16')
-          sw.write_text(s, encoding='utf-8')
+          import json,glob,re
+          for path in glob.glob('public/manifest*.webmanifest'):
+              p=Path(path)
+              d=json.loads(p.read_text(encoding='utf-8'))
+              d['name']='Listia'
+              d['short_name']='Listia'
+              for icon in d.get('icons') or []:
+                  src=str(icon.get('src',''))
+                  icon['src']=re.sub(r'\?v=\d+$','?v=16',src)
+              p.write_text(json.dumps(d,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
           PY
 
-      - name: Validate patched app
+      - name: Validate canonical PWA identity
         shell: bash
         run: |
           set -Eeuo pipefail
-          ! grep -Eq 'US\$(0|97|147)|>Free<|>Pro<|>Premium<' public/index.html
-          grep -Fq '/manifest-en.webmanifest?v=16' public/index.html
-          grep -Fq 'listia-pwa-v0.27.12-pwa-audit' public/sw.js
-          ! grep -Eq 'manifest[^" ]*\.webmanifest\?v=13' public/sw.js
-          node --check public/app.js
-          node --check public/sw.js
           python3 - <<'PY'
-          import json,glob
-          for p in glob.glob('public/manifest*.webmanifest'):
+          import json,glob,re
+          files=glob.glob('public/manifest*.webmanifest')
+          assert len(files)>=12
+          for p in files:
               d=json.load(open(p,encoding='utf-8'))
-              assert d.get('name') and d.get('short_name')
-              assert d.get('display') == 'standalone'
-              assert d.get('icons')
-          print('Manifest validation OK')
+              assert d.get('name')=='Listia', p
+              assert d.get('short_name')=='Listia', p
+              assert d.get('display')=='standalone', p
+              icons=d.get('icons') or []
+              assert icons, p
+              assert all(re.search(r'\?v=16$',str(i.get('src',''))) for i in icons), p
+          print('All manifest identities are canonical Listia')
           PY
 
       - name: Commit fixes
@@ -87,6 +61,6 @@ jobs:
           if git diff --quiet; then exit 0; fi
           git config user.name 'LISTIA PWA Audit Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/index.html public/sw.js
-          git commit -m 'fix(pwa): align manifests and remove stale pricing'
+          git add public/manifest*.webmanifest
+          git commit -m 'fix(pwa): normalize Listia identity across manifests'
           git push origin HEAD:main
