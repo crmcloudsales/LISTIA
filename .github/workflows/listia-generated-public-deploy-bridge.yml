@@ -8,6 +8,7 @@ on:
   workflow_run:
     workflows:
       - 'LISTIA Marketplace Runtime Sync'
+      - 'LISTIA Marketplace Visible Mobile'
       - 'LISTIA My Website Runtime'
       - 'LISTIA App Icon v17'
       - 'LISTIA Market Intelligence Runtime'
