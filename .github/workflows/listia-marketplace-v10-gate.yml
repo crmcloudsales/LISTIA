@@ -69,7 +69,7 @@ jobs:
           console.log('Marketplace gateway capability contract OK');
           NODE
 
-      - name: Validate Marketplace UI, voice and latest-search-wins contracts
+      - name: Validate Marketplace UI, voice and mobile cleanup contracts
         run: |
           set -Eeuo pipefail
           node <<'NODE'
@@ -87,8 +87,8 @@ jobs:
           for(const s of ['registerAction','SpeechRecognition','speechSynthesis']) need(voice,s,'voice');
           for(const s of ['marketplace-interest-button','sendInterestClick','pendingReset=false','queueMicrotask(()=>load(true))']) need(base,s,'marketplace core');
           for(const s of ['marketplace-pro-tabs','marketplace-pro-voice','qroo-intel-chart']) need(qroo,s,'marketplace map shell');
-          for(const s of ['resetMarketplaceList','scrollLeft=0','MutationObserver']) need(nativeRuntime,s,'native mobile reset runtime');
-          console.log('Marketplace UI + voice + latest-search-wins contracts OK');
+          for(const s of ['resetMarketplaceList','scrollLeft=0','MutationObserver','suppressMobileLegacyUi','.marketplace-save-row']) need(nativeRuntime,s,'native mobile runtime');
+          console.log('Marketplace UI + voice + mobile cleanup contracts OK');
           NODE
 
       - name: Validate Marketplace firewall contract
@@ -112,12 +112,14 @@ jobs:
           python scripts/audit-public-runtime.py
           grep -Fq '/marketplace.js?v=13' public/config.js
           grep -Fq '/marketplace.js?v=13' public/sw.js
-          grep -Fq '/marketplace-native-runtime-v1.js?v=3' public/config.js
-          grep -Fq '/marketplace-native-runtime-v1.js?v=3' public/sw.js
-          grep -Fq '/marketplace-visible-mobile-v2.css' public/config.js
-          grep -Fq '/marketplace-visible-mobile-v2.css' public/sw.js
+          grep -Fq '/marketplace-native-runtime-v1.js?v=4' public/config.js
+          grep -Fq '/marketplace-native-runtime-v1.js?v=4' public/sw.js
+          grep -Fq '/marketplace-visible-mobile-v3.css' public/config.js
+          grep -Fq '/marketplace-visible-mobile-v3.css' public/sw.js
           ! grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/config.js
           ! grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/sw.js
+          ! grep -Fq '/marketplace-visible-mobile-v2.css' public/config.js
+          ! grep -Fq '/marketplace-visible-mobile-v2.css' public/sw.js
           grep -Fq 'outer_white_background=removed' public/APP_ICON_VERSION.txt
           grep -Fq 'extra_wheel_or_pointer=forbidden' public/APP_ICON_VERSION.txt
 
@@ -134,7 +136,7 @@ jobs:
           deployed=0
           for i in $(seq 1 45); do
             sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
-            if grep -Fq '/marketplace.js?v=13' <<<"$sw" && grep -Fq 'mobile-v2-runtime-v3' <<<"$sw"; then deployed=1; break; fi
+            if grep -Fq '/marketplace.js?v=13' <<<"$sw" && grep -Fq 'mobile-v3-runtime-v4' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
@@ -142,15 +144,16 @@ jobs:
           fetch "$base/marketplace?gate=$GITHUB_SHA" /tmp/marketplace.html
           fetch "$base/marketplace-gateway-v9.js?v=5&gate=$GITHUB_SHA" /tmp/gateway.js
           fetch "$base/marketplace.js?v=13&gate=$GITHUB_SHA" /tmp/marketplace.js
-          fetch "$base/marketplace-native-runtime-v1.js?v=3&gate=$GITHUB_SHA" /tmp/native.js
-          fetch "$base/marketplace-visible-mobile-v2.css?gate=$GITHUB_SHA" /tmp/mobile.css
+          fetch "$base/marketplace-native-runtime-v1.js?v=4&gate=$GITHUB_SHA" /tmp/native.js
+          fetch "$base/marketplace-visible-mobile-v3.css?gate=$GITHUB_SHA" /tmp/mobile.css
           fetch "$base/manifest.webmanifest?gate=$GITHUB_SHA" /tmp/manifest.json
           grep -Fq 'EDGE_PAGE_SIZE=30' /tmp/gateway.js
           grep -Fq 'firewallPreserved:true' /tmp/gateway.js
           grep -Fq 'pendingReset=false' /tmp/marketplace.js
           grep -Fq 'queueMicrotask(()=>load(true))' /tmp/marketplace.js
           grep -Fq 'resetMarketplaceList' /tmp/native.js
-          grep -Fq 'marketplace-filters' /tmp/mobile.css
+          grep -Fq 'suppressMobileLegacyUi' /tmp/native.js
+          grep -Fq 'marketplace-save-row' /tmp/mobile.css
           grep -Fq 'LISTIA' /tmp/marketplace.html
           python3 - <<'PY'
           import json
