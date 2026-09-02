@@ -28,31 +28,38 @@ jobs:
       - name: Verify JavaScript syntax and runtime parity
         run: |
           node --check public/config.js
+          node --check public/sw.js
           node --check public/marketplace-native-runtime-v1.js
           node --check public/marketplace-gateway-v9.js
           node --check public/marketplace.js
           node --check public/marketplace-qroo-map.js
+          python scripts/audit-public-runtime.py
           python - <<'PY'
           from pathlib import Path
           import re
           c=Path('public/config.js').read_text(encoding='utf-8')
           s=Path('public/sw.js').read_text(encoding='utf-8')
+          q=Path('public/marketplace-qroo-map.js').read_text(encoding='utf-8')
           for name in ('marketplace-native-runtime-v1.js','marketplace-gateway-v9.js','marketplace.js','marketplace-qroo-map.js'):
               cv=re.search(rf'/{re.escape(name)}\?v=(\d+)',c)
               sv=re.search(rf'/{re.escape(name)}\?v=(\d+)',s)
               assert cv and sv and cv.group(1)==sv.group(1),(name,cv.group(1) if cv else None,sv.group(1) if sv else None)
+          assert '/marketplace.js?v=13' in c and '/marketplace.js?v=13' in s
+          assert '/marketplace-qroo-map.js?v=3' in c and '/marketplace-qroo-map.js?v=3' in s
           assert '/marketplace-pro-mobile.css?v=1' in c
           assert '/marketplace-native-mobile-v1.css?v=1' in c
           assert 'listiaMarketplaceNativeRuntimeV1Loader' in c
-          print('Marketplace runtime parity verified')
+          assert "let proMode='list';" in q
+          assert "setProMode(matchMedia('(max-width:650px)').matches?'list':'map')" in q
+          print('Marketplace runtime parity + mobile default-list verified')
           PY
-      - name: Commit synchronized runtime loader
+      - name: Commit synchronized Marketplace runtime
         run: |
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/config.js
-          git commit -m 'fix: execute current Marketplace runtime and mobile layers' || exit 0
+          git add public/config.js public/sw.js public/marketplace-qroo-map.js
+          git commit -m 'fix: open LISTIA Marketplace on visible properties in mobile' || exit 0
           git pull --rebase origin main
           git push origin main
 
-# Runtime sync trigger v2
+# Runtime sync trigger v3
