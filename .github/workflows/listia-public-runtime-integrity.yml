@@ -1,0 +1,40 @@
+name: LISTIA Public Runtime Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'scripts/audit-public-runtime.py'
+      - '.github/workflows/listia-public-runtime-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-public-runtime-integrity
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit public runtime graph
+        run: python scripts/audit-public-runtime.py
+      - name: Check JavaScript syntax for critical runtime
+        run: |
+          node --check public/config.js
+          node --check public/sw.js
+          node --check public/marketplace-native-runtime-v1.js
+          node --check public/marketplace-gateway-v9.js
+          node --check public/marketplace.js
+          node --check public/marketplace-qroo-map.js
+          node --check public/listings-my-website.js
+          node --check public/market-intelligence.js
