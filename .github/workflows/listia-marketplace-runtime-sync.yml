@@ -28,6 +28,7 @@ jobs:
       - name: Verify JavaScript syntax and runtime parity
         run: |
           node --check public/config.js
+          node --check public/marketplace-native-runtime-v1.js
           node --check public/marketplace-gateway-v9.js
           node --check public/marketplace.js
           node --check public/marketplace-qroo-map.js
@@ -36,12 +37,13 @@ jobs:
           import re
           c=Path('public/config.js').read_text(encoding='utf-8')
           s=Path('public/sw.js').read_text(encoding='utf-8')
-          for name in ('marketplace-gateway-v9.js','marketplace.js','marketplace-qroo-map.js'):
+          for name in ('marketplace-native-runtime-v1.js','marketplace-gateway-v9.js','marketplace.js','marketplace-qroo-map.js'):
               cv=re.search(rf'/{re.escape(name)}\?v=(\d+)',c)
               sv=re.search(rf'/{re.escape(name)}\?v=(\d+)',s)
               assert cv and sv and cv.group(1)==sv.group(1),(name,cv.group(1) if cv else None,sv.group(1) if sv else None)
           assert '/marketplace-pro-mobile.css?v=1' in c
           assert '/marketplace-native-mobile-v1.css?v=1' in c
+          assert 'listiaMarketplaceNativeRuntimeV1Loader' in c
           print('Marketplace runtime parity verified')
           PY
       - name: Commit synchronized runtime loader
@@ -53,4 +55,4 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
-# Runtime sync trigger v1
+# Runtime sync trigger v2
