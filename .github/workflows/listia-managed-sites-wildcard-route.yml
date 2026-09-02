@@ -25,6 +25,7 @@ jobs:
       TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
       ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-app
+      LEGACY_WORKER_NAME: listia-managed-sites
     steps:
       - name: Ensure wildcard LISTIA tenant route
         shell: bash
@@ -40,13 +41,19 @@ jobs:
             code=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Accept: application/json' -o "$out" -w '%{http_code}' "$api" || true)
             [[ "$code" == 200 ]] || continue
             count=$(jq --arg p "$pattern" '[.result[]|select(.pattern==$p)]|length' "$out")
+            route_id=$(jq -r --arg p "$pattern" '[.result[]|select(.pattern==$p)][0].id // ""' "$out")
             script=$(jq -r --arg p "$pattern" '[.result[]|select(.pattern==$p)][0].script // ""' "$out")
             if [[ "$count" -gt 1 ]]; then echo 'Ambiguous wildcard route'; exit 1; fi
-            if [[ "$count" == 1 ]]; then
-              [[ "$script" == "$WORKER_NAME" ]] || { echo "Wildcard owned by ${script}; refusing overwrite"; exit 1; }
-              success="$source"; break
-            fi
             body=$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
+            if [[ "$count" == 1 ]]; then
+              if [[ "$script" == "$WORKER_NAME" ]]; then success="$source"; break; fi
+              if [[ "$script" != "$LEGACY_WORKER_NAME" ]]; then echo "Wildcard owned by ${script}; refusing overwrite"; exit 1; fi
+              updated="/tmp/update-${source}.json"
+              c=$(curl -sS --max-time 25 -X PUT -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data "$body" -o "$updated" -w '%{http_code}' "${api}/${route_id}" || true)
+              echo "Legacy LISTIA wildcard migration (${source}): HTTP ${c}"
+              if [[ "$c" =~ ^2[0-9][0-9]$ ]] && jq -e '.success==true' "$updated" >/dev/null; then success="$source"; break; fi
+              continue
+            fi
             created="/tmp/create-${source}.json"
             c=$(curl -sS --max-time 25 -X POST -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data "$body" -o "$created" -w '%{http_code}' "$api" || true)
             if [[ "$c" =~ ^2[0-9][0-9]$ ]] && jq -e '.success==true' "$created" >/dev/null; then success="$source"; break; fi
