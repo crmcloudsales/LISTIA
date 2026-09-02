@@ -1,19 +1,23 @@
 name: LISTIA Managed Site Browser Smoke
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - 'Deploy LISTIA App to Cloudflare Workers'
+    types: [completed]
     branches: [main]
-    paths:
-      - 'listia-app-worker/index.js'
-      - 'wrangler-listia-app.jsonc'
-      - '.github/workflows/listia-managed-site-browser-smoke.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: listia-managed-site-browser-smoke
+  cancel-in-progress: true
+
 jobs:
   bonavista-mobile:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,7 +44,7 @@ jobs:
             const errors=[];
             page.on('pageerror',e=>errors.push(String(e)));
             page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-            const response=await page.goto('https://bonavista.listiaapp.com/?managed_smoke=1',{waitUntil:'domcontentloaded',timeout:60000});
+            const response=await page.goto('https://bonavista.listiaapp.com/?managed_smoke=2',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForTimeout(6000);
             const state=await page.evaluate(()=>({
               title:document.title,
