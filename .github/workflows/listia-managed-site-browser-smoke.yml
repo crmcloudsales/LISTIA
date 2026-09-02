@@ -1,0 +1,70 @@
+name: LISTIA Managed Site Browser Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'listia-app-worker/index.js'
+      - 'wrangler-listia-app.jsonc'
+      - '.github/workflows/listia-managed-site-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bonavista-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install Playwright Chromium
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p /tmp/listia-managed-site-smoke && cd /tmp/listia-managed-site-smoke
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Verify Bonavista managed site
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /tmp/listia-managed-site-smoke
+          cat > smoke.js <<'NODE'
+          const { chromium, devices } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
+            const page=await context.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            const response=await page.goto('https://bonavista.listiaapp.com/?managed_smoke=1',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(6000);
+            const state=await page.evaluate(()=>({
+              title:document.title,
+              cards:document.querySelectorAll('.property').length,
+              interests:document.querySelectorAll('.interest').length,
+              powered:(document.body.innerText||'').includes('Powered by LISTIA'),
+              brand:(document.body.innerText||'').includes('Bonavista Realtors'),
+              siteNotFound:/Site not found|Sitio no encontrado/i.test(document.body.innerText||''),
+              bodyWidth:document.body.scrollWidth,
+              viewport:innerWidth
+            }));
+            const health=await page.request.get('https://bonavista.listiaapp.com/.well-known/listia-health');
+            const healthJson=await health.json().catch(()=>null);
+            console.log('BONAVISTA='+JSON.stringify(state));
+            console.log('HEALTH='+JSON.stringify({status:health.status(),json:healthJson}));
+            console.log('ERRORS='+JSON.stringify(errors.slice(0,10)));
+            if(response?.status()!==200)throw new Error('bonavista_not_200');
+            if(!state.brand||!state.powered||state.siteNotFound)throw new Error('managed_site_identity_failed');
+            if(state.cards<1||state.interests<1)throw new Error('managed_site_inventory_missing');
+            if(state.bodyWidth>state.viewport+4)throw new Error('managed_site_horizontal_overflow');
+            if(health.status()!==200||!healthJson?.ok||!healthJson?.managed)throw new Error('managed_site_health_failed');
+            if(errors.some(x=>/CORS|502|Site temporarily unavailable/i.test(x)))throw new Error('managed_site_runtime_error');
+            console.log(`LISTIA_MANAGED_SITE_SMOKE_OK cards=${state.cards} host=bonavista.listiaapp.com`);
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node smoke.js
