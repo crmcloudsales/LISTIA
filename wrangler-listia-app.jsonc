@@ -6,9 +6,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": true,
     "not_found_handling": "single-page-application",
     "html_handling": "auto-trailing-slash"
   }
 }
-// Marketplace human-firewall: API routes execute Worker code before static assets.
+// Worker-first is required so LISTIA tenant subdomains, health routes and Marketplace APIs are handled before SPA static fallback.
