@@ -49,17 +49,18 @@ jobs:
               powered:(document.body.innerText||'').includes('Powered by LISTIA'),
               brand:(document.body.innerText||'').includes('Bonavista Realtors'),
               siteNotFound:/Site not found|Sitio no encontrado/i.test(document.body.innerText||''),
+              brokenImages:[...document.images].filter(i=>i.complete&&i.naturalWidth===0).length,
               bodyWidth:document.body.scrollWidth,
               viewport:innerWidth
             }));
+            await page.screenshot({path:'/tmp/listia-managed-site-smoke/bonavista-mobile.png',fullPage:true});
             const health=await page.request.get('https://bonavista.listiaapp.com/.well-known/listia-health');
             const healthJson=await health.json().catch(()=>null);
-            console.log('BONAVISTA='+JSON.stringify(state));
-            console.log('HEALTH='+JSON.stringify({status:health.status(),json:healthJson}));
-            console.log('ERRORS='+JSON.stringify(errors.slice(0,10)));
+            console.log('BONAVISTA='+JSON.stringify(state)); console.log('HEALTH='+JSON.stringify({status:health.status(),json:healthJson})); console.log('ERRORS='+JSON.stringify(errors.slice(0,10)));
             if(response?.status()!==200)throw new Error('bonavista_not_200');
             if(!state.brand||!state.powered||state.siteNotFound)throw new Error('managed_site_identity_failed');
             if(state.cards<1||state.interests<1)throw new Error('managed_site_inventory_missing');
+            if(state.brokenImages>0)throw new Error('managed_site_broken_images');
             if(state.bodyWidth>state.viewport+4)throw new Error('managed_site_horizontal_overflow');
             if(health.status()!==200||!healthJson?.ok||!healthJson?.managed)throw new Error('managed_site_health_failed');
             if(errors.some(x=>/CORS|502|Site temporarily unavailable/i.test(x)))throw new Error('managed_site_runtime_error');
@@ -68,3 +69,12 @@ jobs:
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
           node smoke.js
+
+      - name: Upload Bonavista visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: listia-bonavista-mobile-evidence
+          path: /tmp/listia-managed-site-smoke/bonavista-mobile.png
+          if-no-files-found: warn
+          retention-days: 7
