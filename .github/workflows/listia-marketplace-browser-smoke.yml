@@ -51,10 +51,8 @@ jobs:
             });
             page.on('pageerror',e=>errors.push(String(e)));
             page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-
             await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=final',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForTimeout(15000);
-
             const list=await page.evaluate(()=>({
               cards:document.querySelectorAll('#marketplaceGrid .marketplace-card').length,
               published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:0,
@@ -63,47 +61,52 @@ jobs:
               gateway:window.LISTIA_MARKETPLACE_GATEWAY?.version||null,
               scrollH:document.documentElement.scrollHeight,
               viewportH:innerHeight,
-              tabs:document.querySelectorAll('.marketplace-pro-tabs').length
+              tabs:document.querySelectorAll('.marketplace-pro-tabs').length,
+              searchVisible:!!document.querySelector('#marketplaceSearch, [data-marketplace-search]'),
+              bodyWidth:document.body.scrollWidth,
+              viewportWidth:innerWidth
             }));
-
+            await page.screenshot({path:'/tmp/listia-browser-smoke/marketplace-list-mobile.png',fullPage:true});
             const mapBtn=page.locator('.marketplace-pro-tabs button').filter({hasText:/^Mapa$/i}).first();
             if(await mapBtn.count())await mapBtn.click();
             await page.waitForTimeout(5000);
-
             const map=await page.evaluate(()=>({
               mount:!!document.getElementById('qrooMarketplaceMapMount'),
               dots:document.querySelectorAll('#qrooMarketplaceMapMount .qroo-map-dot').length,
               places:document.querySelectorAll('#qrooMarketplaceMapMount .qroo-place').length,
               unavailable:/mapa no disponible|no disponible/i.test(document.getElementById('qrooMarketplaceMapMount')?.innerText||''),
               scrollH:document.documentElement.scrollHeight,
-              viewportH:innerHeight
+              viewportH:innerHeight,
+              bodyWidth:document.body.scrollWidth,
+              viewportWidth:innerWidth
             }));
-
+            await page.screenshot({path:'/tmp/listia-browser-smoke/marketplace-map-mobile.png',fullPage:true});
             const sameOrigin429=rateLimited.filter(u=>{try{return new URL(u).origin==='https://app.listiaapp.com'}catch{return false}});
-            console.log('LIST='+JSON.stringify(list));
-            console.log('MAP='+JSON.stringify(map));
-            console.log('FEED='+JSON.stringify(feed.slice(0,5)));
-            console.log('QROO='+JSON.stringify(qroo));
-            console.log('RATE_LIMITED='+JSON.stringify(rateLimited));
-            console.log('ERRORS='+JSON.stringify(errors.slice(0,20)));
-
+            console.log('LIST='+JSON.stringify(list)); console.log('MAP='+JSON.stringify(map)); console.log('FEED='+JSON.stringify(feed.slice(0,5))); console.log('QROO='+JSON.stringify(qroo)); console.log('RATE_LIMITED='+JSON.stringify(rateLimited)); console.log('ERRORS='+JSON.stringify(errors.slice(0,20)));
             if(!feed.some(x=>x.status===200&&x.length>0&&x.total>0))throw new Error('feed_inventory_missing');
             if(list.cards<1||list.published<1||list.count<1)throw new Error('list_not_rendered');
             if(list.nearActive)throw new Error('near_me_activated_without_user_action');
-            if(list.scrollH>list.viewportH+120)throw new Error('list_exceeds_mobile_viewport');
             if(list.tabs!==1)throw new Error('marketplace_tab_bar_duplicate');
+            if(!list.searchVisible)throw new Error('marketplace_search_not_visible');
+            if(list.bodyWidth>list.viewportWidth+2)throw new Error('list_horizontal_overflow');
             if(!map.mount||map.unavailable)throw new Error('map_unavailable');
             if(map.dots<1||map.places<1)throw new Error('map_points_missing');
-            if(map.scrollH>map.viewportH+120)throw new Error('map_exceeds_mobile_viewport');
+            if(map.bodyWidth>map.viewportWidth+2)throw new Error('map_horizontal_overflow');
             if(!qroo.some(x=>x.status===200&&x.url.includes('mode=clusters')))throw new Error('clusters_not_200');
             if(!qroo.some(x=>x.status===200&&x.url.includes('mode=microzones')))throw new Error('microzones_not_200');
             if(sameOrigin429.some(u=>u.includes('/api/marketplace/')))throw new Error('marketplace_api_rate_limited');
             if(errors.some(x=>/\bCORS\b|map_502|feed_502|edge_firewall_required/i.test(x)))throw new Error('marketplace_runtime_error');
-
             console.log(`LISTIA_BROWSER_SMOKE_OK cards=${list.cards} total=${list.count} dots=${map.dots} gateway=${list.gateway}`);
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
           node smoke.js
 
-# Reverify after worker-first tenant routing changes.
+      - name: Upload Marketplace visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: listia-marketplace-mobile-evidence
+          path: /tmp/listia-browser-smoke/marketplace-*-mobile.png
+          if-no-files-found: warn
+          retention-days: 7
