@@ -1,0 +1,84 @@
+name: LISTIA Market Intelligence Runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/market-intelligence.js'
+      - 'public/market-intelligence.css'
+      - '.github/workflows/listia-market-intelligence-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-market-intelligence-runtime
+  cancel-in-progress: true
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wire Market Intelligence into LISTIA PWA
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          config=Path('public/config.js')
+          s=config.read_text(encoding='utf-8')
+          style='["listiaMarketIntelligenceStyles","/market-intelligence.css?v=1"]'
+          style_anchor='["listiaControlCenterStyles","/control-center.css?v=1"]'
+          module='["/market-intelligence.js?v=1","listiaMarketIntelligenceLoader"]'
+          module_anchor='["/control-center.js?v=5","listiaControlCenterLoader"]'
+          if style not in s:
+              if style_anchor not in s: raise SystemExit('control center style anchor missing')
+              s=s.replace(style_anchor,style_anchor+','+style,1)
+          if module not in s:
+              if module_anchor not in s: raise SystemExit('control center module anchor missing')
+              s=s.replace(module_anchor,module_anchor+','+module,1)
+          config.write_text(s,encoding='utf-8')
+
+          sw=Path('public/sw.js')
+          w=sw.read_text(encoding='utf-8')
+          w=re.sub(r'const CACHE="([^"]+?)(?:-mi-v\d+)?";',r'const CACHE="\1-mi-v1";',w,count=1)
+          css='"/market-intelligence.css?v=1",'
+          js='"/market-intelligence.js?v=1",'
+          if css not in w:
+              a='"/control-center.css?v=1",'
+              if a not in w: raise SystemExit('control center css cache anchor missing')
+              w=w.replace(a,a+css,1)
+          if js not in w:
+              a='"/control-center.js?v=5",'
+              if a not in w: raise SystemExit('control center js cache anchor missing')
+              w=w.replace(a,a+js,1)
+          sw.write_text(w,encoding='utf-8')
+          PY
+      - name: Verify Market Intelligence contract
+        run: |
+          node --check public/market-intelligence.js
+          node --check public/config.js
+          node --check public/sw.js
+          grep -Fq '/market-intelligence.js?v=1' public/config.js
+          grep -Fq '/market-intelligence.css?v=1' public/config.js
+          grep -Fq '/market-intelligence.js?v=1' public/sw.js
+          grep -Fq '/market-intelligence.css?v=1' public/sw.js
+          grep -Fq 'get_market_intelligence' public/market-intelligence.js
+          grep -Fq 'data_insufficient' public/market-intelligence.js
+          grep -Fq "p_country_code:'MX'" public/market-intelligence.js
+          if grep -Eq 'median_price[^\n]{0,120}\+.*USD|USD[^\n]{0,120}\+.*MXN' public/market-intelligence.js; then
+            echo 'Potential mixed-currency arithmetic found'; exit 1
+          fi
+          echo 'LISTIA Market Intelligence runtime verified'
+      - name: Commit runtime wiring
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/config.js public/sw.js
+          git commit -m 'feat: activate LISTIA Market Intelligence in PWA' || exit 0
+          git pull --rebase origin main
+          git push origin main
