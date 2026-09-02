@@ -1,16 +1,6 @@
 name: LISTIA Marketplace Browser Smoke
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'public/marketplace*.js'
-      - 'public/marketplace*.css'
-      - 'public/listia-bootstrap.js'
-      - 'public/config.js'
-      - 'public/sw.js'
-      - 'listia-app-worker/index.js'
-      - '.github/workflows/listia-marketplace-browser-smoke.yml'
   workflow_run:
     workflows:
       - 'Deploy LISTIA App to Cloudflare Workers'
@@ -27,7 +17,7 @@ concurrency:
 
 jobs:
   mobile-browser:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,11 +36,6 @@ jobs:
           cat > smoke.js <<'NODE'
           const { chromium, devices } = require('playwright');
           const crypto=require('crypto');
-          const visibleRect=(el)=>{
-            if(!el)return null;
-            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
-            return {x:r.x,y:r.y,w:r.width,h:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right,display:s.display,visibility:s.visibility,opacity:Number(s.opacity||1)};
-          };
           (async()=>{
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
@@ -66,7 +51,7 @@ jobs:
             });
             page.on('pageerror',e=>errors.push(String(e)));
             page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=visual-v2',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=visual-v3',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForSelector('#marketplaceGrid .marketplace-card',{state:'attached',timeout:45000});
             await page.waitForTimeout(3500);
 
@@ -85,21 +70,21 @@ jobs:
               const properties=[...document.querySelectorAll('.marketplace-pro-tabs button')].find(b=>/^(Propiedades|Properties)$/i.test((b.textContent||'').trim()));
               const active=[...document.querySelectorAll('.marketplace-pro-tabs button.active')].map(b=>(b.textContent||'').trim());
               const img=card?.querySelector('img');
-              const center=cardRect?document.elementFromPoint(Math.min(innerWidth-2,Math.max(1,cardRect.left+cardRect.w/2)),Math.min(innerHeight-2,Math.max(1,cardRect.top+Math.min(cardRect.h,120)/2))):null;
+              const x=cardRect?Math.min(innerWidth-2,Math.max(1,cardRect.left+cardRect.w/2)):1;
+              const y=cardRect?Math.min(innerHeight-2,Math.max(1,cardRect.top+Math.min(cardRect.h,120)/2)):1;
+              const center=cardRect?document.elementFromPoint(x,y):null;
               return {
                 cards:document.querySelectorAll('#marketplaceGrid .marketplace-card').length,
                 published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:0,
                 count:Number(document.getElementById('marketplaceCount')?.textContent||0),
                 gateway:window.LISTIA_MARKETPLACE_GATEWAY?.version||null,
-                screenClass:screen?.className||'',
-                activeTabs:active,
+                screenClass:screen?.className||'', activeTabs:active,
                 propertiesActive:!!properties?.classList.contains('active'),
-                cardRect,
-                cardCenterBelongs:!!(card&&center&&(card===center||card.contains(center))),
+                cardRect, cardCenterBelongs:!!(card&&center&&(card===center||card.contains(center))),
+                coveringElement:center?{tag:center.tagName,id:center.id||'',className:String(center.className||''),text:(center.textContent||'').trim().slice(0,80)}:null,
                 imageLoaded:!img||img.naturalWidth>0,
                 inputRect,searchRect,backRect,
-                searchBackOverlap:intersects(searchRect,backRect),
-                inputSearchOverlap:intersects(inputRect,searchRect),
+                searchBackOverlap:intersects(searchRect,backRect), inputSearchOverlap:intersects(inputRect,searchRect),
                 filtersDisplay:filters?getComputedStyle(filters).display:'missing',
                 nearActive:window.LISTIA_MARKETPLACE_NEAR_ACTIVE===true,
                 bodyWidth:document.body.scrollWidth,viewportWidth:innerWidth,viewportH:innerHeight,
@@ -107,7 +92,7 @@ jobs:
               };
             });
             const listShot=await page.screenshot({path:'/tmp/listia-browser-smoke/marketplace-list-mobile.png',fullPage:true});
-
+            console.log('LIST='+JSON.stringify(list)); console.log('FEED='+JSON.stringify(feed.slice(0,5)));
             if(!feed.some(x=>x.status===200&&x.length>0&&x.total>0))throw new Error('feed_inventory_missing');
             if(list.cards<1||list.published<1||list.count<1)throw new Error('list_not_rendered');
             if(!list.propertiesActive||!/marketplace-pro-list/.test(list.screenClass))throw new Error('mobile_did_not_open_properties');
@@ -140,9 +125,8 @@ jobs:
             const mapShot=await page.screenshot({path:'/tmp/listia-browser-smoke/marketplace-map-mobile.png',fullPage:true});
             const listHash=crypto.createHash('sha256').update(listShot).digest('hex');
             const mapHash=crypto.createHash('sha256').update(mapShot).digest('hex');
-
             const sameOrigin429=rateLimited.filter(u=>{try{return new URL(u).origin==='https://app.listiaapp.com'}catch{return false}});
-            console.log('LIST='+JSON.stringify(list)); console.log('MAP='+JSON.stringify(map)); console.log('FEED='+JSON.stringify(feed.slice(0,5))); console.log('QROO='+JSON.stringify(qroo)); console.log('ERRORS='+JSON.stringify(errors.slice(0,20))); console.log(`SHOTS=${listHash} ${mapHash}`);
+            console.log('MAP='+JSON.stringify(map)); console.log('QROO='+JSON.stringify(qroo)); console.log('ERRORS='+JSON.stringify(errors.slice(0,20))); console.log(`SHOTS=${listHash} ${mapHash}`);
             if(!map.mount||map.unavailable||!/marketplace-pro-map/.test(map.screenClass))throw new Error('map_unavailable');
             if(!map.stageRect||map.stageRect.w<240||map.stageRect.h<180||map.stageRect.bottom<0||map.stageRect.top>map.viewportH)throw new Error('map_stage_not_visible');
             if(!map.svgRect||map.svgRect.w<240||map.svgRect.h<180)throw new Error('map_svg_not_visible');
