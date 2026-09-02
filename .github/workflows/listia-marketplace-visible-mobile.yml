@@ -1,0 +1,74 @@
+name: LISTIA Marketplace Visible Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/marketplace-visible-mobile-v1.css'
+      - '.github/workflows/listia-marketplace-visible-mobile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-marketplace-visible-mobile
+  cancel-in-progress: true
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wire final mobile Marketplace CSS last
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('public/config.js')
+          s=p.read_text(encoding='utf-8')
+          item='["listiaMarketplaceVisibleMobileStyles","/marketplace-visible-mobile-v1.css?v=1"]'
+          if item not in s:
+              anchor='["listiaLeadWorkspaceStyles","/lead-workspace.css?v=1"]'
+              if anchor not in s: raise SystemExit('final style anchor missing')
+              s=s.replace(anchor,anchor+','+item,1)
+          p.write_text(s,encoding='utf-8')
+
+          sw=Path('public/sw.js')
+          w=sw.read_text(encoding='utf-8')
+          asset='"/marketplace-visible-mobile-v1.css?v=1",'
+          if asset not in w:
+              anchor='"/lead-workspace.css?v=1",'
+              if anchor not in w: raise SystemExit('SW style anchor missing')
+              w=w.replace(anchor,anchor+asset,1)
+          w=re.sub(r'const CACHE="([^"]+?)(?:-visible-marketplace-v\d+)?";',r'const CACHE="\1-visible-marketplace-v1";',w,count=1)
+          sw.write_text(w,encoding='utf-8')
+          PY
+      - name: Verify final mobile Marketplace contract
+        run: |
+          node --check public/config.js
+          node --check public/sw.js
+          test -s public/marketplace-visible-mobile-v1.css
+          grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/config.js
+          grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/sw.js
+          grep -Fq '.marketplace-filters{display:none!important}' public/marketplace-visible-mobile-v1.css
+          grep -Fq 'display:flex!important;flex-direction:column!important' public/marketplace-visible-mobile-v1.css
+          python - <<'PY'
+          from pathlib import Path
+          c=Path('public/config.js').read_text(encoding='utf-8')
+          new=c.index('/marketplace-visible-mobile-v1.css?v=1')
+          for old in ('/marketplace-pro-mobile.css?v=1','/marketplace-native-mobile-v1.css?v=1','/mobile-ui-repair.css?v=1'):
+              assert c.index(old)<new,(old,'must load before final visible layer')
+          print('Final visible Marketplace layer is last')
+          PY
+      - name: Commit runtime wiring
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/config.js public/sw.js
+          git commit -m 'fix: load final LISTIA Marketplace mobile layer' || exit 0
+          git pull --rebase origin main
+          git push origin main
