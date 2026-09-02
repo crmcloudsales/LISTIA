@@ -1,0 +1,56 @@
+name: LISTIA Marketplace Search Race Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix-marketplace-search-race.py'
+      - '.github/workflows/listia-marketplace-search-race-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-marketplace-search-race-fix
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply deterministic search-race fix
+        run: python scripts/fix-marketplace-search-race.py
+      - name: Verify latest-search-wins contract
+        run: |
+          node --check public/marketplace.js
+          node --check public/config.js
+          node --check public/sw.js
+          python scripts/audit-public-runtime.py
+          python - <<'PY'
+          from pathlib import Path
+          m=Path('public/marketplace.js').read_text(encoding='utf-8')
+          c=Path('public/config.js').read_text(encoding='utf-8')
+          s=Path('public/sw.js').read_text(encoding='utf-8')
+          assert 'pendingReset=false' in m
+          assert 'if(busy){if(reset)pendingReset=true;return}' in m
+          assert 'if(token!==serial||pendingReset)return' in m
+          assert 'queueMicrotask(()=>load(true))' in m
+          assert '/marketplace.js?v=13' in c
+          assert '/marketplace.js?v=13' in s
+          assert '/marketplace.js?v=12' not in c
+          assert '/marketplace.js?v=12' not in s
+          print('Marketplace search race contract verified')
+          PY
+      - name: Commit source/runtime correction
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/marketplace.js public/config.js public/sw.js
+          git commit -m 'fix: keep latest LISTIA Marketplace search result' || exit 0
+          git pull --rebase origin main
+          git push origin main
