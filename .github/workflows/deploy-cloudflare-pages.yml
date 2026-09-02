@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: listia-app-production
@@ -66,34 +67,25 @@ jobs:
           find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) -delete
           find dist-pwa -type f -name '.deploy-trigger-*' -delete
           rm -f dist-pwa/APP_ICON_VERSION.txt
-
           for file in dist-pwa/*.js; do
             [[ -f "$file" ]] || continue
             tmp="${file}.protected"
             npx --yes terser@5 "$file" --compress passes=2,drop_console=false --mangle --comments false --output "$tmp"
             mv "$tmp" "$file"
           done
-
           for file in dist-pwa/*.css; do
             [[ -f "$file" ]] || continue
             tmp="${file}.protected"
             npx --yes csso-cli@4 "$file" --output "$tmp"
             mv "$tmp" "$file"
           done
-
           printf '\n;Object.defineProperty(window,"LISTIA_BUILD_FINGERPRINT",{value:"%s",writable:false,configurable:false});\n' "${GITHUB_SHA}" >> dist-pwa/config.js
-
-          if find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) | grep -q .; then
-            echo 'Protected artifact still contains source/development files.'
-            exit 1
-          fi
-
+          if find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) | grep -q .; then echo 'Protected artifact still contains source/development files.'; exit 1; fi
           node --check dist-pwa/config.js
           node --check dist-pwa/app.js
           node --check dist-pwa/listia-voice.js
           node --check dist-pwa/assistant-intelligence.js
           grep -Fq "LISTIA_BUILD_FINGERPRINT" dist-pwa/config.js
-
           mv public public-source
           mv dist-pwa public
           echo "Protected artifact ready for ${GITHUB_SHA}"
@@ -105,22 +97,17 @@ jobs:
           set -Eeuo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
           test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}" || { echo 'No Cloudflare token is configured'; exit 1; }
-
-          selected=''
-          preview_url=''
+          selected=''; preview_url=''
           for source in security primary; do
             if [[ "${source}" == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
             [[ -n "${token}" ]] || continue
             echo "Trying Workers Static Assets deployment with ${source} token"
-            if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" \
-              npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-app.jsonc \
-              2>&1 | tee "/tmp/listia-app-${source}.log"; then
+            if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-app.jsonc 2>&1 | tee "/tmp/listia-app-${source}.log"; then
               selected="${source}"
               preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' "/tmp/listia-app-${source}.log" | head -1 | sed 's/[),]$//' || true)"
               break
             fi
           done
-
           [[ -n "${selected}" ]] || { echo 'WORKER_DEPLOY_BLOCKED: neither token can deploy Workers Static Assets.'; exit 1; }
           [[ -n "${preview_url}" ]] || { echo 'Worker deployed but workers.dev URL could not be resolved from Wrangler output.'; exit 1; }
           echo "token_source=${selected}" >> "${GITHUB_OUTPUT}"
@@ -149,36 +136,21 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          api="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/workers/routes"
-          pattern="${APP_HOSTNAME}/*"
-          selected=''
+          api="https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/workers/routes"; pattern="${APP_HOSTNAME}/*"; selected=''
           for source in primary security; do
             if [[ "$source" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
             [[ -n "$token" ]] || continue
             out="/tmp/routes-${source}.json"
             http="$(curl -sS --max-time 25 --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --output "$out" --write-out '%{http_code}' "$api" || true)"
-            echo "Workers Routes probe (${source}): HTTP ${http}"
-            [[ "$http" == 200 ]] || { jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "$out" 2>/dev/null || true; continue; }
-
+            [[ "$http" == 200 ]] || continue
             exact_count="$(jq --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)] | length' "$out")"
             exact_script="$(jq -r --arg pattern "$pattern" '[.result[] | select(.pattern == $pattern)][0].script // "absent"' "$out")"
             [[ "$exact_count" -le 1 ]] || { echo 'Refusing ambiguous app route ownership.'; exit 1; }
-            if [[ "$exact_count" == 1 ]]; then
-              [[ "$exact_script" == "$WORKER_NAME" ]] || { echo "Refusing to overwrite app route owned by ${exact_script}."; exit 1; }
-              selected="$source"
-              echo 'Existing LISTIA app Worker Route preserved.'
-              break
-            fi
-
+            if [[ "$exact_count" == 1 ]]; then [[ "$exact_script" == "$WORKER_NAME" ]] || { echo "Refusing to overwrite app route owned by ${exact_script}."; exit 1; }; selected="$source"; break; fi
             body="$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')"
             create_out="/tmp/route-create-${source}.json"
             create_http="$(curl -sS --max-time 30 --request POST --header "Authorization: Bearer ${token}" --header 'Accept: application/json' --header 'Content-Type: application/json' --data "$body" --output "$create_out" --write-out '%{http_code}' "$api" || true)"
-            echo "Create LISTIA app route (${source}): HTTP ${create_http}"
-            if [[ "$create_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "$create_out" >/dev/null 2>&1; then
-              selected="$source"
-              break
-            fi
-            jq -c '{success,errors:[(.errors // [])[]|{code,message}]}' "$create_out" 2>/dev/null || true
+            if [[ "$create_http" =~ ^2[0-9][0-9]$ ]] && jq -e '.success == true' "$create_out" >/dev/null 2>&1; then selected="$source"; break; fi
           done
           [[ -n "$selected" ]] || { echo 'ROUTE_CUTOVER_BLOCKED: no configured token can manage the LISTIA app Worker Route.'; exit 1; }
           echo "token_source=${selected}" >> "$GITHUB_OUTPUT"
@@ -196,17 +168,11 @@ jobs:
             terms="$(curl -sS -L --max-time 20 -o /tmp/terms.html -w '%{http_code}' 'https://app.listiaapp.com/terms.html' || true)"
             privacy="$(curl -sS -L --max-time 20 -o /tmp/privacy.html -w '%{http_code}' 'https://app.listiaapp.com/privacy.html' || true)"
             if [[ "$root_ru" == 200 && "$ja" == 200 && "$voice" == 200 && "$config" == 200 && "$terms" == 200 && "$privacy" == 200 ]] && grep -Fq '日本語' /tmp/ja.js && grep -Fq 'ru-RU' /tmp/voice.js && grep -Fq 'ja-JP' /tmp/voice.js && grep -Fq 'LISTIA_BUILD_FINGERPRINT' /tmp/config.js && grep -Fq 'Version 1.4' /tmp/terms.html && grep -Fq 'Version 1.3' /tmp/privacy.html; then ok=true; break; fi
-            echo "Production verification waiting (${attempt}/30): root=${root_ru} ja=${ja} voice=${voice} config=${config} terms=${terms} privacy=${privacy}"
             sleep 5
           done
           [[ "$ok" == true ]]
-          for lang in es en fr it pt-BR de ar-AE ru he zh-CN ja; do
-            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://app.listiaapp.com/?lang=${lang}")"
-            test "$code" = 200
-          done
-          code="$(curl -sS -L --max-time 20 -o /tmp/voice-lab.html -w '%{http_code}' 'https://app.listiaapp.com/voice-lab.html')"
-          test "$code" = 200
-          grep -Fq '日本語 · 日本' /tmp/voice-lab.html
+          for lang in es en fr it pt-BR de ar-AE ru he zh-CN ja; do code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://app.listiaapp.com/?lang=${lang}")"; test "$code" = 200; done
+          code="$(curl -sS -L --max-time 20 -o /tmp/voice-lab.html -w '%{http_code}' 'https://app.listiaapp.com/voice-lab.html')"; test "$code" = 200; grep -Fq '日本語 · 日本' /tmp/voice-lab.html
 
       - name: Persist PWA live deployment proof
         shell: bash
@@ -238,3 +204,19 @@ jobs:
           git add PWA_LIVE_DEPLOYMENT_PROOF.txt
           git commit -m 'Record verified LISTIA PWA Workers deployment' || exit 0
           git push origin main
+
+      - name: Dispatch Marketplace visual browser smoke
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${REPO}/actions/workflows/listia-marketplace-browser-smoke.yml/dispatches" \
+            --data '{"ref":"main"}'
+          echo 'Marketplace visual smoke dispatched after verified production deploy.'
