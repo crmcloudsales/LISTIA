@@ -18,7 +18,7 @@ concurrency:
 jobs:
   route:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -26,7 +26,64 @@ jobs:
       ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
       WORKER_NAME: listia-app
       LEGACY_WORKER_NAME: listia-managed-sites
+      WILDCARD_DNS_NAME: '*.listiaapp.com'
+      WILDCARD_DNS_TARGET: listiaapp.com
     steps:
+      - name: Ensure proxied wildcard DNS for LISTIA tenants
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api="https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records"
+          success=''
+          for source in primary security; do
+            if [[ "$source" == primary ]]; then token="$TOKEN_PRIMARY"; else token="$TOKEN_SECURITY"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/dns-${source}.json"
+            code=$(curl -sS --max-time 25 -G \
+              -H "Authorization: Bearer ${token}" -H 'Accept: application/json' \
+              --data-urlencode "name=${WILDCARD_DNS_NAME}" \
+              -o "$out" -w '%{http_code}' "$api" || true)
+            [[ "$code" == 200 ]] || continue
+            count=$(jq '.result|length' "$out")
+            if [[ "$count" -gt 1 ]]; then
+              echo 'Ambiguous wildcard DNS records; refusing unsafe mutation'
+              jq -r '.result[]|[.id,.type,.name,.content,.proxied]|@tsv' "$out"
+              exit 1
+            fi
+            if [[ "$count" == 1 ]]; then
+              record_id=$(jq -r '.result[0].id' "$out")
+              type=$(jq -r '.result[0].type' "$out")
+              content=$(jq -r '.result[0].content' "$out")
+              proxied=$(jq -r '.result[0].proxied // false' "$out")
+              if [[ "$proxied" == true ]]; then
+                echo "Wildcard DNS already proxied (${type} ${content})"
+                success="$source"
+                break
+              fi
+              body=$(jq -nc --arg type "$type" --arg name "$WILDCARD_DNS_NAME" --arg content "$content" '{type:$type,name:$name,content:$content,ttl:1,proxied:true}')
+              updated="/tmp/dns-update-${source}.json"
+              c=$(curl -sS --max-time 25 -X PUT \
+                -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+                --data "$body" -o "$updated" -w '%{http_code}' "${api}/${record_id}" || true)
+              if [[ "$c" =~ ^2[0-9][0-9]$ ]] && jq -e '.success==true' "$updated" >/dev/null; then
+                success="$source"
+                break
+              fi
+              continue
+            fi
+            body=$(jq -nc --arg name "$WILDCARD_DNS_NAME" --arg content "$WILDCARD_DNS_TARGET" '{type:"CNAME",name:$name,content:$content,ttl:1,proxied:true}')
+            created="/tmp/dns-create-${source}.json"
+            c=$(curl -sS --max-time 25 -X POST \
+              -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+              --data "$body" -o "$created" -w '%{http_code}' "$api" || true)
+            if [[ "$c" =~ ^2[0-9][0-9]$ ]] && jq -e '.success==true' "$created" >/dev/null; then
+              success="$source"
+              break
+            fi
+          done
+          [[ -n "$success" ]] || { echo 'Could not verify/create proxied LISTIA wildcard DNS'; exit 1; }
+          echo "Wildcard DNS ready using ${success} token"
+
       - name: Ensure wildcard LISTIA tenant route
         shell: bash
         run: |
@@ -66,10 +123,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           ok=false
-          for i in $(seq 1 24); do
+          for i in $(seq 1 36); do
             code=$(curl -sS -L --max-time 15 -o /tmp/health.json -w '%{http_code}' 'https://bonavista.listiaapp.com/.well-known/listia-health' || true)
             if [[ "$code" == 200 ]] && jq -e '.ok==true and .managed==true and .host=="bonavista.listiaapp.com"' /tmp/health.json >/dev/null 2>&1; then ok=true; break; fi
-            echo "Waiting for wildcard route (${i}/24): HTTP ${code}"
+            echo "Waiting for wildcard edge (${i}/36): HTTP ${code}"
             sleep 5
           done
           [[ "$ok" == true ]]
