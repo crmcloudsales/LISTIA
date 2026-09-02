@@ -1,0 +1,42 @@
+name: LISTIA Generated Public Deploy Bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-generated-public-deploy-bridge.yml'
+  workflow_run:
+    workflows:
+      - 'LISTIA Marketplace Runtime Sync'
+      - 'LISTIA My Website Runtime'
+      - 'LISTIA App Icon v17'
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: listia-generated-public-deploy-bridge
+  cancel-in-progress: true
+
+jobs:
+  dispatch-production:
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical LISTIA production deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${REPO}/actions/workflows/deploy-cloudflare-pages.yml/dispatches" \
+            --data '{"ref":"main"}'
+          echo 'Canonical LISTIA production deploy dispatched.'
