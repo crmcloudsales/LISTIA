@@ -76,3 +76,4 @@ jobs:
           grep -Fq 'Bonavista Realtors' /tmp/site.html
           grep -Fq 'Powered by LISTIA' /tmp/site.html
           grep -Fq 'Propiedades' /tmp/site.html
+          grep -Fq 'Solicitar información' /tmp/site.html
