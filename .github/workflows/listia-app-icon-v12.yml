@@ -1,10 +1,10 @@
-name: LISTIA App Icon v15
+name: LISTIA App Icon v17
 
 on:
   push:
     branches: [main]
     paths:
-      - 'public/listia-official-icon-v5.svg'
+      - 'public/listia-app-icon-official.jpg'
       - 'scripts/build-listia-icon-v12.py'
       - '.github/workflows/listia-app-icon-v12.yml'
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: listia-app-icon-v15
+  group: listia-app-icon-v17
   cancel-in-progress: true
 
 jobs:
@@ -27,40 +27,47 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Generate official LISTIA PWA launcher icons
-        run: |
-          python -m pip install --disable-pip-version-check cairosvg
-          python scripts/build-listia-icon-v12.py
-      - name: Verify full-bleed purple background and white centered house
+      - name: Generate LISTIA launcher icons from official master
         run: |
           python -m pip install --disable-pip-version-check pillow
+          python scripts/build-listia-icon-v12.py
+      - name: Verify physical v17 icon release
+        run: |
           python - <<'PY'
-          from PIL import Image
           from pathlib import Path
-          for name,size in [('listia-app-icon-32.png',32),('listia-app-icon-180.png',180),('listia-app-icon-192.png',192),('listia-app-icon-512.png',512),('listia-app-icon-maskable-192.png',192),('listia-app-icon-maskable-512.png',512)]:
-              im=Image.open(Path('public')/name).convert('RGBA')
+          from PIL import Image
+          import json
+          pub=Path('public')
+          expected=[('listia-app-icon-v17-32.png',32),('listia-app-icon-v17-180.png',180),('listia-app-icon-v17-192.png',192),('listia-app-icon-v17-512.png',512),('listia-app-icon-v17-maskable-192.png',192),('listia-app-icon-v17-maskable-512.png',512)]
+          for name,size in expected:
+              im=Image.open(pub/name).convert('RGB')
               assert im.size==(size,size),(name,im.size)
-              for xy in [(0,0),(size-1,0),(0,size-1),(size-1,size-1)]:
-                  r,g,b,a=im.getpixel(xy)
-                  assert a==255,(name,xy,'transparent outer tile')
-                  assert not (r>245 and g>245 and b>245),(name,xy,'white outer tile')
-              # Official house must remain visibly white in the center region.
+              for xy in ((0,0),(size-1,0),(0,size-1),(size-1,size-1)):
+                  r,g,b=im.getpixel(xy)
+                  assert not (r>235 and g>235 and b>235),(name,xy,'white outer launcher tile')
               white=0
               for y in range(size//5,4*size//5):
                   for x in range(size//5,4*size//5):
-                      r,g,b,a=im.getpixel((x,y))
-                      white += int(a>245 and r>245 and g>245 and b>245)
-              assert white > (size*size)*0.08,(name,'white house missing')
-          print('LISTIA icon v15 verification passed')
+                      r,g,b=im.getpixel((x,y)); white+=int(r>240 and g>240 and b>240)
+              assert white>(size*size)*0.08,(name,'white house missing')
+          for manifest in pub.glob('manifest*.webmanifest'):
+              refs=[str(i.get('src','')) for i in json.loads(manifest.read_text(encoding='utf-8')).get('icons',[])]
+              assert refs and all('v17' in ref and '?v=' not in ref for ref in refs),(manifest,refs)
+          config=(pub/'config.js').read_text(encoding='utf-8')
+          assert "const v='17'" in config
+          assert '/listia-app-icon-v17-180.png' in config
+          sw=(pub/'sw.js').read_text(encoding='utf-8')
+          assert '-icon-v17' in sw
+          note=(pub/'APP_ICON_VERSION.txt').read_text(encoding='utf-8')
+          assert 'redraw=none' in note and 'recolor=none' in note
+          assert 'cache_strategy=physical-versioned-filenames' in note
+          print('LISTIA icon v17 verification passed')
           PY
-          grep -Fq 'cache_version=v15' public/APP_ICON_VERSION.txt
-          grep -Fq 'white_house=required' public/APP_ICON_VERSION.txt
-          grep -Fq 'extra_wheel_or_pointer=forbidden' public/APP_ICON_VERSION.txt
-          grep -Fq '?v=15' public/manifest.webmanifest
       - name: Commit generated icon release
         run: |
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png public/manifest*.webmanifest public/index.html public/config.js public/sw.js public/APP_ICON_VERSION.txt
-          git commit -m 'Release LISTIA application icon v15 without white launcher tile' || exit 0
+          git add public/listia-app-icon-32.png public/listia-app-icon-180.png public/listia-app-icon-192.png public/listia-app-icon-512.png public/listia-app-icon-maskable-192.png public/listia-app-icon-maskable-512.png public/listia-app-icon-v17-32.png public/listia-app-icon-v17-180.png public/listia-app-icon-v17-192.png public/listia-app-icon-v17-512.png public/listia-app-icon-v17-maskable-192.png public/listia-app-icon-v17-maskable-512.png public/manifest*.webmanifest public/index.html public/config.js public/sw.js public/APP_ICON_VERSION.txt
+          git commit -m 'fix: release LISTIA official app icon v17 with physical filenames' || exit 0
+          git pull --rebase origin main
           git push origin main

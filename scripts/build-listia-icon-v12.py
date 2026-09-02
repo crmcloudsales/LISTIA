@@ -1,47 +1,104 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import json
 import re
-import cairosvg
+from PIL import Image
 
-ROOT=Path(__file__).resolve().parents[1]
-PUB=ROOT/'public'
-SVG=PUB/'listia-official-icon-v5.svg'
-ICON_VERSION='15'
-DRIVE_SOURCE='1v-MeZmwDa6EBR-vo1T7d9m_hk3jTnceB'
-if not SVG.exists(): raise SystemExit('missing official icon SVG')
+ROOT = Path(__file__).resolve().parents[1]
+PUB = ROOT / 'public'
+SOURCE = PUB / 'listia-app-icon-official.jpg'
+ICON_VERSION = '17'
+DRIVE_SOURCE = '1v-MeZmwDa6EBR-vo1T7d9m_hk3jTnceB'
 
-def render(name,size):
-    cairosvg.svg2png(bytestring=SVG.read_bytes(),write_to=str(PUB/name),output_width=size,output_height=size)
+if not SOURCE.exists():
+    raise SystemExit('missing official LISTIA icon master')
 
-for name,size in [
-    ('listia-app-icon-32.png',32),('listia-app-icon-180.png',180),('listia-app-icon-192.png',192),('listia-app-icon-512.png',512),
-    ('listia-app-icon-maskable-192.png',192),('listia-app-icon-maskable-512.png',512)]: render(name,size)
+source = Image.open(SOURCE).convert('RGB')
+w, h = source.size
+if w != h or w < 512:
+    raise SystemExit(f'unexpected official source dimensions: {source.size}')
 
-# Rotate every manifest icon reference to v15 so Android requests fresh launcher assets.
-for p in PUB.glob('manifest*.webmanifest'):
-    s=p.read_text(encoding='utf-8')
-    s=re.sub(r'(listia-app-icon[^"?]*\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
-    p.write_text(s,encoding='utf-8')
+# Remove only the outer white launcher margin. Find the first diagonal inset
+# where all four corners are part of the purple artwork. No redraw/recolor.
+def purple(pixel):
+    r, g, b = pixel
+    return b > g + 12 and r > g + 8 and max(pixel) - min(pixel) > 25
 
-idx=PUB/'index.html'
-s=idx.read_text(encoding='utf-8')
-s=re.sub(r'(manifest(?:-[a-zA-Z0-9-]+)?\.webmanifest)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
-s=re.sub(r'(listia-app-icon-(?:180|32)\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
-idx.write_text(s,encoding='utf-8')
+inset = None
+for i in range(0, w // 4):
+    pts = [source.getpixel((i, i)), source.getpixel((w-1-i, i)),
+           source.getpixel((i, h-1-i)), source.getpixel((w-1-i, h-1-i))]
+    if all(purple(p) for p in pts):
+        inset = i
+        break
+if inset is None:
+    raise SystemExit('could not locate full-bleed purple artwork boundary')
 
-config=PUB/'config.js'
-s=config.read_text(encoding='utf-8')
-s=re.sub(r"const v='\d+'",f"const v='{ICON_VERSION}'",s,count=1)
-config.write_text(s,encoding='utf-8')
+master = source.crop((inset, inset, w-inset, h-inset))
 
-sw=PUB/'sw.js'
-s=sw.read_text(encoding='utf-8')
-s=re.sub(r'(listia-app-icon[^"?]*\.png)\?v=\d+',rf'\1?v={ICON_VERSION}',s)
-s=re.sub(r'(const CACHE="listia-pwa-v[^\"]+-marketplace-v)\d+(\")',rf'\g<1>{ICON_VERSION}\2',s)
-sw.write_text(s,encoding='utf-8')
+def render(path, size):
+    master.resize((size, size), Image.Resampling.LANCZOS).save(PUB / path, 'PNG', optimize=True)
 
-release='unknown'
-m=re.search(r'BOOTSTRAP_VERSION:"([^"]+)"',config.read_text(encoding='utf-8'))
-if m: release=m.group(1)
-(PUB/'APP_ICON_VERSION.txt').write_text(f'''LISTIA OFFICIAL APPLICATION ICON\nversion={ICON_VERSION}\nicon_version={ICON_VERSION}\nsource=Google Drive file {DRIVE_SOURCE}\nscope=application-icon-launcher-favicon-apple-touch-and-pwa\nrelease={release}\npwa_release={release}\nartwork=purple rounded square with white house\nwhite_house=required\nouter_white_background=removed\nhouse_scale=0.90\nhouse_vertical_adjustment=-3px_source\nextra_wheel_or_pointer=forbidden\ninternal_isotipo=listia-site-isotipo-v4.svg\ninternal_isotipo_change=none\ncache_version=v{ICON_VERSION}\n''',encoding='utf-8')
-print(f'LISTIA icon v{ICON_VERSION} generated: full-bleed purple, centered white house, no outer white tile')
+for size in (32, 180, 192, 512):
+    render(f'listia-app-icon-v{ICON_VERSION}-{size}.png', size)
+    render(f'listia-app-icon-{size}.png', size)
+for size in (192, 512):
+    render(f'listia-app-icon-v{ICON_VERSION}-maskable-{size}.png', size)
+    render(f'listia-app-icon-maskable-{size}.png', size)
+
+# Physical filenames are deliberate: installed launchers can retain an old icon
+# even when only a query string changes.
+for path in PUB.glob('manifest*.webmanifest'):
+    data = json.loads(path.read_text(encoding='utf-8'))
+    for icon in data.get('icons', []):
+        size = str(icon.get('sizes', '')).split('x', 1)[0]
+        if size not in {'192', '512'}:
+            continue
+        if 'maskable' in str(icon.get('purpose', 'any')):
+            icon['src'] = f'/listia-app-icon-v{ICON_VERSION}-maskable-{size}.png'
+        else:
+            icon['src'] = f'/listia-app-icon-v{ICON_VERSION}-{size}.png'
+    path.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
+
+idx = PUB / 'index.html'
+s = idx.read_text(encoding='utf-8')
+s = re.sub(r'(manifest(?:-[a-zA-Z0-9-]+)?\.webmanifest)(?:\?v=\d+)?', rf'\1?v={ICON_VERSION}', s)
+s = re.sub(r'/listia-app-icon(?:-v\d+)?-180\.png(?:\?v=\d+)?', f'/listia-app-icon-v{ICON_VERSION}-180.png', s)
+s = re.sub(r'/listia-app-icon(?:-v\d+)?-32\.png(?:\?v=\d+)?', f'/listia-app-icon-v{ICON_VERSION}-32.png', s)
+idx.write_text(s, encoding='utf-8')
+
+config = PUB / 'config.js'
+s = config.read_text(encoding='utf-8')
+s = re.sub(r"const v='\d+'", f"const v='{ICON_VERSION}'", s, count=1)
+s = re.sub(r'`/listia-app-icon(?:-v\d+)?-180\.png(?:\?v=\$\{v\})?`', f'`/listia-app-icon-v{ICON_VERSION}-180.png`', s)
+s = re.sub(r'`/listia-app-icon(?:-v\d+)?-32\.png(?:\?v=\$\{v\})?`', f'`/listia-app-icon-v{ICON_VERSION}-32.png`', s)
+config.write_text(s, encoding='utf-8')
+
+sw = PUB / 'sw.js'
+s = sw.read_text(encoding='utf-8')
+s = re.sub(r'const CACHE="([^"]+?)(?:-icon-v\d+)?";', rf'const CACHE="\1-icon-v{ICON_VERSION}";', s, count=1)
+for size in ('32', '180', '192', '512'):
+    s = re.sub(rf'/listia-app-icon(?:-v\d+)?-{size}\.png(?:\?v=\d+)?', f'/listia-app-icon-v{ICON_VERSION}-{size}.png', s)
+for size in ('192', '512'):
+    s = re.sub(rf'/listia-app-icon(?:-v\d+)?-maskable-{size}\.png(?:\?v=\d+)?', f'/listia-app-icon-v{ICON_VERSION}-maskable-{size}.png', s)
+s = re.sub(r'(manifest(?:-[a-zA-Z0-9-]+)?\.webmanifest)\?v=\d+', rf'\1?v={ICON_VERSION}', s)
+sw.write_text(s, encoding='utf-8')
+
+release = 'unknown'
+m = re.search(r'BOOTSTRAP_VERSION:"([^"]+)"', config.read_text(encoding='utf-8'))
+if m:
+    release = m.group(1)
+(PUB / 'APP_ICON_VERSION.txt').write_text(
+    '\n'.join([
+        'LISTIA OFFICIAL APPLICATION ICON',
+        f'version={ICON_VERSION}', f'icon_version={ICON_VERSION}',
+        f'source_repo={SOURCE.name}', f'canonical_drive_source={DRIVE_SOURCE}',
+        f'source_dimensions={w}x{h}', f'outer_margin_crop={inset}px_each_side',
+        'scope=application-icon-launcher-favicon-apple-touch-and-pwa',
+        f'release={release}', f'pwa_release={release}',
+        'artwork=user-approved official master; house, lighting, volume and gradient preserved',
+        'outer_white_background=removed', 'redraw=none', 'recolor=none',
+        'extra_wheel_or_pointer=forbidden',
+        'cache_strategy=physical-versioned-filenames', f'cache_version=v{ICON_VERSION}'
+    ]) + '\n', encoding='utf-8')
+print(f'LISTIA icon v{ICON_VERSION} generated from official master; crop={inset}px')
