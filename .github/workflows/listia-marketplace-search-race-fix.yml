@@ -54,3 +54,5 @@ jobs:
           git commit -m 'fix: keep latest LISTIA Marketplace search result' || exit 0
           git pull --rebase origin main
           git push origin main
+
+# trigger: 2026-09-02 search-race verification
