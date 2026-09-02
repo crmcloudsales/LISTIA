@@ -1,0 +1,71 @@
+name: LISTIA My Website Runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-listings-site-runtime.yml'
+      - 'public/listings-my-website.js'
+      - 'public/listings-my-website.css'
+      - 'public/config.js'
+      - 'public/sw.js'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-my-website-runtime
+  cancel-in-progress: true
+
+jobs:
+  wire-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wire My Website assets into the live PWA
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/config.js')
+          s=p.read_text(encoding='utf-8')
+          style='["listiaListingsMyWebsiteStyles","/listings-my-website.css?v=2"]'
+          style_anchor='["listiaListingsV2Styles","/listings-v2.css?v=3"]'
+          module='["/listings-my-website.js?v=2","listiaListingsMyWebsiteLoader"]'
+          module_anchor='["/listings-v2.js?v=6","listiaListingsV2Loader"]'
+          if style not in s:
+              if style_anchor not in s: raise SystemExit('listings-v2 style anchor missing')
+              s=s.replace(style_anchor,style_anchor+','+style,1)
+          if module not in s:
+              if module_anchor not in s: raise SystemExit('listings-v2 module anchor missing')
+              s=s.replace(module_anchor,module_anchor+','+module,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Verify My Website runtime contract
+        run: |
+          node --check public/config.js
+          node --check public/listings-my-website.js
+          python - <<'PY'
+          from pathlib import Path
+          c=Path('public/config.js').read_text(encoding='utf-8')
+          sw=Path('public/sw.js').read_text(encoding='utf-8')
+          for asset in ('/listings-my-website.css?v=2','/listings-my-website.js?v=2'):
+              assert asset in c, f'{asset} not loaded by config.js'
+              assert asset in sw, f'{asset} not precached by sw.js'
+          js=Path('public/listings-my-website.js').read_text(encoding='utf-8')
+          assert '.listiaapp.com' in js
+          assert 'MI SITIO WEB' in js
+          assert 'listiapp.com' not in js.lower()
+          print('LISTIA My Website runtime contract verified')
+          PY
+      - name: Commit runtime wiring
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/config.js
+          git commit -m 'fix: load LISTIA My Website UI in production' || exit 0
+          git pull --rebase origin main
+          git push origin main
