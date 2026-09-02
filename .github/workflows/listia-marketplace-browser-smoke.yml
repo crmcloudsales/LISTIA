@@ -51,7 +51,7 @@ jobs:
             });
             page.on('pageerror',e=>errors.push(String(e)));
             page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=visual-v3',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.goto('https://app.listiaapp.com/marketplace?browser_smoke=visual-v4',{waitUntil:'domcontentloaded',timeout:60000});
             await page.waitForSelector('#marketplaceGrid .marketplace-card',{state:'attached',timeout:45000});
             await page.waitForTimeout(3500);
 
@@ -67,12 +67,14 @@ jobs:
               const back=[...document.querySelectorAll('#screen-marketplace button')].find(b=>['←','‹','⟵'].includes((b.textContent||'').trim())||/back|volver|regresar/i.test(b.getAttribute('aria-label')||''));
               const backRect=rect(back);
               const filters=document.querySelector('#screen-marketplace .marketplace-filters');
+              const saveRow=document.querySelector('#screen-marketplace .marketplace-save-row');
               const properties=[...document.querySelectorAll('.marketplace-pro-tabs button')].find(b=>/^(Propiedades|Properties)$/i.test((b.textContent||'').trim()));
               const active=[...document.querySelectorAll('.marketplace-pro-tabs button.active')].map(b=>(b.textContent||'').trim());
               const img=card?.querySelector('img');
               const x=cardRect?Math.min(innerWidth-2,Math.max(1,cardRect.left+cardRect.w/2)):1;
               const y=cardRect?Math.min(innerHeight-2,Math.max(1,cardRect.top+Math.min(cardRect.h,120)/2)):1;
               const center=cardRect?document.elementFromPoint(x,y):null;
+              const fixedOverCard=[...document.querySelectorAll('body *')].map(el=>({el,s:getComputedStyle(el)})).filter(x=>x.s.position==='fixed'&&x.s.display!=='none'&&x.s.visibility!=='hidden'&&Number(x.s.opacity||1)>0).map(x=>({el:x.el,r:rect(x.el)})).filter(x=>intersects(cardRect,x.r)>400).map(x=>({tag:x.el.tagName,id:x.el.id||'',className:String(x.el.className||'').slice(0,160),text:(x.el.textContent||'').trim().replace(/\s+/g,' ').slice(0,100),area:Math.round(intersects(cardRect,x.r)),rect:x.r}));
               return {
                 cards:document.querySelectorAll('#marketplaceGrid .marketplace-card').length,
                 published:Array.isArray(window.LISTIA_MARKETPLACE_DATA)?window.LISTIA_MARKETPLACE_DATA.length:0,
@@ -85,7 +87,10 @@ jobs:
                 imageLoaded:!img||img.naturalWidth>0,
                 inputRect,searchRect,backRect,
                 searchBackOverlap:intersects(searchRect,backRect), inputSearchOverlap:intersects(inputRect,searchRect),
+                searchVerticalDelta:inputRect&&searchRect?Math.abs(inputRect.top-searchRect.top):999,
                 filtersDisplay:filters?getComputedStyle(filters).display:'missing',
+                saveRowDisplay:saveRow?getComputedStyle(saveRow).display:'missing',
+                fixedOverCard,
                 nearActive:window.LISTIA_MARKETPLACE_NEAR_ACTIVE===true,
                 bodyWidth:document.body.scrollWidth,viewportWidth:innerWidth,viewportH:innerHeight,
                 tabs:document.querySelectorAll('.marketplace-pro-tabs').length
@@ -100,12 +105,15 @@ jobs:
             if(!list.cardCenterBelongs)throw new Error('first_card_is_covered_by_overlay');
             if(!list.imageLoaded)throw new Error('first_card_image_not_loaded');
             if(list.filtersDisplay!=='none')throw new Error('desktop_filters_visible_on_mobile');
+            if(list.saveRowDisplay!=='none'&&list.saveRowDisplay!=='missing')throw new Error('secondary_saved_controls_visible_before_inventory');
             if(!list.inputRect||!list.searchRect||list.inputRect.w<120||list.searchRect.w<72)throw new Error('mobile_search_controls_not_sized');
+            if(list.searchVerticalDelta>4)throw new Error('mobile_search_controls_misaligned');
             if(list.inputSearchOverlap>2)throw new Error('search_input_button_overlap');
             if(list.searchBackOverlap>2)throw new Error('search_button_back_overlap');
             if(list.nearActive)throw new Error('near_me_activated_without_user_action');
             if(list.tabs!==1)throw new Error('marketplace_tab_bar_duplicate');
             if(list.bodyWidth>list.viewportWidth+2)throw new Error('list_horizontal_overflow');
+            if(list.fixedOverCard.length)throw new Error('fixed_element_overlaps_property');
 
             const mapBtn=page.locator('.marketplace-pro-tabs button').filter({hasText:/^(Mapa|Map)$/i}).first();
             if(!await mapBtn.count())throw new Error('map_tab_missing');
