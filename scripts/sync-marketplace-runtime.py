@@ -13,6 +13,7 @@ sw=sw_path.read_text(encoding='utf-8')
 # Service Worker considers current. This prevents stale Marketplace logic from
 # being executed while a newer file is merely precached.
 files=(
+    'marketplace-native-runtime-v1.js',
     'marketplace-gateway-v9.js',
     'marketplace.js',
     'marketplace-qroo-map.js',
@@ -23,9 +24,16 @@ for name in files:
         raise SystemExit(f'{name}: missing from Service Worker release')
     version=m.group(1)
     pattern=rf'/{re.escape(name)}\?v=\d+'
-    if not re.search(pattern,config):
+    if re.search(pattern,config):
+        config=re.sub(pattern,f'/{name}?v={version}',config)
+        continue
+    if name!='marketplace-native-runtime-v1.js':
         raise SystemExit(f'{name}: missing from config runtime loader')
-    config=re.sub(pattern,f'/{name}?v={version}',config)
+    anchor='["/marketplace-assistant.js?v=2","listiaMarketplaceAssistantLoader"]'
+    native=f'["/{name}?v={version}","listiaMarketplaceNativeRuntimeV1Loader"]'
+    if anchor not in config:
+        raise SystemExit('Marketplace assistant module anchor missing from config.js')
+    config=config.replace(anchor,anchor+','+native,1)
 
 # These app-only mobile layers were already part of the release/cache contract
 # but were never injected into the live document by config.js.
