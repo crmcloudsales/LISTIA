@@ -1,0 +1,78 @@
+name: LISTIA Managed Sites Wildcard Route
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'listia-app-worker/index.js'
+      - '.github/workflows/listia-managed-sites-wildcard-route.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-managed-sites-route
+  cancel-in-progress: true
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TOKEN_SECURITY: ${{ secrets.CLOUDFLARE_SECURITY_TOKEN }}
+      ZONE_ID: cb7b05213bf99ff0700becf4aebdf2ab
+      WORKER_NAME: listia-app
+    steps:
+      - name: Ensure wildcard LISTIA tenant route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pattern='*.listiaapp.com/*'
+          api="https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/workers/routes"
+          success=''
+          for source in primary security; do
+            if [[ "$source" == primary ]]; then token="$TOKEN_PRIMARY"; else token="$TOKEN_SECURITY"; fi
+            [[ -n "$token" ]] || continue
+            out="/tmp/routes-${source}.json"
+            code=$(curl -sS --max-time 25 -H "Authorization: Bearer ${token}" -H 'Accept: application/json' -o "$out" -w '%{http_code}' "$api" || true)
+            [[ "$code" == 200 ]] || continue
+            count=$(jq --arg p "$pattern" '[.result[]|select(.pattern==$p)]|length' "$out")
+            script=$(jq -r --arg p "$pattern" '[.result[]|select(.pattern==$p)][0].script // ""' "$out")
+            if [[ "$count" -gt 1 ]]; then echo 'Ambiguous wildcard route'; exit 1; fi
+            if [[ "$count" == 1 ]]; then
+              [[ "$script" == "$WORKER_NAME" ]] || { echo "Wildcard owned by ${script}; refusing overwrite"; exit 1; }
+              success="$source"; break
+            fi
+            body=$(jq -nc --arg pattern "$pattern" --arg script "$WORKER_NAME" '{pattern:$pattern,script:$script}')
+            created="/tmp/create-${source}.json"
+            c=$(curl -sS --max-time 25 -X POST -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' --data "$body" -o "$created" -w '%{http_code}' "$api" || true)
+            if [[ "$c" =~ ^2[0-9][0-9]$ ]] && jq -e '.success==true' "$created" >/dev/null; then success="$source"; break; fi
+          done
+          [[ -n "$success" ]] || { echo 'Could not configure LISTIA wildcard route'; exit 1; }
+          echo "Wildcard route ready using ${success} token"
+
+      - name: Verify Bonavista health route
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ok=false
+          for i in $(seq 1 24); do
+            code=$(curl -sS -L --max-time 15 -o /tmp/health.json -w '%{http_code}' 'https://bonavista.listiaapp.com/.well-known/listia-health' || true)
+            if [[ "$code" == 200 ]] && jq -e '.ok==true and .managed==true and .host=="bonavista.listiaapp.com"' /tmp/health.json >/dev/null 2>&1; then ok=true; break; fi
+            echo "Waiting for wildcard route (${i}/24): HTTP ${code}"
+            sleep 5
+          done
+          [[ "$ok" == true ]]
+
+      - name: Verify Bonavista public site
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          code=$(curl -sS -L --max-time 20 -o /tmp/site.html -w '%{http_code}' 'https://bonavista.listiaapp.com/')
+          test "$code" = 200
+          grep -Fq 'Bonavista Realtors' /tmp/site.html
+          grep -Fq 'Powered by LISTIA' /tmp/site.html
+          grep -Fq 'Propiedades' /tmp/site.html
