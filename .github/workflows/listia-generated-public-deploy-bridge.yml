@@ -10,6 +10,7 @@ on:
       - 'LISTIA Marketplace Runtime Sync'
       - 'LISTIA My Website Runtime'
       - 'LISTIA App Icon v17'
+      - 'LISTIA Market Intelligence Runtime'
     types: [completed]
     branches: [main]
 
