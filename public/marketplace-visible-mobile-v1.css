@@ -41,3 +41,4 @@
   body:has(#screen-marketplace.active) .cloudy-fab,
   body:has(#screen-marketplace.active) .listia-ai-fab{right:10px!important;bottom:calc(76px + env(safe-area-inset-bottom))!important;transform:scale(.82)!important;transform-origin:bottom right!important}
 }
+/* visual smoke trigger: marketplace-v13-qroo-v3 */
