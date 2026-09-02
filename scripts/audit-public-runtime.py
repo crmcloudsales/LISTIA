@@ -66,13 +66,12 @@ else:
         if f'listia-app-icon-v{icon_v}-' not in text:
             fail(f'{manifest.name}: does not reference active icon v{icon_v}')
 
-# Marketplace critical runtime assets must be both loaded and cached.
+# Marketplace critical runtime capabilities must be both loaded and cached.
 critical = [
     'marketplace-native-runtime-v1.js',
     'marketplace-gateway-v9.js',
     'marketplace.js',
     'marketplace-qroo-map.js',
-    'marketplace-visible-mobile-v1.css',
     'listings-my-website.js',
     'market-intelligence.js',
 ]
@@ -81,6 +80,23 @@ for name in critical:
         fail(f'config.js missing critical asset: {name}')
     if name not in sw:
         fail(f'sw.js missing critical asset: {name}')
+
+# Do not freeze the integrity contract to one mobile release number. Require a
+# physical versioned final layer and require config + Service Worker to agree.
+mobile_config = re.findall(r'marketplace-visible-mobile-v(\d+)\.css', config)
+mobile_sw = re.findall(r'marketplace-visible-mobile-v(\d+)\.css', sw)
+if len(mobile_config) != 1:
+    fail(f'config.js must load exactly one physical Marketplace visible-mobile layer; found {mobile_config}')
+elif len(mobile_sw) != 1:
+    fail(f'sw.js must cache exactly one physical Marketplace visible-mobile layer; found {mobile_sw}')
+elif mobile_config[0] != mobile_sw[0]:
+    fail(f'Marketplace mobile layer mismatch: config=v{mobile_config[0]} sw=v{mobile_sw[0]}')
+else:
+    mobile_name = f'marketplace-visible-mobile-v{mobile_config[0]}.css'
+    if not (PUB / mobile_name).is_file():
+        fail(f'missing physical Marketplace mobile layer: {mobile_name}')
+    if int(mobile_config[0]) < 2:
+        fail('stale Marketplace visible-mobile v1 must not be active')
 
 # Keep the public browser configuration free of known secret-key shapes.
 secret_patterns = [
