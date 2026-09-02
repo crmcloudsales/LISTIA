@@ -9,36 +9,62 @@
   #screen-marketplace.active .marketplace-v8-search-row{display:grid!important;grid-template-columns:minmax(0,1fr) 104px!important;gap:7px!important;width:100%!important}
   #screen-marketplace.active #marketplaceSearch{width:100%!important;min-width:0!important;max-width:none!important;height:44px!important;font-size:15px!important}
   #screen-marketplace.active #marketplaceV8SearchButton{width:104px!important;min-width:104px!important;height:44px!important;padding:0 10px!important}
-  #screen-marketplace.active .marketplace-v8-quick{display:flex!important;flex:0 0 auto!important;overflow-x:auto!important;gap:7px!important;width:100%!important}
+  #screen-marketplace.active .marketplace-v8-quick{display:flex!important;flex:0 0 auto!important;overflow-x:auto!important;gap:7px!important;width:100%!important;scrollbar-width:none!important}
+  #screen-marketplace.active .marketplace-v8-quick::-webkit-scrollbar{display:none!important}
   #screen-marketplace.active .marketplace-v8-quick button{flex:0 0 auto!important;min-width:86px!important;height:36px!important;padding:0 14px!important}
-  /* Advanced desktop filters were the source of clipped labels and unusable controls. */
-  #screen-marketplace.active .marketplace-filters{display:none!important}
+
+  /* Mobile is inventory-first. Desktop/advanced controls must never consume the listing viewport. */
+  #screen-marketplace.active .marketplace-filters,
+  #screen-marketplace.active .marketplace-v8-filters,
+  #screen-marketplace.active .marketplace-advanced-filters,
+  #screen-marketplace.active [data-marketplace-filters]{display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
   #screen-marketplace.active .marketplace-count{display:block!important;flex:0 0 24px!important;height:24px!important;line-height:24px!important;margin:0 3px!important;font-size:13px!important}
   #screen-marketplace.active .marketplace-pro-toolbar{display:grid!important;grid-template-columns:minmax(0,1fr) 94px!important;flex:0 0 44px!important;height:44px!important;gap:7px!important;margin:0!important}
   #screen-marketplace.active .marketplace-pro-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;height:44px!important;padding:3px!important;overflow:hidden!important}
   #screen-marketplace.active .marketplace-pro-tabs button{min-width:0!important;padding:5px 4px!important;font-size:12px!important;overflow:hidden!important;text-overflow:ellipsis!important}
   #screen-marketplace.active .marketplace-pro-voice{width:94px!important;padding:5px!important;font-size:12px!important}
+
+  /* This legacy absolute back button overlapped Search on narrow screens. */
+  #screen-marketplace.active>.back,
+  #screen-marketplace.active .marketplace-panel>.back{display:none!important;visibility:hidden!important;pointer-events:none!important}
+
   #screen-marketplace.active #qrooMarketplaceMapMount{flex:1 1 auto!important;min-height:220px!important;height:auto!important;overflow:hidden!important;margin:0!important;display:block!important}
-  #screen-marketplace.active.marketplace-pro-map #qrooMarketplaceMapMount{display:block!important;flex:1 1 auto!important;height:auto!important;min-height:220px!important}
+  #screen-marketplace.active.marketplace-pro-map #qrooMarketplaceMapMount{display:block!important;flex:1 1 auto!important;height:auto!important;min-height:220px!important;position:relative!important;z-index:2!important}
   #screen-marketplace.active.marketplace-pro-map .qroo-map-shell,
   #screen-marketplace.active.marketplace-pro-map .qroo-map-layout,
   #screen-marketplace.active.marketplace-pro-map .qroo-map-stage{display:block!important;width:100%!important;height:100%!important;min-height:220px!important;margin:0!important}
   #screen-marketplace.active.marketplace-pro-map .qroo-map-stage{background:radial-gradient(circle at 70% 35%,rgba(109,53,242,.12),transparent 34%),linear-gradient(180deg,#eef7fb,#e8f1f3)!important;border-radius:14px!important}
-  #screen-marketplace.active.marketplace-pro-list #qrooMarketplaceMapMount{display:none!important}
-  #screen-marketplace.active.marketplace-pro-list #marketplaceGrid{display:flex!important;flex:1 1 auto!important;height:auto!important;min-height:220px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:0 0 3px!important}
-  #screen-marketplace.active.marketplace-pro-list .marketplace-card{flex:0 0 min(82vw,330px)!important;height:100%!important;min-height:220px!important}
+
+  /* LIST VIEW: one clean property occupies the usable content area. */
+  #screen-marketplace.active.marketplace-pro-list #qrooMarketplaceMapMount,
+  #screen-marketplace.active.marketplace-pro-list .qroo-intelligence{display:none!important;visibility:hidden!important;pointer-events:none!important}
+  #screen-marketplace.active.marketplace-pro-list #marketplaceGrid{
+    display:flex!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:220px!important;
+    overflow-x:auto!important;overflow-y:hidden!important;padding:0!important;gap:10px!important;
+    scroll-snap-type:x mandatory!important;scroll-padding:0!important;position:relative!important;z-index:20!important;isolation:isolate!important;scrollbar-width:none!important;
+  }
+  #screen-marketplace.active.marketplace-pro-list #marketplaceGrid::-webkit-scrollbar{display:none!important}
+  #screen-marketplace.active.marketplace-pro-list .marketplace-card{
+    flex:0 0 100%!important;width:100%!important;max-width:100%!important;height:100%!important;min-height:220px!important;
+    scroll-snap-align:start!important;position:relative!important;z-index:21!important;isolation:isolate!important;
+  }
+
   #screen-marketplace.active.marketplace-pro-intel #qrooMarketplaceMapMount{display:block!important;flex:1 1 auto!important;height:auto!important;min-height:220px!important}
-  /* Saved-search controls remain usable but must never steal the main viewport. */
+
+  /* Saved-search and notification managers are secondary actions and must not precede inventory on mobile. */
   #screen-marketplace.active .marketplace-saved-manager,
   #screen-marketplace.active .marketplace-notification-center,
   #screen-marketplace.active [data-marketplace-saved-manager],
-  #screen-marketplace.active [data-marketplace-notification-center]{flex:0 0 auto!important;max-height:58px!important;overflow:hidden!important}
-  #screen-marketplace.active .marketplace-saved-manager button,
-  #screen-marketplace.active .marketplace-notification-center button{min-height:42px!important;font-size:11px!important;padding:5px 7px!important}
-  /* Keep floating assistant clear of the Marketplace action row. */
+  #screen-marketplace.active [data-marketplace-notification-center]{display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+
+  /* Marketplace already has Hablar. Global floating assistants must never cover a property or its CTA. */
   .app-shell:has(#screen-marketplace.active) .cloudy-fab,
   .app-shell:has(#screen-marketplace.active) .listia-ai-fab,
+  .app-shell:has(#screen-marketplace.active) [data-cloudy-fab],
+  .app-shell:has(#screen-marketplace.active) [data-listia-ai-fab],
   body:has(#screen-marketplace.active) .cloudy-fab,
-  body:has(#screen-marketplace.active) .listia-ai-fab{right:10px!important;bottom:calc(76px + env(safe-area-inset-bottom))!important;transform:scale(.82)!important;transform-origin:bottom right!important}
+  body:has(#screen-marketplace.active) .listia-ai-fab,
+  body:has(#screen-marketplace.active) [data-cloudy-fab],
+  body:has(#screen-marketplace.active) [data-listia-ai-fab]{display:none!important;visibility:hidden!important;pointer-events:none!important}
 }
-/* visual smoke trigger: marketplace-v13-qroo-v3 */
+/* visual smoke trigger: marketplace-mobile-unobstructed-v2 */
