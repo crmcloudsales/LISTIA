@@ -106,7 +106,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from urllib.parse import urlparse
-          import re,json
+          import re
           s=Path('public/sw.js').read_text(encoding='utf-8')
           cache=re.search(r'const\s+CACHE\s*=\s*["\']([^"\']+)["\']\s*;',s)
           assert cache and cache.group(1).startswith('listia-pwa-'), 'Valid LISTIA cache marker missing'
@@ -117,8 +117,11 @@ jobs:
           assert not missing, 'Missing SW precache assets: '+', '.join(sorted(set(missing)))
           assert any(urlparse(r).path=='/listia-bootstrap.js' for r in refs), 'Bootstrap not precached'
           assert any('/marketplace.js?v=13' in r for r in refs), 'Marketplace v13 not precached'
-          assert any('/marketplace-visible-mobile-v1.css?v=1' in r for r in refs), 'Visible mobile layer not precached'
-          print(f'Service Worker refs OK cache={cache.group(1)} count={len(set(refs))}')
+          mobile=[urlparse(r).path for r in refs if re.fullmatch(r'/marketplace-visible-mobile-v\d+\.css',urlparse(r).path)]
+          assert len(set(mobile))==1, f'Expected exactly one physical visible-mobile layer, found {sorted(set(mobile))}'
+          mm=re.search(r'-v(\d+)\.css$',mobile[0]); assert mm and int(mm.group(1))>=2, f'Stale visible-mobile layer: {mobile[0]}'
+          assert (Path('public')/mobile[0].lstrip('/')).exists(), f'Missing visible-mobile asset: {mobile[0]}'
+          print(f'Service Worker refs OK cache={cache.group(1)} mobile={mobile[0]} count={len(set(refs))}')
           PY
 
       - name: Marketplace mobile contracts
@@ -130,4 +133,6 @@ jobs:
           grep -Fq 'qroo-intel-chart' public/marketplace-qroo-map.js
           grep -Fq 'pendingReset=false' public/marketplace.js
           grep -Fq 'queueMicrotask(()=>load(true))' public/marketplace.js
+          grep -Fq 'resetMarketplaceList' public/marketplace-native-runtime-v1.js
+          grep -Fq 'scrollLeft=0' public/marketplace-native-runtime-v1.js
           echo 'Marketplace mobile and latest-search-wins contracts OK'
