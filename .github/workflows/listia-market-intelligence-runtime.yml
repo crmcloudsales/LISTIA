@@ -68,8 +68,9 @@ jobs:
           grep -Fq '/market-intelligence.js?v=1' public/sw.js
           grep -Fq '/market-intelligence.css?v=1' public/sw.js
           grep -Fq 'get_market_intelligence' public/market-intelligence.js
-          grep -Fq 'data_insufficient' public/market-intelligence.js
+          grep -Fq 'demandAvailable=Boolean(d.available)' public/market-intelligence.js
           grep -Fq "p_country_code:'MX'" public/market-intelligence.js
+          grep -Fq 'no inferirá demanda a partir de poca oferta' public/market-intelligence.js
           if grep -Eq 'median_price[^\n]{0,120}\+.*USD|USD[^\n]{0,120}\+.*MXN' public/market-intelligence.js; then
             echo 'Potential mixed-currency arithmetic found'; exit 1
           fi
