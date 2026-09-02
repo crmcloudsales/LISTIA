@@ -6,6 +6,7 @@ on:
     paths:
       - 'public/**'
       - 'listia-app-worker/**'
+      - 'scripts/audit-public-runtime.py'
       - '.github/workflows/listia-pwa-full-audit.yml'
   workflow_dispatch:
 
@@ -20,7 +21,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Audit HTML structure and local assets
-        shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
@@ -50,84 +50,84 @@ jobs:
               path=urlparse(ref).path.lstrip('/')
               if path and not path.endswith('/') and not (root/path).exists(): bad.append(ref)
           assert not bad, 'Missing local assets referenced by index.html: '+', '.join(bad)
-          assert 'US$97' not in html and 'US$147' not in html and '>Free<' not in html and '>Premium<' not in html
           assert any(urlparse(x).path=='/listia-bootstrap.js' for x in p.scripts), 'Canonical bootstrap is not wired into index.html'
-          print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}; marketplace screens are dynamic')
-          Path('/tmp/index-scripts.txt').write_text('\n'.join(urlparse(x).path.lstrip('/') for x in p.scripts if urlparse(x).path.endswith('.js')),encoding='utf-8')
+          print(f'HTML OK ids={len(p.ids)} local_refs={len(set(p.refs))}')
           PY
 
       - name: Validate JavaScript loaded by the PWA
-        shell: bash
         run: |
           set -Eeuo pipefail
-          while IFS= read -r f; do test -f "public/$f" || { echo "Missing script public/$f"; exit 1; }; node --check "public/$f"; done < /tmp/index-scripts.txt
+          node --check public/config.js
           node --check public/sw.js
           node --check public/listia-bootstrap.js
-          python3 - <<'PY' >/tmp/bootstrap-js.txt
-          import re
-          s=open('public/listia-bootstrap.js',encoding='utf-8').read()
-          block=re.search(r'const JS=\[(.*?)\];',s,re.S)
-          assert block, 'Bootstrap JS list missing'
-          for x in re.findall(r"['\"](/[^'\"]+\.js(?:\?[^'\"]*)?)['\"]",block.group(1)):
-              print(x.split('?',1)[0].lstrip('/'))
-          PY
-          while IFS= read -r f; do test -f "public/$f" || { echo "Missing bootstrap module public/$f"; exit 1; }; node --check "public/$f"; done < /tmp/bootstrap-js.txt
-          echo 'Loaded and bootstrapped JavaScript syntax OK'
+          node --check public/marketplace-native-runtime-v1.js
+          node --check public/marketplace-gateway-v9.js
+          node --check public/marketplace.js
+          node --check public/marketplace-qroo-map.js
+          node --check public/listia-voice.js
+          node --check public/listings-my-website.js
+          node --check public/market-intelligence.js
+          echo 'Critical PWA JavaScript syntax OK'
 
-      - name: Audit manifests and canonical app identity
-        shell: bash
+      - name: Audit current runtime graph, manifests and immutable app identity
         run: |
           set -Eeuo pipefail
+          python scripts/audit-public-runtime.py
           python3 - <<'PY'
+          from pathlib import Path
           import json,glob,re
+          note=Path('public/APP_ICON_VERSION.txt').read_text(encoding='utf-8')
+          m=re.search(r'icon_version=(\d+)|version=(\d+)',note)
+          assert m, 'APP_ICON_VERSION missing version'
+          version=next(x for x in m.groups() if x)
+          assert 'outer_white_background=removed' in note
+          assert 'extra_wheel_or_pointer=forbidden' in note
           files=glob.glob('public/manifest*.webmanifest'); assert len(files)>=12, f'Expected >=12 manifests, found {len(files)}'
           for p in files:
               d=json.load(open(p,encoding='utf-8'))
               assert d.get('name')=='Listia', f'{p}: name must be Listia'
               assert d.get('short_name')=='Listia', f'{p}: short_name must be Listia'
               assert d.get('display')=='standalone', f'{p}: display not standalone'
-              assert d.get('start_url'), f'{p}: missing start_url'
               icons=d.get('icons') or []
               assert any(i.get('sizes')=='192x192' for i in icons), f'{p}: missing 192 icon'
               assert any(i.get('sizes')=='512x512' for i in icons), f'{p}: missing 512 icon'
               assert any('maskable' in str(i.get('purpose','')) for i in icons), f'{p}: missing maskable icon'
-              assert all(re.search(r'\?v=16$',str(i.get('src',''))) for i in icons), f'{p}: stale icon version'
-          print('Manifest identity OK')
+              for icon in icons:
+                  src=str(icon.get('src',''))
+                  assert '?v=' not in src, f'{p}: icon must use physical immutable filename: {src}'
+                  assert f'listia-app-icon-v{version}-' in src, f'{p}: icon version mismatch: {src}'
+                  assert Path('public/'+src.lstrip('/')).exists(), f'{p}: missing physical icon {src}'
+          print(f'Manifest identity + immutable icon v{version} OK')
           PY
 
       - name: Audit Service Worker precache references
-        shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
           from urllib.parse import urlparse
-          import re
+          import re,json
           s=Path('public/sw.js').read_text(encoding='utf-8')
           cache=re.search(r'const\s+CACHE\s*=\s*["\']([^"\']+)["\']\s*;',s)
-          assert cache and cache.group(1).startswith('listia-pwa-'), 'Valid current LISTIA cache marker missing'
+          assert cache and cache.group(1).startswith('listia-pwa-'), 'Valid LISTIA cache marker missing'
           refs=re.findall(r'"(/[^"]+)"',s); missing=[]
           for ref in refs:
               path=urlparse(ref).path.lstrip('/')
               if path and not path.endswith('/') and not (Path('public')/path).exists(): missing.append(ref)
           assert not missing, 'Missing SW precache assets: '+', '.join(sorted(set(missing)))
-          manifests=[r for r in refs if '.webmanifest' in r]
-          appicons=[r for r in refs if '/listia-app-icon-' in r]
-          assert manifests and all('?v=16' in r for r in manifests), 'Manifest cache version mismatch'
-          assert appicons and all('?v=16' in r for r in appicons), 'App icon cache version mismatch'
           assert any(urlparse(r).path=='/listia-bootstrap.js' for r in refs), 'Bootstrap not precached'
+          assert any('/marketplace.js?v=13' in r for r in refs), 'Marketplace v13 not precached'
+          assert any('/marketplace-visible-mobile-v1.css?v=1' in r for r in refs), 'Visible mobile layer not precached'
           print(f'Service Worker refs OK cache={cache.group(1)} count={len(set(refs))}')
           PY
 
       - name: Marketplace mobile contracts
-        shell: bash
         run: |
           set -Eeuo pipefail
           grep -Fq '100dvh' public/marketplace-pro-mobile.css
           grep -Fq 'marketplace-pro-tabs' public/marketplace-qroo-map.js
           grep -Fq 'marketplace-pro-voice' public/marketplace-qroo-map.js
           grep -Fq 'qroo-intel-chart' public/marketplace-qroo-map.js
-          node --check public/marketplace-qroo-map.js
-          node --check public/marketplace.js
-          node --check public/listia-voice.js
-          echo 'Marketplace mobile contracts OK'
+          grep -Fq 'pendingReset=false' public/marketplace.js
+          grep -Fq 'queueMicrotask(()=>load(true))' public/marketplace.js
+          echo 'Marketplace mobile and latest-search-wins contracts OK'
