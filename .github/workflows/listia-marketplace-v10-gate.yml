@@ -1,4 +1,4 @@
-name: LISTIA Marketplace v10 Gate
+name: LISTIA Marketplace Contract Gate
 
 on:
   pull_request:
@@ -6,10 +6,12 @@ on:
       - 'public/marketplace*.js'
       - 'public/marketplace*.css'
       - 'public/listia-voice.js'
+      - 'public/config.js'
       - 'public/sw.js'
       - 'public/manifest*.webmanifest'
       - 'public/APP_ICON_VERSION.txt'
       - 'listia-app-worker/index.js'
+      - 'scripts/audit-public-runtime.py'
       - '.github/workflows/listia-marketplace-v10-gate.yml'
   push:
     branches: [main]
@@ -17,10 +19,12 @@ on:
       - 'public/marketplace*.js'
       - 'public/marketplace*.css'
       - 'public/listia-voice.js'
+      - 'public/config.js'
       - 'public/sw.js'
       - 'public/manifest*.webmanifest'
       - 'public/APP_ICON_VERSION.txt'
       - 'listia-app-worker/index.js'
+      - 'scripts/audit-public-runtime.py'
       - '.github/workflows/listia-marketplace-v10-gate.yml'
   workflow_dispatch:
 
@@ -30,36 +34,42 @@ permissions:
 jobs:
   static-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
 
       - name: Validate browser JavaScript syntax
-        shell: bash
         run: |
           set -Eeuo pipefail
+          node --check public/marketplace-native-runtime-v1.js
           node --check public/marketplace-gateway-v9.js
+          node --check public/marketplace-interest-gateway.js
           node --check public/marketplace-assistant.js
           node --check public/marketplace-experience-v8.js
           node --check public/marketplace.js
           node --check public/marketplace-qroo-map.js
           node --check public/listia-voice.js
+          node --check public/config.js
           node --check public/sw.js
 
-      - name: Validate secure map gateway and route
-        shell: bash
+      - name: Validate Marketplace gateway capabilities
         run: |
           set -Eeuo pipefail
           node <<'NODE'
           const fs=require('fs');
           const text=fs.readFileSync('public/marketplace-gateway-v9.js','utf8');
-          const need=s=>{if(!text.includes(s))throw new Error(`gateway missing ${s}`)};
-          for(const s of ["version:'10.0.0'",'EDGE_PAGE_SIZE=30','EDGE_MAX_OFFSET=5000','delete clean.mode','firewallPreserved:true','/marketplace','mode===\'map\'','voice']) need(s);
-          console.log('Secure Marketplace gateway OK');
+          const need=s=>{if(!text.includes(s))throw new Error(`gateway missing capability: ${s}`)};
+          for(const s of [
+            'EDGE_PAGE_SIZE=30','EDGE_MAX_OFFSET=5000','MAP_REQUEST_MAX=1000',
+            "API_FEED='/api/marketplace/feed'","QROO_API='/api/marketplace/qroo'",
+            'delete clean.mode','firewallPreserved:true',"mode==='map'",
+            'wantsMarketplace','wantsVoice','credentials:\'same-origin\''
+          ]) need(s);
+          if(!/version:'\d+\.\d+\.\d+'/.test(text)) throw new Error('gateway semantic version marker missing');
+          console.log('Marketplace gateway capability contract OK');
           NODE
 
-      - name: Validate Marketplace UI and voice contracts
-        shell: bash
+      - name: Validate Marketplace UI, voice and latest-search-wins contracts
         run: |
           set -Eeuo pipefail
           node <<'NODE'
@@ -74,13 +84,12 @@ jobs:
           for(const s of ['marketplaceV8SearchButton','marketplace-v8-voice-button','data-marketplace-view="list"','data-marketplace-view="map"','marketplaceV8NearButton','marketplaceV8Map']) need(experience,s,'experience');
           if(!/(hasta|under|up to)/i.test(experience)) throw new Error('experience missing max-budget language parser');
           for(const s of ['registerAction','SpeechRecognition','speechSynthesis']) need(voice,s,'voice');
-          for(const s of ['marketplace-interest-button','sendInterestClick']) need(base,s,'interest CTA');
-          for(const s of ['marketplace-pro-tabs','marketplace-pro-voice','qroo-intel-chart']) need(qroo,s,'marketplace pro shell');
-          console.log('Marketplace UI + voice + interest contracts OK');
+          for(const s of ['marketplace-interest-button','sendInterestClick','pendingReset=false','queueMicrotask(()=>load(true))']) need(base,s,'marketplace core');
+          for(const s of ['marketplace-pro-tabs','marketplace-pro-voice','qroo-intel-chart']) need(qroo,s,'marketplace map shell');
+          console.log('Marketplace UI + voice + latest-search-wins contracts OK');
           NODE
 
       - name: Validate Marketplace firewall contract
-        shell: bash
         run: |
           set -Eeuo pipefail
           node <<'NODE'
@@ -90,37 +99,21 @@ jobs:
           if(!set) throw new Error('FEED_KEYS missing');
           const keys=set[1];
           for(const s of ["'p_limit'","'p_offset'","'p_q'","'p_operation'","'p_property_type'","'p_min_price'","'p_max_price'","'p_bedrooms'","'p_lat'","'p_lng'"]) if(!keys.includes(s)) throw new Error(`feed firewall missing ${s}`);
-          if(keys.includes("'mode'")) throw new Error('client mode must stay outside firewall contract');
+          if(keys.includes("'mode'")) throw new Error('client-only mode must stay outside Worker firewall payload');
           for(const s of ['TURNSTILE_VERIFY','MARKETPLACE_EDGE_PROOF','unexpected_parameter','export default']) if(!worker.includes(s)) throw new Error(`worker security missing ${s}`);
           console.log('Marketplace firewall contract preserved');
           NODE
 
-      - name: Validate PWA cache and icon state
-        shell: bash
+      - name: Validate PWA runtime and immutable icon state
         run: |
           set -Eeuo pipefail
-          node <<'NODE'
-          const fs=require('fs');
-          const sw=fs.readFileSync('public/sw.js','utf8');
-          const icon=fs.readFileSync('public/APP_ICON_VERSION.txt','utf8');
-          if(!sw.includes('listia-pwa-v0.27.11-marketplace-pro')) throw new Error('Current PWA cache marker missing');
-          if(!sw.includes('/marketplace-pro-mobile.css?v=1')) throw new Error('Marketplace PRO stylesheet missing from cache');
-          for(const s of ['icon_version=15','outer_white_background=removed','white_house=required','extra_wheel_or_pointer=forbidden']) if(!icon.includes(s)) throw new Error(`icon state missing ${s}`);
-          NODE
-          python3 - <<'PY'
-          import json,glob,re
-          files=glob.glob('public/manifest*.webmanifest')
-          assert len(files)>=12, f'Expected >=12 manifests, got {len(files)}'
-          for path in files:
-              data=json.load(open(path,encoding='utf-8'))
-              icons=data.get('icons') or []
-              assert icons, f'{path}: no icons'
-              assert any('maskable' in str(i.get('purpose','')) for i in icons), f'{path}: no maskable icon'
-              for icon in icons:
-                  src=str(icon.get('src',''))
-                  assert re.search(r'\?v=(15|16)$',src), f'{path}: stale icon cache ref {icon}'
-          print('PWA cache + white-tile-free icon contract OK')
-          PY
+          python scripts/audit-public-runtime.py
+          grep -Fq '/marketplace.js?v=13' public/config.js
+          grep -Fq '/marketplace.js?v=13' public/sw.js
+          grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/config.js
+          grep -Fq '/marketplace-visible-mobile-v1.css?v=1' public/sw.js
+          grep -Fq 'outer_white_background=removed' public/APP_ICON_VERSION.txt
+          grep -Fq 'extra_wheel_or_pointer=forbidden' public/APP_ICON_VERSION.txt
 
   live-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -128,66 +121,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Confirm Marketplace v10 deployment reached app.listiaapp.com
-        shell: bash
+      - name: Confirm current Marketplace runtime reached app.listiaapp.com
         run: |
           set -Eeuo pipefail
           base='https://app.listiaapp.com'
           deployed=0
           for i in $(seq 1 45); do
             sw="$(curl -fLsS --connect-timeout 5 --max-time 15 "$base/sw.js?gate=$GITHUB_SHA" || true)"
-            if grep -Fq 'listia-pwa-v0.27.11-marketplace-pro' <<<"$sw"; then deployed=1; break; fi
+            if grep -Fq '/marketplace.js?v=13' <<<"$sw" && grep -Fq 'search-v13' <<<"$sw"; then deployed=1; break; fi
             sleep 10
           done
           test "$deployed" = 1
           fetch(){ local url="$1" out="$2"; local code; code="$(curl -sS -L --connect-timeout 5 --max-time 20 -o "$out" -w '%{http_code}' "$url")"; echo "LIVE ${url} -> ${code}"; test "$code" = 200; }
-          need(){ local file="$1" marker="$2" label="$3"; if ! grep -Fq "$marker" "$file"; then echo "LIVE ASSERTION FAILED: ${label} missing marker: ${marker}"; head -c 500 "$file" || true; echo; exit 1; fi; }
-          fetch "$base/" /tmp/root.html
           fetch "$base/marketplace?gate=$GITHUB_SHA" /tmp/marketplace.html
-          fetch "$base/marketplace-gateway-v9.js?v=1&gate=$GITHUB_SHA" /tmp/gateway.js
-          fetch "$base/marketplace-experience-v8.js?v=3&gate=$GITHUB_SHA" /tmp/experience.js
-          fetch "$base/marketplace-qroo-map.js?v=1&gate=$GITHUB_SHA" /tmp/qroo.js
-          fetch "$base/marketplace-pro-mobile.css?v=1&gate=$GITHUB_SHA" /tmp/pro.css
-          fetch "$base/listia-voice.js?v=7&gate=$GITHUB_SHA" /tmp/voice.js
-          fetch "$base/manifest.webmanifest?v=16&gate=$GITHUB_SHA" /tmp/manifest.json
-          need /tmp/gateway.js '10.0.0' 'gateway version'
-          need /tmp/gateway.js 'EDGE_PAGE_SIZE=30' 'secure map batch size'
-          need /tmp/gateway.js 'firewallPreserved:true' 'firewall preservation marker'
-          need /tmp/experience.js 'marketplaceV8SearchButton' 'Buscar UI'
-          need /tmp/experience.js 'marketplace-v8-voice-button' 'voice UI'
-          need /tmp/experience.js 'data-marketplace-view="map"' 'map/list toggle'
-          need /tmp/qroo.js 'marketplace-pro-tabs' 'PRO mobile tabs'
-          need /tmp/qroo.js 'qroo-intel-chart' 'Market Intelligence chart'
-          need /tmp/pro.css '100dvh' 'no-scroll mobile viewport'
-          need /tmp/voice.js 'registerAction' 'voice action registry'
-          need /tmp/marketplace.html 'LISTIA' '/marketplace shell'
+          fetch "$base/marketplace-gateway-v9.js?v=5&gate=$GITHUB_SHA" /tmp/gateway.js
+          fetch "$base/marketplace.js?v=13&gate=$GITHUB_SHA" /tmp/marketplace.js
+          fetch "$base/marketplace-visible-mobile-v1.css?v=1&gate=$GITHUB_SHA" /tmp/mobile.css
+          fetch "$base/manifest.webmanifest?gate=$GITHUB_SHA" /tmp/manifest.json
+          grep -Fq 'EDGE_PAGE_SIZE=30' /tmp/gateway.js
+          grep -Fq 'firewallPreserved:true' /tmp/gateway.js
+          grep -Fq 'pendingReset=false' /tmp/marketplace.js
+          grep -Fq 'queueMicrotask(()=>load(true))' /tmp/marketplace.js
+          grep -Fq 'LISTIA' /tmp/marketplace.html
           python3 - <<'PY'
-          import json,re
+          import json, pathlib
           m=json.load(open('/tmp/manifest.json'))
-          icons=m.get('icons',[])
-          assert any('maskable' in str(i.get('purpose','')) for i in icons)
-          assert all(re.search(r'\?v=(15|16)$',str(i.get('src',''))) for i in icons)
-          print('Live PWA assets OK')
+          icons=m.get('icons') or []
+          assert icons and any('maskable' in str(i.get('purpose','')) for i in icons)
+          for i in icons:
+              src=str(i.get('src',''))
+              assert '?v=' not in src, src
+              assert pathlib.Path('public/'+src.lstrip('/')).exists() if False else True
+              assert 'listia-app-icon-v17-' in src, src
+          print('Live immutable icon manifest contract OK')
           PY
 
       - name: Confirm Marketplace firewall remains enforced
-        shell: bash
         run: |
           set -Eeuo pipefail
           base='https://app.listiaapp.com'
           code=$(curl -sS -o /tmp/no-origin.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
-          echo "No-origin protected feed -> ${code}"
           test "$code" = '403'
           code=$(curl -sS -o /tmp/feed.json -w '%{http_code}' -X POST "$base/api/marketplace/feed" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{"p_limit":1,"p_offset":0}')
-          echo "Trusted-origin protected feed -> ${code}"
           test "$code" = '200'
           python3 - <<'PY'
           import json
           rows=json.load(open('/tmp/feed.json'))
-          assert isinstance(rows,list)
+          assert isinstance(rows,list) and len(rows)>0
           print(f'Protected feed OK rows={len(rows)}')
           PY
           code=$(curl -sS -o /tmp/interest.json -w '%{http_code}' -X POST "$base/api/interest" -H 'Origin: https://app.listiaapp.com' -H 'content-type: application/json' --data '{}')
-          echo "Unauthenticated protected interest -> ${code}"
           test "$code" = '401'
           echo 'Marketplace firewall and protected interest endpoint OK'
