@@ -12,6 +12,7 @@ on:
       - 'LISTIA My Website Runtime'
       - 'LISTIA App Icon v17'
       - 'LISTIA Market Intelligence Runtime'
+      - 'LISTIA OAuth Login'
     types: [completed]
     branches: [main]
 
