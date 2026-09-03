@@ -78,27 +78,36 @@ jobs:
   provider-health:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Google and Microsoft providers redirect correctly
+      - name: Verify Google and Microsoft providers independently
         shell: bash
         env:
           SUPABASE_URL: https://zvzafiarwerbuoaccnoz.supabase.co
           REDIRECT_TO: https://app.listiaapp.com/
         run: |
-          set -Eeuo pipefail
+          set -u
+          failures=0
           test_provider(){
             local provider="$1" expected="$2" scopes="${3:-}"
-            local url="${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=$(python -c 'import urllib.parse,os;print(urllib.parse.quote(os.environ["REDIRECT_TO"],safe=""))')"
+            local encoded
+            encoded=$(python -c 'import urllib.parse,os;print(urllib.parse.quote(os.environ["REDIRECT_TO"],safe=""))')
+            local url="${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encoded}"
             if [[ -n "$scopes" ]]; then url="${url}&scopes=${scopes}"; fi
             code=$(curl -sS --max-time 20 -D /tmp/${provider}.headers -o /tmp/${provider}.body -w '%{http_code}' "$url" || true)
             location=$(awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/^location:[[:space:]]*/,"");gsub(/\r/,"");print;exit}' /tmp/${provider}.headers || true)
-            echo "${provider}: HTTP ${code} redirect_host=${location%%/*}"
+            echo "${provider}: HTTP ${code} location=${location:-none}"
             if [[ ! "$code" =~ ^30[12378]$ ]] || [[ "$location" != *"${expected}"* ]]; then
-              echo "Provider ${provider} is not ready. Response body:"
+              echo "PROVIDER_NOT_READY=${provider}"
               head -c 800 /tmp/${provider}.body || true
               echo
-              exit 1
+              failures=$((failures+1))
+            else
+              echo "PROVIDER_READY=${provider}"
             fi
           }
           test_provider google accounts.google.com
           test_provider azure login.microsoftonline.com email
+          if [[ "$failures" -gt 0 ]]; then
+            echo "OAuth provider health failed for ${failures} provider(s)."
+            exit 1
+          fi
           echo 'Google and Microsoft OAuth providers are enabled and redirecting.'
