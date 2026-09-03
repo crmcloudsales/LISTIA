@@ -1,0 +1,104 @@
+name: LISTIA OAuth Login
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/oauth-auth.js'
+      - '.github/workflows/listia-oauth-login.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-oauth-login
+  cancel-in-progress: true
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wire OAuth module into LISTIA runtime
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          config=Path('public/config.js')
+          s=config.read_text(encoding='utf-8')
+          module='["/oauth-auth.js?v=1","listiaOauthAuthLoader"]'
+          anchor='["/legal-consent.js?v=1","listiaLegalConsentLoader"]'
+          if module not in s:
+              if anchor not in s: raise SystemExit('OAuth config anchor missing')
+              s=s.replace(anchor,anchor+','+module,1)
+          config.write_text(s,encoding='utf-8')
+
+          sw=Path('public/sw.js')
+          w=sw.read_text(encoding='utf-8')
+          w=re.sub(r'const CACHE="([^"]+?)(?:-oauth-v\d+)?";',r'const CACHE="\1-oauth-v1";',w,count=1)
+          asset='"/oauth-auth.js?v=1",'
+          anchor='"/legal-consent.js?v=1",'
+          if asset not in w:
+              if anchor not in w: raise SystemExit('OAuth SW anchor missing')
+              w=w.replace(anchor,anchor+asset,1)
+          sw.write_text(w,encoding='utf-8')
+          PY
+      - name: Verify OAuth client contract
+        run: |
+          set -Eeuo pipefail
+          node --check public/oauth-auth.js
+          node --check public/config.js
+          node --check public/sw.js
+          grep -Fq '/oauth-auth.js?v=1' public/config.js
+          grep -Fq '/oauth-auth.js?v=1' public/sw.js
+          grep -Fq "provider:'google'" public/oauth-auth.js
+          grep -Fq "provider:'azure'" public/oauth-auth.js
+          grep -Fq "scopes:'email'" public/oauth-auth.js
+          grep -Fq "https://app.listiaapp.com/" public/oauth-auth.js
+          grep -Fq 'listia_session' public/app.js
+          grep -Fq 'access_token=' public/app.js
+          if grep -Eqi '(client_secret|service_role|azure.*secret|google.*secret)' public/oauth-auth.js; then
+            echo 'Private OAuth secret reference detected in public client'; exit 1
+          fi
+          echo 'LISTIA OAuth client contract verified'
+      - name: Commit OAuth runtime wiring
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/config.js public/sw.js
+          git commit -m 'feat: activate Google and Microsoft login in LISTIA' || exit 0
+          git pull --rebase origin main
+          git push origin main
+
+  provider-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Google and Microsoft providers redirect correctly
+        shell: bash
+        env:
+          SUPABASE_URL: https://zvzafiarwerbuoaccnoz.supabase.co
+          REDIRECT_TO: https://app.listiaapp.com/
+        run: |
+          set -Eeuo pipefail
+          test_provider(){
+            local provider="$1" expected="$2" scopes="${3:-}"
+            local url="${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=$(python -c 'import urllib.parse,os;print(urllib.parse.quote(os.environ["REDIRECT_TO"],safe=""))')"
+            if [[ -n "$scopes" ]]; then url="${url}&scopes=${scopes}"; fi
+            code=$(curl -sS --max-time 20 -D /tmp/${provider}.headers -o /tmp/${provider}.body -w '%{http_code}' "$url" || true)
+            location=$(awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/^location:[[:space:]]*/,"");gsub(/\r/,"");print;exit}' /tmp/${provider}.headers || true)
+            echo "${provider}: HTTP ${code} redirect_host=${location%%/*}"
+            if [[ ! "$code" =~ ^30[12378]$ ]] || [[ "$location" != *"${expected}"* ]]; then
+              echo "Provider ${provider} is not ready. Response body:"
+              head -c 800 /tmp/${provider}.body || true
+              echo
+              exit 1
+            fi
+          }
+          test_provider google accounts.google.com
+          test_provider azure login.microsoftonline.com email
+          echo 'Google and Microsoft OAuth providers are enabled and redirecting.'
