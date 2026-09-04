@@ -1,0 +1,87 @@
+name: LISTIA AI Engine Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/listia-ai-engine/**'
+      - 'supabase/functions/listia-conversation/**'
+      - 'supabase/functions/listia-public-chat/**'
+      - 'supabase/functions/listia-tts/**'
+      - 'supabase/functions/property-ai-worker/**'
+      - 'supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
+      - 'supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+      - '.github/workflows/listia-ai-engine-gate.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/listia-ai-engine/**'
+      - 'supabase/functions/listia-conversation/**'
+      - 'supabase/functions/listia-public-chat/**'
+      - 'supabase/functions/listia-tts/**'
+      - 'supabase/functions/property-ai-worker/**'
+      - 'supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
+      - 'supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+      - '.github/workflows/listia-ai-engine-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ai-engine-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enforce central LISTIA AI Engine
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          engine='supabase/functions/listia-ai-engine/index.ts'
+          adapters='supabase/functions/listia-ai-engine/adapters.ts'
+          migration='supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
+          tts_migration='supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+          consumers=(
+            'supabase/functions/listia-conversation/index.ts'
+            'supabase/functions/listia-public-chat/index.ts'
+            'supabase/functions/listia-tts/index.ts'
+            'supabase/functions/property-ai-worker/index.ts'
+          )
+
+          # Provider endpoints and provider protocol live only in adapters.
+          grep -Fq 'https://api.openai.com/v1/responses' "$adapters"
+          grep -Fq 'https://api.openai.com/v1/audio/speech' "$adapters"
+          grep -Fq 'https://integrate.api.nvidia.com/v1/chat/completions' "$adapters"
+          grep -Fq "from './adapters.ts'" "$engine"
+          grep -Fq "name='listia_ai_engine_secret'" "$engine"
+          grep -Fq "task==='tts'" "$engine"
+          grep -Fq 'private.ai_runs' "$engine"
+          grep -Fq 'private.ai_route_policies' "$engine"
+          grep -Fq 'private.ai_provider_runtimes' "$engine"
+
+          # Product functions may know the Engine, never provider URLs or raw provider secrets.
+          for file in "${consumers[@]}"; do
+            grep -Fq '/functions/v1/listia-ai-engine' "$file"
+            grep -Fq 'listia_ai_engine_secret' "$file"
+            if grep -Eqi 'api\.openai\.com|integrate\.api\.nvidia\.com|OPENAI_API_KEY|NVIDIA_API_KEY|NIM_API_KEY|LISTIA_LLM_API_KEY|brain\.listiaapp\.com' "$file"; then
+              echo "Direct provider dependency found outside LISTIA AI Engine: $file"
+              exit 1
+            fi
+          done
+
+          # Core routing and LISTIA-owned credentials are source-of-truth.
+          grep -Fq "'nvidia:listia_direct'" "$migration"
+          grep -Fq "'listia_nvidia_api_key'" "$migration"
+          grep -Fq "'listia_openai_api_key'" "$migration"
+          grep -Fq "'openai:gpt-5.6-sol'" "$migration"
+          grep -Fq "'openai:gpt-5.6-terra'" "$migration"
+          grep -Fq "'openai:gpt-5.6-luna'" "$migration"
+          grep -Fq "'conversation','q1'" "$migration"
+          grep -Fq "'property_extract','q1'" "$migration"
+          grep -Fq "'openai:gpt-4o-mini-tts'" "$tts_migration"
+          grep -Fq "'tts','q1'" "$tts_migration"
+
+          # Engine itself is LISTIA-only and does not cross into Marketplace product data.
+          ! grep -Eqi 'cloudsales|cloudco|marketplace_listings|public\.marketplace_|/functions/v1/marketplace' "$engine" "$adapters"
+
+          echo 'LISTIA_AI_ENGINE_BOUNDARY_OK'
