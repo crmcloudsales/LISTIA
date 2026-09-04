@@ -25,7 +25,7 @@ async function refreshToken(row:any){
   const expiresAt=new Date(Date.now()+Math.max(60,Number(data.expires_in)||3600)*1000).toISOString()
   await sql.begin(async tx=>{
     await tx`select vault.update_secret(${row.access_token_secret_id}::uuid,${String(data.access_token)})`
-    await tx`update private.integration_token_refs set token_expires_at=${expiresAt}::timestamptz,token_metadata=coalesce(token_metadata,'{}'::jsonb)||jsonb_build_object('token_type',coalesce(${String(data.token_type||'Bearer')},'Bearer'),'refreshed_at',now()),updated_at=now() where connection_id=${row.connection_id}::uuid`
+    await tx`update private.integration_token_refs set token_expires_at=${expiresAt}::timestamptz,token_metadata=coalesce(token_metadata,'{}'::jsonb)||jsonb_build_object('token_type',${String(data.token_type||'Bearer')},'refreshed_at',now()),updated_at=now() where connection_id=${row.connection_id}::uuid`
   })
   return String(data.access_token)
 }
@@ -47,8 +47,7 @@ async function googleFetch(url:string,init:RequestInit,row:any){
 
 async function appointmentContext(job:any){
   const [row]=await sql`
-    select
-      a.id,a.organization_id,a.title,a.starts_at,a.ends_at,a.meeting_type,a.status,a.external_event_id,
+    select a.id,a.organization_id,a.title,a.starts_at,a.ends_at,a.meeting_type,a.status,a.external_event_id,
       c.id as connection_id,c.metadata->>'calendar_id' as calendar_id,c.granted_scopes,
       tr.access_token_secret_id,tr.refresh_token_secret_id,tr.token_expires_at,
       (select decrypted_secret from vault.decrypted_secrets where id=tr.access_token_secret_id limit 1) as access_token,
@@ -76,8 +75,7 @@ async function upsertEvent(row:any){
   const id=String(row.external_event_id||eventId(String(row.id)))
   const calendar=encodeURIComponent(String(row.calendar_id))
   const event=encodeURIComponent(id)
-  const body={
-    id,
+  const eventFields={
     summary:safeTitle(row.title),
     description:`Managed by LISTIA. Status: ${String(row.status||'scheduled')}.`,
     start:{dateTime:new Date(row.starts_at).toISOString()},
@@ -85,11 +83,11 @@ async function upsertEvent(row:any){
     extendedProperties:{private:{listia_appointment_id:String(row.id),listia_managed:'true'}},
   }
   const patchUrl=`https://www.googleapis.com/calendar/v3/calendars/${calendar}/events/${event}`
-  let r=await googleFetch(patchUrl,{method:'PATCH',body:JSON.stringify(body)},row)
+  let r=await googleFetch(patchUrl,{method:'PATCH',body:JSON.stringify(eventFields)},row)
   if(r.status===404){
     const createUrl=`https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`
-    r=await googleFetch(createUrl,{method:'POST',body:JSON.stringify(body)},row)
-    if(r.status===409)r=await googleFetch(patchUrl,{method:'PATCH',body:JSON.stringify(body)},row)
+    r=await googleFetch(createUrl,{method:'POST',body:JSON.stringify({id,...eventFields})},row)
+    if(r.status===409)r=await googleFetch(patchUrl,{method:'PATCH',body:JSON.stringify(eventFields)},row)
   }
   const text=await r.text()
   if(!r.ok)throw new Error(`google_event_upsert_${r.status}:${text.slice(0,180)}`)
