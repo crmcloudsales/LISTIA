@@ -61,7 +61,16 @@ jobs:
           grep -Fq "effectivePlan === 'pro' ? 20 : effectivePlan === 'premium' ? 10 : 30" "$webhook"
           grep -Fq 'recordAffiliateCommission' "$webhook"
           grep -Fq 'affiliate_commissions' "$webhook"
-          grep -Fq "action = 'billing_checkout_create'" "$checkout"
+
+          if grep -Fq 'pricing_pending' "$checkout"; then
+            echo 'LISTIA checkout is intentionally in pricing HOLD.'
+            ! grep -Fq 'stripe.checkout.sessions.create' "$checkout"
+            ! grep -Fq 'stripe.customers.create' "$checkout"
+            ! grep -Eq 'STRIPE_(RESTRICTED|SECRET)_KEY' "$checkout"
+          else
+            grep -Fq "action = 'billing_checkout_create'" "$checkout"
+          fi
+
           grep -Fq "billing_portal_create" "$portal"
           grep -Fq "billing_premium_seats_update" "$seats"
           grep -Fq "proration_behavior:'always_invoice'" "$seats"
