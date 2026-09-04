@@ -9,6 +9,12 @@ on:
       - 'wrangler-listia-app.jsonc'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
+    inputs:
+      run_marketplace_smoke:
+        description: 'Run Marketplace visual smoke after the core LISTIA deploy'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -215,8 +221,8 @@ jobs:
           git commit -m 'Record verified LISTIA PWA Workers deployment' || exit 0
           git push origin main
 
-      - name: Dispatch Marketplace visual browser smoke
-        if: success()
+      - name: Optionally dispatch Marketplace visual browser smoke
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.run_marketplace_smoke == true
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -229,4 +235,4 @@ jobs:
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/${REPO}/actions/workflows/listia-marketplace-browser-smoke.yml/dispatches" \
             --data '{"ref":"main"}'
-          echo 'Marketplace visual smoke dispatched after verified production deploy.'
+          echo 'Marketplace visual smoke dispatched only by explicit manual request.'
