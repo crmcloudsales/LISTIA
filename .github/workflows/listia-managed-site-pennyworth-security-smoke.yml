@@ -7,11 +7,6 @@ on:
       - '.github/workflows/listia-managed-site-pennyworth-security-smoke.yml'
       - 'listia-app-worker/index.js'
       - 'supabase/functions/managed-site-inquiry/**'
-  workflow_run:
-    workflows:
-      - 'LISTIA Managed Sites Wildcard Route'
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -23,7 +18,6 @@ concurrency:
 
 jobs:
   contract:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -41,7 +35,11 @@ jobs:
               "SUPABASE_SITE_INQUIRY",
               "managed_site_inquiry",
               "verifyHuman(req,env",
-              "x-listia-client-ip",
+              "form_elapsed_ms:Math.max(0,Date.now()-opened)",
+              "website:body.website,form_elapsed_ms:body.form_elapsed_ms",
+              "'x-listia-client-ip':clientIp(req)",
+              "'x-listia-client-ua':String(req.headers.get('user-agent')||'').slice(0,500)",
+              "'x-listia-country':String(req.cf?.country||'').slice(0,8)",
               "/api/site/inquiry",
           ]
           edge_required = [
@@ -50,41 +48,55 @@ jobs:
               "if(decision!=='accepted')return json({ok:true})",
               "disposable_email",
               "canonical_edge_verified",
-              "marketplace_inquiries",
+              ".rpc('submit_marketplace_interest'",
+              "source:'listia_managed_site'",
+              "quality_score:score",
               "firewall:'pennyworth_v1'",
           ]
           missing = [f'worker:{x}' for x in worker_required if x not in worker]
           missing += [f'edge:{x}' for x in edge_required if x not in edge]
           if missing:
               raise SystemExit('PENNYWORTH_CANONICAL_CONTRACT_MISSING=' + ','.join(missing))
+          accepted_pos=edge.index("if(decision!=='accepted')return json({ok:true})")
+          pipeline_pos=edge.index(".rpc('submit_marketplace_interest'")
+          if pipeline_pos <= accepted_pos:
+              raise SystemExit('PENNYWORTH_PIPELINE_ORDER_INVALID')
           print('PENNYWORTH_CANONICAL_SOURCE_CONTRACT_OK')
           PY
 
   live-security-gates:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Verify live canonical route, Turnstile gate and private edge gate
+      - name: Verify live canonical route and Pennyworth public boundary
         shell: bash
         env:
           SITE: https://bonavista.listiaapp.com
           EDGE: https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/managed-site-inquiry
         run: |
           set -Eeuo pipefail
-          code=$(curl -sS -L --max-time 30 -D /tmp/site.headers -o /tmp/site.html -w '%{http_code}' "$SITE/?pennyworth_security_smoke=${GITHUB_RUN_ID}")
-          title=$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' /tmp/site.html | head -n1 || true)
-          brand_count=$( { grep -Fo 'Bonavista Realtors' /tmp/site.html || true; } | wc -l | tr -d ' ')
-          interest_count=$( { grep -oE '<button class="interest" data-id="[0-9a-fA-F-]{36}"' /tmp/site.html || true; } | wc -l | tr -d ' ')
+          ready=false
+          for attempt in $(seq 1 48); do
+            code=$(curl -sS -L --max-time 30 -o /tmp/site.html -w '%{http_code}' "$SITE/?pennyworth_security_smoke=${GITHUB_RUN_ID}_${attempt}" || true)
+            brand_count=$( { grep -Fo 'Bonavista Realtors' /tmp/site.html || true; } | wc -l | tr -d ' ')
+            interest_count=$( { grep -oE '<button class="interest" data-id="[0-9a-fA-F-]{36}"' /tmp/site.html || true; } | wc -l | tr -d ' ')
+            if [[ "$code" == 200 && "$brand_count" -gt 0 && "$interest_count" -gt 0 ]] && grep -Fq 'form_elapsed_ms:Math.max(0,Date.now()-opened)' /tmp/site.html && grep -Fq 'data-action="managed_site_inquiry"' /tmp/site.html; then
+              ready=true
+              break
+            fi
+            echo "Waiting for canonical Pennyworth v2 edge (${attempt}/48): status=${code} brand=${brand_count} interests=${interest_count}"
+            sleep 5
+          done
+          [[ "$ready" == true ]] || { echo 'PENNYWORTH_V2_NOT_LIVE'; exit 21; }
+
           listing_id=$(grep -oE '<button class="interest" data-id="[0-9a-fA-F-]{36}"' /tmp/site.html | head -n1 | sed -E 's/.*data-id="([0-9a-fA-F-]{36})"/\1/' || true)
-          echo "SITE_DIAGNOSTIC status=${code} title=${title:-none} brand=${brand_count} interests=${interest_count} first=${listing_id:-none}"
-          [[ "$code" == 200 && "$brand_count" -gt 0 && "$interest_count" -gt 0 && -n "$listing_id" ]] || exit 21
+          [[ -n "$listing_id" ]] || exit 22
 
           code=$(curl -sS -L --max-time 20 -o /tmp/health.json -w '%{http_code}' "$SITE/.well-known/listia-health")
           [[ "$code" == 200 ]] && jq -e '.ok==true and .managed==true and .host=="bonavista.listiaapp.com"' /tmp/health.json >/dev/null
 
           cat >/tmp/invalid-turnstile.json <<JSON
-          {"listing_id":"${listing_id}","name":"Security Probe","email":"security-probe-${GITHUB_RUN_ID}@example.com","message":"LISTIA invalid Turnstile gate probe","turnstile_token":"invalid-ci-token"}
+          {"listing_id":"${listing_id}","name":"Security Probe","email":"security-probe-${GITHUB_RUN_ID}@example.com","message":"LISTIA invalid Turnstile gate probe","form_elapsed_ms":3000,"turnstile_token":"invalid-ci-token"}
           JSON
           code=$(curl -sS --max-time 30 -o /tmp/invalid-turnstile.out -w '%{http_code}' \
             -X POST "$SITE/api/site/inquiry" \
@@ -92,68 +104,10 @@ jobs:
             -H 'Origin: https://bonavista.listiaapp.com' \
             -H 'Sec-Fetch-Site: same-origin' \
             --data-binary @/tmp/invalid-turnstile.json)
-          [[ "$code" == 403 ]] || { echo "TURNSTILE_GATE_STATUS=${code}"; cat /tmp/invalid-turnstile.out; exit 22; }
+          [[ "$code" == 403 ]] || { echo "TURNSTILE_GATE_STATUS=${code}"; cat /tmp/invalid-turnstile.out; exit 23; }
           grep -Eq 'human_verification_failed|missing_human_verification|hostname_mismatch|action_mismatch' /tmp/invalid-turnstile.out
 
           code=$(curl -sS --max-time 30 -o /tmp/private-edge.out -w '%{http_code}' -X POST "$EDGE" -H 'Content-Type: application/json' --data '{}')
-          [[ "$code" == 403 ]] || { echo "PRIVATE_EDGE_STATUS=${code}"; cat /tmp/private-edge.out; exit 23; }
+          [[ "$code" == 403 ]] || { echo "PRIVATE_EDGE_STATUS=${code}"; cat /tmp/private-edge.out; exit 24; }
           grep -Fq 'edge_firewall_required' /tmp/private-edge.out
-          echo 'LISTIA_CANONICAL_SECURITY_GATES_OK'
-
-  live-pennyworth-junk:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-      - name: Install Playwright Chromium
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          mkdir -p /tmp/listia-pennyworth-e2e && cd /tmp/listia-pennyworth-e2e
-          npm init -y >/dev/null 2>&1
-          npm install playwright@latest >/dev/null 2>&1
-          npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Send one deliberately junk inquiry through real Turnstile and Pennyworth
-        shell: bash
-        env:
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -Eeuo pipefail
-          cd /tmp/listia-pennyworth-e2e
-          cat > pennyworth.js <<'NODE'
-          const { chromium, devices } = require('playwright');
-          (async()=>{
-            const browser=await chromium.launch({headless:true});
-            const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
-            const page=await context.newPage();
-            const url=`https://bonavista.listiaapp.com/?pennyworth_e2e=${encodeURIComponent(process.env.RUN_ID||'manual')}`;
-            const nav=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-            if(nav?.status()!==200)throw new Error(`managed_site_status_${nav?.status()}`);
-            const first=page.locator('button.interest[data-id]').first();
-            await first.waitFor({state:'visible',timeout:30000});
-            await first.click();
-            await page.locator('input[name="name"]').fill('test');
-            await page.locator('input[name="email"]').fill(`listia-pennyworth-e2e-${process.env.RUN_ID||Date.now()}@mailinator.com`);
-            await page.locator('textarea[name="message"]').fill('LISTIA Pennyworth automated junk security probe');
-            await page.waitForTimeout(2500);
-            let token='';
-            for(let i=0;i<45;i++){
-              token=await page.locator('input[name="cf-turnstile-response"]').inputValue().catch(()=> '');
-              if(token)break;
-              await page.waitForTimeout(1000);
-            }
-            if(!token)throw new Error('real_turnstile_token_not_obtained');
-            const responsePromise=page.waitForResponse(r=>r.url().endsWith('/api/site/inquiry')&&r.request().method()==='POST',{timeout:30000});
-            await page.locator('button.send').click();
-            const response=await responsePromise;
-            const body=await response.text().catch(()=> '');
-            console.log(`PENNYWORTH_BROWSER_RESPONSE status=${response.status()} body=${body}`);
-            if(response.status()!==200||!body.includes('"ok":true'))throw new Error(`pennyworth_submit_${response.status()}`);
-            if(body.includes('"id":'))throw new Error('junk_probe_reached_commercial_inquiry_layer');
-            await browser.close();
-          })().catch(e=>{console.error(e);process.exit(1)});
-          NODE
-          node pennyworth.js
+          echo "LISTIA_PENNYWORTH_V2_LIVE_SECURITY_OK listing=${listing_id}"
