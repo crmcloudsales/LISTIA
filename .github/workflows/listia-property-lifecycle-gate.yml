@@ -1,0 +1,75 @@
+name: LISTIA Property Lifecycle Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/property-lifecycle-action/index.ts'
+      - 'supabase/migrations/20260904134212_create_property_lifecycle_audit.sql'
+      - 'public/property-lifecycle-ui.js'
+      - 'public/property-lifecycle.css'
+      - 'public/listia-bootstrap.js'
+      - '.github/workflows/listia-property-lifecycle-gate.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/property-lifecycle-action/index.ts'
+      - 'supabase/migrations/20260904134212_create_property_lifecycle_audit.sql'
+      - 'public/property-lifecycle-ui.js'
+      - 'public/property-lifecycle.css'
+      - 'public/listia-bootstrap.js'
+      - '.github/workflows/listia-property-lifecycle-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify LISTIA property lifecycle isolation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          edge='supabase/functions/property-lifecycle-action/index.ts'
+          migration='supabase/migrations/20260904134212_create_property_lifecycle_audit.sql'
+          ui='public/property-lifecycle-ui.js'
+          bootstrap='public/listia-bootstrap.js'
+
+          node --check "$ui"
+
+          # Server-side authorization and lifecycle contract.
+          grep -Fq "error: 'owner_or_admin_required'" "$edge"
+          grep -Fq "const action = 'property_lifecycle_action'" "$edge"
+          grep -Fq 'private.security_rate_limits' "$edge"
+          grep -Fq 'private.property_lifecycle_events' "$edge"
+          grep -Fq "['archive', 'restore']" "$edge"
+          grep -Fq "error: 'published_property_requires_marketplace_unpublish'" "$edge"
+          grep -Fq "message.includes('property_limit_reached')" "$edge"
+          grep -Fq 'for update' "$edge"
+
+          # This core LISTIA function may acknowledge the Marketplace boundary in
+          # an error string, but it must never read/write Marketplace relations.
+          ! grep -Eq "public\.marketplace_|private\.marketplace_|from\(['\"]marketplace_|\.from\(['\"]marketplace_" "$edge"
+
+          # Lifecycle audit is private/service-only.
+          grep -Fq 'create table if not exists private.property_lifecycle_events' "$migration"
+          grep -Fq 'enable row level security' "$migration"
+          grep -Fq 'revoke all on private.property_lifecycle_events from public, anon, authenticated' "$migration"
+          grep -Fq 'grant select, insert on private.property_lifecycle_events to service_role' "$migration"
+
+          # UI owns archive/restore only for LISTIA inventory.
+          grep -Fq "/functions/v1/property-lifecycle-action" "$ui"
+          grep -Fq "status=eq.archived" "$ui"
+          grep -Fq "status=neq.archived" "$ui"
+          grep -Fq "property.status==='published'" "$ui"
+          ! grep -Eq "marketplace_listings|public\.marketplace_|/functions/v1/marketplace" "$ui"
+
+          # Core bootstrap must load only the new isolated lifecycle assets.
+          grep -Fq '/property-lifecycle-ui.js?v=1' "$bootstrap"
+          grep -Fq '/property-lifecycle.css?v=1' "$bootstrap"
+          test -f public/property-lifecycle.css
+
+          echo 'LISTIA_PROPERTY_LIFECYCLE_BOUNDARY_OK'
