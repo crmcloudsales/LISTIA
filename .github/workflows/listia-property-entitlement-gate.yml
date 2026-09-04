@@ -6,25 +6,25 @@ on:
     paths:
       - 'supabase/functions/property-intake-start/index.ts'
       - 'supabase/functions/development-unit-promote/index.ts'
+      - 'supabase/migrations/20260824113420_pricing_v2_markups_domains_free_three_properties.sql'
       - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
       - 'public/app.js'
       - 'public/i18n.js'
       - 'public/i18n-extra.js'
       - 'public/global-locales.js'
       - 'public/japanese-locale.js'
-      - 'public/BUILD_INFO.json'
       - '.github/workflows/listia-property-entitlement-gate.yml'
   pull_request:
     paths:
       - 'supabase/functions/property-intake-start/index.ts'
       - 'supabase/functions/development-unit-promote/index.ts'
+      - 'supabase/migrations/20260824113420_pricing_v2_markups_domains_free_three_properties.sql'
       - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
       - 'public/app.js'
       - 'public/i18n.js'
       - 'public/i18n-extra.js'
       - 'public/global-locales.js'
       - 'public/japanese-locale.js'
-      - 'public/BUILD_INFO.json'
       - '.github/workflows/listia-property-entitlement-gate.yml'
   workflow_dispatch:
 
@@ -43,9 +43,17 @@ jobs:
           set -Eeuo pipefail
           intake='supabase/functions/property-intake-start/index.ts'
           promote='supabase/functions/development-unit-promote/index.ts'
-          migration='supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+          pricing='supabase/migrations/20260824113420_pricing_v2_markups_domains_free_three_properties.sql'
+          boundary='supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
 
-          # Browser/Edge intake must use the canonical entitlement table and
+          # Canonical plan entitlement lives in private.plan_entitlements.
+          grep -Fq 'create table if not exists private.plan_entitlements' "$pricing"
+          grep -Fq "('free',3,50,now())" "$pricing"
+          grep -Fq "('pro',null,25,now())" "$pricing"
+          grep -Fq "('premium',null,12.5,now())" "$pricing"
+          grep -Fq 'revoke all on private.plan_entitlements from public, anon, authenticated' "$pricing"
+
+          # Browser/Edge intake must consume the canonical entitlement and
           # serialize count + insert in the same transaction.
           grep -Fq 'private.plan_entitlements' "$intake"
           grep -Fq 'pg_advisory_xact_lock' "$intake"
@@ -54,31 +62,30 @@ jobs:
           grep -Fq "error: 'plan_entitlement_unavailable'" "$intake"
           grep -Fq 'await sql.begin' "$intake"
 
-          # The quota must not drift back to a hard-coded free-only check.
+          # The Edge Function must not drift back to a duplicated free-only quota.
           ! grep -Eq "plan\s*===\s*['\"]free['\"].*(>=\s*3|>\s*2)" "$intake"
           ! grep -Fq 'free_property_limit' "$intake"
 
           # Database trigger is the final authority for every property creation
-          # path, including future service-role Edge Functions.
-          grep -Fq 'create or replace function private.enforce_property_plan_limit()' "$migration"
-          grep -Fq 'create trigger enforce_property_plan_limit' "$migration"
-          grep -Fq 'before insert or update of status, organization_id on public.properties' "$migration"
-          grep -Fq 'private.plan_entitlements' "$migration"
-          grep -Fq 'pg_advisory_xact_lock' "$migration"
-          grep -Fq "new.status = 'archived'" "$migration"
-          grep -Fq "p.status <> 'archived'" "$migration"
-          grep -Fq "message = 'property_limit_reached'" "$migration"
-          grep -Fq "message = 'plan_entitlement_unavailable'" "$migration"
+          # path, including current and future service-role functions.
+          grep -Fq 'create or replace function private.enforce_property_plan_limit()' "$boundary"
+          grep -Fq 'create trigger enforce_property_plan_limit' "$boundary"
+          grep -Fq 'before insert or update of status, organization_id on public.properties' "$boundary"
+          grep -Fq 'private.plan_entitlements' "$boundary"
+          grep -Fq 'pg_advisory_xact_lock' "$boundary"
+          grep -Fq "new.status = 'archived'" "$boundary"
+          grep -Fq "p.status <> 'archived'" "$boundary"
+          grep -Fq "message = 'property_limit_reached'" "$boundary"
+          grep -Fq "message = 'plan_entitlement_unavailable'" "$boundary"
 
-          # Development-unit promotion must surface the database entitlement
-          # result instead of masking it as a server error.
+          # Development-unit promotion must surface quota failures instead of
+          # masking them as a generic server error.
           grep -Fq "diagnostic.includes('property_limit_reached')" "$promote"
           grep -Fq "return out({ error: 'property_limit_reached' }, 409" "$promote"
           grep -Fq "diagnostic.includes('plan_entitlement_unavailable')" "$promote"
           grep -Fq "return out({ error: 'plan_entitlement_unavailable' }, 503" "$promote"
 
           # Runtime and product copy must describe the same entitlement.
-          grep -Fq '"free_property_limit": 3' public/BUILD_INFO.json
           grep -Fq '"property_limit_reached": "msg.free_property_limit"' public/app.js
           grep -Fq 'raw === "property_limit_reached"' public/app.js
           ! grep -Fq '"free_property_limit": "msg.free_property_limit"' public/app.js
