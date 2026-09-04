@@ -38,7 +38,9 @@ def main() -> int:
         return 2
     static_path = Path(sys.argv[1])
     output = Path(sys.argv[2])
-    limit = max(1, min(int(os.getenv("QROO_DIRECT_QUEUE_LIMIT", "100")), 200))
+    queue_limit = max(1, min(int(os.getenv("QROO_DIRECT_QUEUE_LIMIT", "100")), 200))
+    processing_limit = max(1, min(int(os.getenv("QROO_DIRECT_MAX_SOURCES", str(queue_limit))), 200))
+    limit = min(queue_limit, processing_limit)
     token = oidc_token()
     req = urllib.request.Request(
         f"{ENDPOINT}?limit={limit}",
