@@ -44,12 +44,10 @@ jobs:
           test -n "${CLOUDFLARE_ACCOUNT_ID}"
           test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}"
           python3 -m py_compile scripts/build-commercial-worker.py
-          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.source.mjs
-          node --check /tmp/listia-commercial-worker.source.mjs
-          timeout --signal=TERM 120s env npm_config_fetch_retries=2 npm_config_fetch_retry_maxtimeout=20000 npx --yes terser@5 /tmp/listia-commercial-worker.source.mjs --module --compress passes=2,drop_console=false --mangle --comments false --output /tmp/listia-commercial-worker.mjs
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
+          node --check /tmp/listia-commercial-worker.mjs
           printf '\nconst __LISTIA_RELEASE_FINGERPRINT="%s";\n' "${GITHUB_SHA}" >> /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
-          rm -f /tmp/listia-commercial-worker.source.mjs
           test "$(grep -c '<option value=' commercial/index.html)" -eq 7
           grep -Fq 'https://listiaapp.com/marketplace' commercial/marketplace.html
           grep -Fq 'LISTIA busca por ti' commercial/marketplace.html
@@ -170,7 +168,8 @@ jobs:
             echo 'investment_url=https://listiaapp.com/investment'
             echo 'legacy_cloudco_route=redirect_only'
             echo 'resource_boundary=LISTIA_ONLY'
-            echo 'commercial_worker_minified=true'
+            echo 'commercial_worker_minified=false'
+            echo 'commercial_worker_bundled_by_wrangler=true'
             echo 'commercial_worker_fingerprinted=true'
             echo 'languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja'
             echo 'terms_version=1.4'
