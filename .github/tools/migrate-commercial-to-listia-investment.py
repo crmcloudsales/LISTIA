@@ -5,6 +5,10 @@ s=p.read_text(encoding='utf-8')
 if 'cloudco-investment-lead' not in s:
     raise SystemExit('legacy endpoint not found; migration already applied or source changed')
 
+# Keep the builder validator aligned with the current commercial Marketplace assets.
+s=s.replace('/marketplace.css?v=10','/marketplace.css?v=11')
+s=s.replace('/marketplace.js?v=10','/marketplace.js?v=11')
+
 # Replace concrete resources and routes.
 s=s.replace('https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/cloudco-investment-lead','https://zvzafiarwerbuoaccnoz.supabase.co/functions/v1/listia-investment-lead')
 s=s.replace('b64(c/"cloudco-assets"/"cloudco-logo-official.webp")','b64(pub/"listia-mark-transparent.webp")')
