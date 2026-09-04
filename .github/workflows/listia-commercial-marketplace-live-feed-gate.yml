@@ -37,6 +37,7 @@ jobs:
 
           feed_code=$(curl -sS -L --max-time 25 -o /tmp/feed.json -w '%{http_code}' \
             -X POST 'https://listiaapp.com/marketplace/api/feed' \
+            -H 'Origin: https://listiaapp.com' \
             -H 'content-type: application/json' \
             --data '{"p_limit":6,"p_offset":0}')
           echo "feed_code=${feed_code}"
@@ -45,6 +46,7 @@ jobs:
 
           filtered_code=$(curl -sS -L --max-time 25 -o /tmp/feed-filtered.json -w '%{http_code}' \
             -X POST 'https://listiaapp.com/marketplace/api/feed' \
+            -H 'Origin: https://listiaapp.com' \
             -H 'content-type: application/json' \
             --data '{"p_limit":6,"p_offset":0,"p_q":"Quintana Roo"}')
           echo "filtered_code=${filtered_code}"
