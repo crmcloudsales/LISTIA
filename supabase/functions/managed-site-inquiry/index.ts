@@ -47,7 +47,7 @@ Deno.serve(async req=>{
   if(!/^[0-9a-f-]{36}$/i.test(listing))return json({error:'invalid_listing'},400)
 
   const admin=createClient(U,S,{auth:{persistSession:false,autoRefreshToken:false}})
-  const {data:w}=await admin.from('organization_websites').select('organization_id,status').eq('mode','listia_subdomain').ilike('subdomain',sub).maybeSingle()
+  const {data:w}=await admin.from('organization_websites').select('organization_id,status,configuration').eq('mode','listia_subdomain').ilike('subdomain',sub).maybeSingle()
   if(!w||w.status!=='active')return json({error:'site_unavailable'},404)
 
   const {data:l}=await admin.from('marketplace_listings').select('id,organization_id,property_id').eq('id',listing).eq('status','published').eq('visibility','public').maybeSingle()
@@ -55,9 +55,30 @@ Deno.serve(async req=>{
 
   const oid=String(w.organization_id)
   const host=`${sub}.listiaapp.com`
+  const cfg=w.configuration&&typeof w.configuration==='object'?w.configuration as any:{}
+  const isTestMirror=cfg?.test_mirror?.enabled===true
   const ipHash=ip?await sha(`ip:${oid}:${ip}`):null
   const normalizedContact=email?`e:${email}`:`p:${phoneDigits(wa)}`
   const contactHash=normalizedContact?await sha(`contact:${oid}:${normalizedContact}`):null
+  const klass=uaClass(ua)
+
+  // QA mirrors consume cloned production leads; they never originate commercial leads.
+  // This preserves Bonavista as an analytics-excluded test mirror without contacting
+  // third-party listing owners when a tester submits its public form.
+  if(isTestMirror){
+    const mirrorReasons=['turnstile_verified','canonical_edge_verified','test_mirror_no_commercial_routing']
+    await sql`insert into private.managed_site_firewall_attempts(organization_id,website_host,listing_id,ip_hash,contact_hash,quality_score,decision,reasons,user_agent_class,country_code) values(${oid}::uuid,${host},${listing}::uuid,${ipHash},${contactHash},${0},${'blocked'},${JSON.stringify(mirrorReasons)}::jsonb,${klass},${country})`
+    return json({ok:true})
+  }
+
+  // A real Managed Site may only originate leads for its own organization inventory.
+  // Crafted cross-organization listing IDs are swallowed generically and never routed.
+  if(String(l.organization_id||'')!==oid){
+    const ownershipReasons=['turnstile_verified','canonical_edge_verified','cross_organization_listing']
+    await sql`insert into private.managed_site_firewall_attempts(organization_id,website_host,listing_id,ip_hash,contact_hash,quality_score,decision,reasons,user_agent_class,country_code) values(${oid}::uuid,${host},${listing}::uuid,${ipHash},${contactHash},${0},${'blocked'},${JSON.stringify(ownershipReasons)}::jsonb,${klass},${country})`
+    return json({ok:true})
+  }
+
   const [recent]=await sql`
     select
       (select count(*)::int from private.managed_site_firewall_attempts where organization_id=${oid}::uuid and ip_hash=${ipHash} and created_at>now()-interval '10 minutes') as ip_count,
@@ -80,7 +101,6 @@ Deno.serve(async req=>{
   if(email){const domain=email.split('@')[1]||'';if(disposable.has(domain)){score-=35;reasons.push('disposable_email')}}
   if(!suspiciousName(name)){score+=10;reasons.push('name_quality')}else{score-=20;reasons.push('suspicious_name')}
   if(elapsed>=2500){score+=10;reasons.push('human_form_time')}else if(elapsed>0&&elapsed<800){score-=25;reasons.push('impossibly_fast_form')}
-  const klass=uaClass(ua)
   if(klass==='browser'||klass==='mobile_browser'){score+=5;reasons.push('browser_client')}
   if(message&&message.length>=12){score+=5;reasons.push('meaningful_message')}
   score=clamp(Math.round(score))
