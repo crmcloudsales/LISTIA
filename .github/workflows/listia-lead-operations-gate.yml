@@ -1,0 +1,60 @@
+name: LISTIA Lead Operations Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/lead-workspace-action/index.ts'
+      - 'supabase/functions/lead-stage-action/index.ts'
+      - '.github/workflows/listia-lead-operations-gate.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/lead-workspace-action/index.ts'
+      - 'supabase/functions/lead-stage-action/index.ts'
+      - '.github/workflows/listia-lead-operations-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lead-operations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify LISTIA lead operation boundaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          workspace='supabase/functions/lead-workspace-action/index.ts'
+          stage='supabase/functions/lead-stage-action/index.ts'
+
+          # Workspace actions: org-scoped, rate-limited and strict inputs.
+          grep -Fq "const action = 'lead_workspace_action'" "$workspace"
+          grep -Fq 'private.security_rate_limits' "$workspace"
+          grep -Fq "error: 'rate_limited'" "$workspace"
+          grep -Fq "error: 'invalid_due_at'" "$workspace"
+          grep -Fq "error: 'invalid_assignee'" "$workspace"
+          grep -Fq "String(task.status) === status" "$workspace"
+          grep -Fq "lead.assigned_user_id || null) === normalized" "$workspace"
+          grep -Fq ".eq('organization_id', organizationId)" "$workspace"
+
+          # Explicit invalid assignees must not silently fall back to the actor.
+          ! grep -Fq 'if(!am)assigned=user.id' "$workspace"
+          ! grep -Fq 'new Date(b.due_at).toISOString()' "$workspace"
+
+          # Stage changes have the same security posture.
+          grep -Fq "const action = 'lead_stage_action'" "$stage"
+          grep -Fq 'private.security_rate_limits' "$stage"
+          grep -Fq "error: 'origin_not_allowed'" "$stage"
+          grep -Fq "error: 'rate_limited'" "$stage"
+          grep -Fq "['owner', 'admin']" "$stage"
+          grep -Fq ".eq('organization_id', lead.organization_id)" "$stage"
+          grep -Fq 'current === next' "$stage"
+
+          # Core CRM functions must not touch Marketplace relations or endpoints.
+          ! grep -Eq 'marketplace_listings|public\.marketplace_|private\.marketplace_|/functions/v1/marketplace' "$workspace"
+          ! grep -Eq 'marketplace_listings|public\.marketplace_|private\.marketplace_|/functions/v1/marketplace' "$stage"
+
+          echo 'LISTIA_LEAD_OPERATIONS_OK'
