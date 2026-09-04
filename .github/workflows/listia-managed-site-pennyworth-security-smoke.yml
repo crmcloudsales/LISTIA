@@ -86,8 +86,8 @@ jobs:
           code=$(curl -sS -L --max-time 30 -D /tmp/site.headers -o /tmp/site.html -w '%{http_code}' "$SITE/?pennyworth_security_smoke=${GITHUB_RUN_ID}")
           title=$(sed -nE 's/.*<title>([^<]+)<\/title>.*/\1/ip' /tmp/site.html | head -n1 || true)
           bytes=$(wc -c </tmp/site.html | tr -d ' ')
-          brand_count=$(grep -Fo 'Bonavista Realtors' /tmp/site.html | wc -l | tr -d ' ')
-          interest_count=$(grep -oE 'data-interest="[0-9a-fA-F-]{36}"' /tmp/site.html | wc -l | tr -d ' ')
+          brand_count=$( { grep -Fo 'Bonavista Realtors' /tmp/site.html || true; } | wc -l | tr -d ' ')
+          interest_count=$( { grep -oE 'data-interest="[0-9a-fA-F-]{36}"' /tmp/site.html || true; } | wc -l | tr -d ' ')
           echo "SITE_DIAGNOSTIC status=${code} title=${title:-none} bytes=${bytes} brand=${brand_count} interests=${interest_count}"
           grep -Ei '^(server|cf-ray|content-type|location):' /tmp/site.headers || true
           [[ "$code" == 200 ]] || { echo 'MANAGED_SITE_NOT_200'; exit 21; }
