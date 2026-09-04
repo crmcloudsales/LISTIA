@@ -1,0 +1,29 @@
+name: LISTIA Commercial Dependency Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-commercial-dependency-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Map commercial builder consumers and legacy CloudCo references
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '=== build-commercial-worker.py consumers ==='
+          grep -RIn --binary-files=without-match 'build-commercial-worker.py' .github/workflows scripts commercial || true
+          echo '=== CloudCo references outside history/docs ==='
+          grep -RInE --binary-files=without-match 'cloudco|CLOUDCO|CloudCo' \
+            .github/workflows scripts commercial public listia-app-worker 2>/dev/null \
+            | grep -v 'listia-commercial-dependency-audit.yml' || true
+          echo '=== commercial worker deploy references ==='
+          grep -RInE --binary-files=without-match 'wrangler.*deploy|workers/scripts|EXPECTED_WORKER|commercial/index.html' .github/workflows | head -n 300 || true
