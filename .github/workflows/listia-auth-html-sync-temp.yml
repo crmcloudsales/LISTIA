@@ -1,0 +1,55 @@
+name: LISTIA Auth HTML Sync Temp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-auth-html-sync-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Align static Auth HTML with 12-character policy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('public/index.html')
+          text=p.read_text(encoding='utf-8')
+          replacements=[
+            ('id="signupPassword" maxlength="72" minlength="8" placeholder="Mínimo 8 caracteres"','id="signupPassword" maxlength="72" minlength="12" placeholder="Mínimo 12 caracteres"'),
+            ('id="resetPassword" maxlength="72" minlength="8" placeholder="Mínimo 8 caracteres"','id="resetPassword" maxlength="72" minlength="12" placeholder="Mínimo 12 caracteres"'),
+            ('id="resetPasswordConfirm" maxlength="72" minlength="8" placeholder="Repite tu contraseña"','id="resetPasswordConfirm" maxlength="72" minlength="12" placeholder="Repite tu contraseña"'),
+          ]
+          for old,new in replacements:
+              count=text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one Auth HTML match, found {count}: {old}')
+              text=text.replace(old,new)
+          for stale in ['id="signupPassword" maxlength="72" minlength="8"','id="resetPassword" maxlength="72" minlength="8"','id="resetPasswordConfirm" maxlength="72" minlength="8"']:
+              if stale in text:
+                  raise SystemExit(f'Stale Auth minimum remains: {stale}')
+          p.write_text(text,encoding='utf-8')
+          print('LISTIA_AUTH_HTML_12_OK')
+          PY
+          git diff --check
+      - name: Persist Auth HTML alignment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Align LISTIA Auth HTML minimum to 12'
+          git push origin main
