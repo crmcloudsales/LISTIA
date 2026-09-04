@@ -8,6 +8,11 @@ const SUPABASE_DB_URL = Deno.env.get('SUPABASE_DB_URL')!
 const sql = postgres(SUPABASE_DB_URL, { prepare: false })
 
 type RateLimitDecision = { allowed: boolean; retryAfter: number }
+type IntakeResult =
+  | { kind: 'created'; property: unknown; plan: string; accessState: string; propertyLimit: number | null; activeCount: number }
+  | { kind: 'payment_blocked'; plan: string; accessState: string }
+  | { kind: 'entitlement_missing'; plan: string; accessState: string }
+  | { kind: 'limit_reached'; plan: string; accessState: string; propertyLimit: number; activeCount: number }
 
 async function consumeSecurityRateLimit(
   principalId: string,
@@ -68,12 +73,14 @@ function cors(req: Request) {
     'vary': 'Origin',
   }
 }
+
 function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...cors(req), 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   })
 }
+
 function clean(value: unknown, max = 2000) {
   if (typeof value !== 'string') return null
   const v = value.trim()
@@ -163,27 +170,6 @@ Deno.serve(async (req: Request) => {
     if (!org) return json(req, { error: 'organization_not_found' }, 404)
     if (!org.onboarding_completed) return json(req, { error: 'onboarding_not_completed' }, 409)
 
-    const [billing] = await sql`
-      select plan_key, access_state
-      from public.organization_billing
-      where organization_id=${body.organization_id}::uuid
-      limit 1
-    `
-    const plan = String(billing?.plan_key || 'free').toLowerCase()
-    const accessState = String(billing?.access_state || 'active').toLowerCase()
-    if (accessState === 'payment_blocked') {
-      return json(req, { error: 'billing_payment_blocked', plan }, 402)
-    }
-
-    const [counts] = await sql`
-      select count(*)::int as total
-      from public.properties
-      where organization_id=${body.organization_id}::uuid and status <> 'archived'
-    `
-    if (plan === 'free' && Number(counts?.total || 0) >= 3) {
-      return json(req, { error: 'free_property_limit', limit: 3 }, 409)
-    }
-
     const operation = ['sale','rent'].includes(String(body.operation_type || '')) ? String(body.operation_type) : null
     const description = clean(body.description, 12000)
     const location = clean(body.location_text, 300)
@@ -201,15 +187,80 @@ Deno.serve(async (req: Request) => {
     const baseTitle = fallbackTitle(locale)
     const title = location ? `${baseTitle} · ${location}`.slice(0, 220) : baseTitle
 
-    const [property] = await sql`
-      insert into public.properties
-        (organization_id,created_by,title,operation_type,description,price,currency,commission_text,location_text,postal_code,status,processing_state,locale)
-      values
-        (${body.organization_id}::uuid,${user.id}::uuid,${title},${operation},${description},${price},${currency},${commission},${location},${postal},'material_received',${JSON.stringify({stage:'material_intake', received_at:new Date().toISOString()})}::jsonb,${locale})
-      returning id,title,status,operation_type,description,price,currency,commission_text,location_text,postal_code,locale,created_at
-    `
+    const intake = await sql.begin(async (tx): Promise<IntakeResult> => {
+      // Serialize property creation per organization so concurrent requests cannot
+      // consume the same remaining entitlement slot.
+      const entitlementLock = `property-entitlement:${body.organization_id}`
+      await tx`select pg_advisory_xact_lock(hashtextextended(${entitlementLock}, 0))`
 
-    return json(req, { ok: true, property, plan, access_state: accessState })
+      const [billing] = await tx`
+        select plan_key, access_state
+        from public.organization_billing
+        where organization_id=${body.organization_id}::uuid
+        limit 1
+      `
+      const plan = String(billing?.plan_key || 'free').toLowerCase()
+      const accessState = String(billing?.access_state || 'active').toLowerCase()
+      if (accessState === 'payment_blocked') {
+        return { kind: 'payment_blocked', plan, accessState }
+      }
+
+      const [entitlement] = await tx`
+        select property_limit
+        from private.plan_entitlements
+        where plan_key=${plan}
+        limit 1
+      `
+      if (!entitlement) {
+        return { kind: 'entitlement_missing', plan, accessState }
+      }
+
+      const propertyLimit = entitlement.property_limit === null ? null : Number(entitlement.property_limit)
+      const [counts] = await tx`
+        select count(*)::int as total
+        from public.properties
+        where organization_id=${body.organization_id}::uuid
+          and status <> 'archived'
+      `
+      const activeCount = Number(counts?.total || 0)
+      if (propertyLimit !== null && activeCount >= propertyLimit) {
+        return { kind: 'limit_reached', plan, accessState, propertyLimit, activeCount }
+      }
+
+      const [property] = await tx`
+        insert into public.properties
+          (organization_id,created_by,title,operation_type,description,price,currency,commission_text,location_text,postal_code,status,processing_state,locale)
+        values
+          (${body.organization_id}::uuid,${user.id}::uuid,${title},${operation},${description},${price},${currency},${commission},${location},${postal},'material_received',${JSON.stringify({stage:'material_intake', received_at:new Date().toISOString()})}::jsonb,${locale})
+        returning id,title,status,operation_type,description,price,currency,commission_text,location_text,postal_code,locale,created_at
+      `
+
+      return { kind: 'created', property, plan, accessState, propertyLimit, activeCount }
+    })
+
+    if (intake.kind === 'payment_blocked') {
+      return json(req, { error: 'billing_payment_blocked', plan: intake.plan }, 402)
+    }
+    if (intake.kind === 'entitlement_missing') {
+      return json(req, { error: 'plan_entitlement_unavailable', plan: intake.plan }, 503)
+    }
+    if (intake.kind === 'limit_reached') {
+      return json(req, {
+        error: 'property_limit_reached',
+        plan: intake.plan,
+        limit: intake.propertyLimit,
+        active_count: intake.activeCount,
+      }, 409)
+    }
+
+    return json(req, {
+      ok: true,
+      property: intake.property,
+      plan: intake.plan,
+      access_state: intake.accessState,
+      property_limit: intake.propertyLimit,
+      active_count_before_create: intake.activeCount,
+    })
   } catch (error) {
     console.error('property-intake-start', error)
     return json(req, { error: 'internal_error' }, 500)
