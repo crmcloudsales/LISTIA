@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'scripts/patch-listia-managed-site-health-v2.py'
-      - 'scripts/patch-listia-deploy-build-tools.py'
       - '.github/workflows/listia-managed-sites-hardening-apply.yml'
   workflow_dispatch:
 
@@ -31,24 +30,21 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 scripts/patch-listia-managed-site-health-v2.py
-          python3 scripts/patch-listia-deploy-build-tools.py
           node --check listia-app-worker/index.js
           grep -Fq 'pennyworth_v2:firewall' listia-app-worker/index.js
           grep -Fq 'Los formularios no generan contactos comerciales.' listia-app-worker/index.js
           grep -Fq 'd?.pennyworth_v2 === true' supabase/functions/website-provision/index.ts
-          grep -Fq 'timeout-minutes: 20' .github/workflows/deploy-cloudflare-pages.yml
-          grep -Fq 'WRANGLER=/tmp/listia-build-tools/node_modules/.bin/wrangler' .github/workflows/deploy-cloudflare-pages.yml
 
       - name: Persist LISTIA-only hardening
         shell: bash
         run: |
           set -Eeuo pipefail
-          if git diff --quiet -- listia-app-worker/index.js supabase/functions/website-provision/index.ts .github/workflows/deploy-cloudflare-pages.yml; then
+          if git diff --quiet -- listia-app-worker/index.js supabase/functions/website-provision/index.ts; then
             echo 'Managed Sites hardening already present.'
             exit 0
           fi
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add listia-app-worker/index.js supabase/functions/website-provision/index.ts .github/workflows/deploy-cloudflare-pages.yml
-          git commit -m 'Harden LISTIA Managed Sites health and deploy pipeline'
+          git add listia-app-worker/index.js supabase/functions/website-provision/index.ts
+          git commit -m 'Harden LISTIA Managed Sites health and QA mirror UI'
           git push origin main
