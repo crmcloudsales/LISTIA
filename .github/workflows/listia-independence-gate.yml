@@ -1,0 +1,69 @@
+name: LISTIA Independence Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'listia-app-worker/**'
+      - 'supabase/functions/**'
+      - 'supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+      - '.github/workflows/listia-independence-gate.yml'
+  pull_request:
+    paths:
+      - 'public/**'
+      - 'listia-app-worker/**'
+      - 'supabase/functions/**'
+      - 'supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+      - '.github/workflows/listia-independence-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify LISTIA runtime independence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # LISTIA runtime must never depend on CloudSales.
+          if grep -RniE 'cloudsales(\.app|crm|\.com)?|fkahaqprzgcimgyathqx' public listia-app-worker supabase/functions --exclude-dir=node_modules; then
+            echo 'CloudSales dependency detected in LISTIA runtime.'
+            exit 1
+          fi
+
+          legacy='supabase/functions/cloudco-investment-lead/index.ts'
+          canonical='supabase/functions/listia-investment-lead/index.ts'
+          migration='supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+
+          # Historical CloudCo-named public form endpoint is allowed only as a
+          # no-I/O tombstone. It must never regain database or external transport access.
+          grep -Fq "error: 'retired_endpoint'" "$legacy"
+          grep -Fq "replacement: 'listia-investment-lead'" "$legacy"
+          grep -Fq "boundary: 'LISTIA_ONLY'" "$legacy"
+          grep -Fq 'status: 410' "$legacy"
+          ! grep -Fq 'SUPABASE_DB_URL' "$legacy"
+          ! grep -Fq 'formsubmit.co' "$legacy"
+          ! grep -Fq 'cloudco_investment_leads' "$legacy"
+          ! grep -Fq 'cloudco_form_rate_limits' "$legacy"
+
+          # Canonical investment flow is LISTIA-owned end to end.
+          grep -Fq 'listia_investment_leads' "$canonical"
+          grep -Fq 'listia_public_form_rate_limit_consume' "$canonical"
+          grep -Fq 'listia_email_enqueue' "$canonical"
+          grep -Fq "boundary:'LISTIA_ONLY'" "$canonical"
+          ! grep -Fqi 'cloudsales' "$canonical"
+          ! grep -Fq 'formsubmit.co' "$canonical"
+
+          # Legacy tables remain historical only and are closed to browser roles.
+          grep -Fq 'revoke all on public.cloudco_investment_leads from public, anon, authenticated' "$migration"
+          grep -Fq 'revoke all on public.cloudco_form_rate_limits from public, anon, authenticated' "$migration"
+          grep -Fq 'LEGACY RETIRED' "$migration"
+
+          echo 'LISTIA_RUNTIME_INDEPENDENCE_OK'
