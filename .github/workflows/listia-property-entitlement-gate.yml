@@ -7,12 +7,24 @@ on:
       - 'supabase/functions/property-intake-start/index.ts'
       - 'supabase/functions/development-unit-promote/index.ts'
       - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+      - 'public/app.js'
+      - 'public/i18n.js'
+      - 'public/i18n-extra.js'
+      - 'public/global-locales.js'
+      - 'public/japanese-locale.js'
+      - 'public/BUILD_INFO.json'
       - '.github/workflows/listia-property-entitlement-gate.yml'
   pull_request:
     paths:
       - 'supabase/functions/property-intake-start/index.ts'
       - 'supabase/functions/development-unit-promote/index.ts'
       - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+      - 'public/app.js'
+      - 'public/i18n.js'
+      - 'public/i18n-extra.js'
+      - 'public/global-locales.js'
+      - 'public/japanese-locale.js'
+      - 'public/BUILD_INFO.json'
       - '.github/workflows/listia-property-entitlement-gate.yml'
   workflow_dispatch:
 
@@ -64,5 +76,30 @@ jobs:
           grep -Fq "return out({ error: 'property_limit_reached' }, 409" "$promote"
           grep -Fq "diagnostic.includes('plan_entitlement_unavailable')" "$promote"
           grep -Fq "return out({ error: 'plan_entitlement_unavailable' }, 503" "$promote"
+
+          # Runtime and product copy must describe the same entitlement.
+          grep -Fq '"free_property_limit": 3' public/BUILD_INFO.json
+          grep -Fq '"property_limit_reached": "msg.free_property_limit"' public/app.js
+          grep -Fq 'raw === "property_limit_reached"' public/app.js
+          ! grep -Fq '"free_property_limit": "msg.free_property_limit"' public/app.js
+          ! grep -Fq 'raw === "free_property_limit"' public/app.js
+
+          for locale_file in public/i18n.js public/i18n-extra.js public/global-locales.js public/japanese-locale.js; do
+            ! grep -Eq "intake\.free_note.*(incluye 1 propiedad|includes 1 property|comprend 1 bien|include 1 immobile|inclui 1 imóvel|umfasst 1 Immobilie|عقاراً واحداً)" "$locale_file"
+            ! grep -Eq "signup\.password_placeholder.*8" "$locale_file"
+            ! grep -Eq "msg\.password_min8_signup.*8" "$locale_file"
+          done
+
+          grep -Fq "Free incluye hasta 3 propiedades activas" public/i18n.js
+          grep -Fq "Free includes up to 3 active properties" public/i18n.js
+          grep -Fq "Free comprend jusqu’à 3 biens actifs" public/i18n.js
+          grep -Fq "fino a 3 immobili attivi" public/i18n-extra.js
+          grep -Fq "até 3 imóveis ativos" public/i18n-extra.js
+          grep -Fq "bis zu 3 aktive Immobilien" public/i18n-extra.js
+          grep -Fq "3 عقارات نشطة" public/i18n-extra.js
+          grep -Fq "до 3 активных объектов" public/global-locales.js
+          grep -Fq "עד 3 נכסים פעילים" public/global-locales.js
+          grep -Fq "3 个活跃房源" public/global-locales.js
+          grep -Fq "最大3件の有効な物件" public/japanese-locale.js
 
           echo 'LISTIA_PROPERTY_ENTITLEMENT_BOUNDARY_OK'
