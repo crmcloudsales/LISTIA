@@ -1,0 +1,97 @@
+name: LISTIA Commercial Marketplace Browser Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-commercial-marketplace-browser-smoke.yml'
+  workflow_run:
+    workflows:
+      - 'LISTIA Commercial Global i18n'
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listia-commercial-marketplace-browser-smoke
+  cancel-in-progress: true
+
+jobs:
+  mobile-browser:
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Install Playwright Chromium
+        run: |
+          set -Eeuo pipefail
+          mkdir -p /tmp/listia-commercial-browser && cd /tmp/listia-commercial-browser
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Verify public Marketplace in a real mobile browser
+        run: |
+          set -Eeuo pipefail
+          cd /tmp/listia-commercial-browser
+          cat > smoke.js <<'NODE'
+          const { chromium, devices } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
+            const page=await context.newPage();
+            const feed=[]; const errors=[];
+            page.on('response',async r=>{
+              if(r.url().includes('/marketplace/api/feed')){
+                let body=null; try{body=await r.json()}catch{}
+                feed.push({status:r.status(),length:Array.isArray(body)?body.length:0});
+              }
+            });
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('https://listiaapp.com/marketplace?browser_smoke=1',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(8000);
+            const state=await page.evaluate(()=>{
+              const visible=el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0&&r.width>20&&r.height>20&&r.bottom>0&&r.top<innerHeight};
+              const cards=[...document.querySelectorAll('#list .card')];
+              const first=cards[0]||null;
+              const img=first?.querySelector('img')||null;
+              return {
+                cards:cards.length,
+                firstVisible:visible(first),
+                firstImageLoaded:!img||img.naturalWidth>0,
+                countText:document.getElementById('count')?.textContent||'',
+                listVisible:visible(document.getElementById('listColumn')),
+                mapVisible:visible(document.getElementById('mapWrap')),
+                mapHeight:document.getElementById('map')?.getBoundingClientRect().height||0,
+                bodyWidth:document.body.scrollWidth,
+                viewportWidth:innerWidth,
+                activeButtons:[...document.querySelectorAll('.viewBtns button.active')].map(x=>x.id),
+                errorCopy:/No pudimos cargar el inventario/i.test(document.getElementById('list')?.innerText||'')
+              };
+            });
+            await page.screenshot({path:'/tmp/listia-commercial-browser/public-marketplace-mobile.png',fullPage:true});
+            console.log('STATE='+JSON.stringify(state));
+            console.log('FEED='+JSON.stringify(feed));
+            console.log('ERRORS='+JSON.stringify(errors.slice(0,20)));
+            if(!feed.some(x=>x.status===200&&x.length>0))throw new Error('browser_feed_missing');
+            if(state.cards<1)throw new Error('property_cards_missing');
+            if(state.errorCopy)throw new Error('inventory_error_visible');
+            if(state.bodyWidth>state.viewportWidth+2)throw new Error('horizontal_overflow');
+            if(state.mapHeight<180)throw new Error('map_not_sized');
+            console.log('LISTIA_PUBLIC_MARKETPLACE_BROWSER_OK');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node smoke.js
+
+      - name: Upload public Marketplace screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: listia-commercial-marketplace-mobile-evidence
+          path: /tmp/listia-commercial-browser/public-marketplace-mobile.png
+          if-no-files-found: warn
+          retention-days: 7
