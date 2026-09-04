@@ -50,7 +50,7 @@ Deno.serve(async req=>{
   const {data:w}=await admin.from('organization_websites').select('organization_id,status').eq('mode','listia_subdomain').ilike('subdomain',sub).maybeSingle()
   if(!w||w.status!=='active')return json({error:'site_unavailable'},404)
 
-  const {data:l}=await admin.from('marketplace_listings').select('id').eq('id',listing).eq('status','published').eq('visibility','public').maybeSingle()
+  const {data:l}=await admin.from('marketplace_listings').select('id,organization_id,property_id').eq('id',listing).eq('status','published').eq('visibility','public').maybeSingle()
   if(!l)return json({error:'listing_unavailable'},404)
 
   const oid=String(w.organization_id)
@@ -64,9 +64,8 @@ Deno.serve(async req=>{
       (select count(*)::int from private.managed_site_firewall_attempts where organization_id=${oid}::uuid and contact_hash=${contactHash} and created_at>now()-interval '60 minutes') as contact_count
   `
 
-  // Pennyworth v1 adapted to the canonical listia-app managed-site gateway.
-  // The gateway has already verified Cloudflare Turnstile before it can present
-  // the private edge proof, so canonical_edge_verified contributes 5 points.
+  // Pennyworth v1 on the canonical LISTIA Managed Sites gateway.
+  // Cloudflare Turnstile is verified by listia-app before the private edge call.
   let score=50
   const reasons:string[]=['turnstile_verified','canonical_edge_verified']
   let hardBlock=false
@@ -89,22 +88,49 @@ Deno.serve(async req=>{
 
   await sql`insert into private.managed_site_firewall_attempts(organization_id,website_host,listing_id,ip_hash,contact_hash,quality_score,decision,reasons,user_agent_class,country_code) values(${oid}::uuid,${host},${listing}::uuid,${ipHash},${contactHash},${score},${decision},${JSON.stringify(reasons)}::jsonb,${klass},${country})`
 
-  // Junk, suspicious and review traffic never reaches the commercial inquiry layer.
-  // Return a generic success so automated clients cannot probe the decision boundary.
+  // Suspicious traffic never reaches LISTIA's inquiry/lead pipeline.
+  // Generic success prevents clients from learning the firewall decision.
   if(decision!=='accepted')return json({ok:true})
 
-  const {data,error}=await admin.from('marketplace_inquiries').insert({
-    listing_id:listing,
-    organization_id:oid,
-    name,
-    email:email||null,
-    whatsapp:wa||null,
-    message:message||null,
-    locale,
-    status:'new',
-    route_type:'managed_site',
-    profile_data:{source:'listia_managed_site',subdomain:sub,firewall:'pennyworth_v1',quality_score:score,reasons}
-  }).select('id').single()
-  if(error){console.error('managed-site-inquiry save failed',error.code);return json({error:'inquiry_save_failed'},502)}
-  return json({ok:true,id:data?.id||null})
+  // Use LISTIA's canonical commercial pipeline. This RPC creates/updates the
+  // marketplace inquiry, creates the CRM lead when routable, and assigns it to
+  // the listing owner/organization. Pennyworth therefore gates the CRM instead
+  // of bypassing it with a direct inquiry insert.
+  const {data:rpcData,error:rpcError}=await admin.rpc('submit_marketplace_interest',{
+    p_listing_id:listing,
+    p_name:name,
+    p_email:email,
+    p_whatsapp:wa,
+    p_message:message,
+    p_locale:locale,
+    p_website:null
+  })
+  if(rpcError||!rpcData){
+    console.error('managed-site-inquiry pipeline failed',rpcError?.code||'missing_result')
+    return json({error:'inquiry_save_failed'},502)
+  }
+
+  const inquiryId=String(rpcData)
+  const {data:inq}=await admin.from('marketplace_inquiries').select('id,lead_id,profile_data,organization_id').eq('id',inquiryId).maybeSingle()
+  const profile={...(inq?.profile_data&&typeof inq.profile_data==='object'?inq.profile_data:{}),source:'listia_managed_site',subdomain:sub,firewall:'pennyworth_v1',quality_score:score,reasons}
+  await admin.from('marketplace_inquiries').update({route_type:'managed_site',profile_data:profile}).eq('id',inquiryId)
+
+  if(inq?.lead_id){
+    const leadOrg=String(inq.organization_id||l.organization_id||oid)
+    const sourceDetail={channel:'managed_site',host,subdomain:sub,listing_id:listing,inquiry_id:inquiryId,firewall:'pennyworth_v1',quality_score:score}
+    const attribution={channel:'managed_site',event:'interest_form',source:'listia_managed_site',medium:'website',website_host:host,listing_id:listing,inquiry_id:inquiryId,quality_score:score,firewall:'pennyworth_v1'}
+    await admin.from('leads').update({
+      source:'listia_managed_site',
+      quality_score:score,
+      lead_score:score,
+      verification_status:'verified',
+      status:score>=90?'qualified':'active',
+      source_detail:sourceDetail,
+      attribution,
+      last_activity_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
+    }).eq('id',inq.lead_id).eq('organization_id',leadOrg)
+  }
+
+  return json({ok:true,id:inquiryId})
 })
