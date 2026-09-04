@@ -1,39 +1,15 @@
-name: CloudCo Inline Logo Fix
+name: LISTIA Legacy CloudCo Logo Fix (Retired)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/patch-cloudco-logo-inline.py'
-      - '.github/workflows/cloudco-inline-logo-fix.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: cloudco-inline-logo-fix
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  patch-builder:
+  retired:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-      - name: Embed official CloudCo logo into generated landing HTML
-        run: |
-          set -Eeuo pipefail
-          python3 scripts/patch-cloudco-logo-inline.py
-          python3 -m py_compile scripts/build-commercial-worker.py
-          grep -Fq 'data:image/webp;base64' scripts/build-commercial-worker.py
-          grep -Fq 'data-cloudco-logo-fallback' scripts/build-commercial-worker.py
-      - name: Commit permanent builder repair
-        run: |
-          git config user.name 'LISTIA DevOps'
-          git config user.email 'actions@users.noreply.github.com'
-          git add scripts/build-commercial-worker.py
-          git commit -m 'Embed official CloudCo logo in commercial worker' || exit 0
-          git push origin main
+      - run: |
+          echo 'Retired. LISTIA commercial runtime must not embed or restore CloudCo brand assets.'
+          echo 'Use the LISTIA-owned /investment route and listia-investment-lead endpoint.'
