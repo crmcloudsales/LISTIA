@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Block CloudSales and CloudCo runtime dependencies
+      - name: Block CloudSales and CloudCo resource dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -34,20 +34,30 @@ jobs:
           for p in public scripts listia-app-worker supabase/functions; do
             [[ -e "$p" ]] && roots+=("$p")
           done
-          if [[ ${#roots[@]} -eq 0 ]]; then
-            echo 'No runtime paths found.'
-            exit 0
-          fi
+          [[ ${#roots[@]} -gt 0 ]] || exit 0
 
-          forbidden='cloudsales\.app|@cloudsales\.app|CLOUDSALES_[A-Z0-9_]*|CLOUDCO_[A-Z0-9_]*|cloudco-investment-lead|cloudco_form_rate_limits|cloudco_investment_leads|/cloudco([/?[:space:]]|$)'
-          if grep -RInE --binary-files=without-match \
-            --exclude='*.md' --exclude='*.txt' --exclude='*.map' \
-            "$forbidden" "${roots[@]}"; then
-            echo 'ERROR: LISTIA runtime contains a forbidden CloudSales/CloudCo dependency.'
-            echo 'Reimplement the resource inside LISTIA instead of sharing another product resource.'
+          forbidden='cloudsales\.app|@cloudsales\.app|CLOUDSALES_[A-Z0-9_]*|CLOUDCO_[A-Z0-9_]*|cloudco-investment-lead|cloudco_form_rate_limits|cloudco_investment_leads|cloudco-assets|cloudco-logo'
+          if grep -RInE --binary-files=without-match --exclude='*.md' --exclude='*.txt' --exclude='*.map' "$forbidden" "${roots[@]}"; then
+            echo 'ERROR: LISTIA runtime contains a forbidden CloudSales/CloudCo resource dependency.'
             exit 1
           fi
-          echo 'LISTIA resource isolation verified.'
+          echo 'Cross-product resource dependency scan passed.'
+
+      - name: Validate narrow legacy URL compatibility
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          hits="$(grep -RIn --binary-files=without-match --exclude='*.md' --exclude='*.txt' '/cloudco' scripts public listia-app-worker supabase/functions 2>/dev/null || true)"
+          if [[ -n "$hits" ]]; then
+            echo "$hits"
+            bad="$(printf '%s\n' "$hits" | grep -v 'scripts/build-commercial-worker.py' || true)"
+            [[ -z "$bad" ]] || { echo 'ERROR: legacy /cloudco URL exists outside the canonical commercial compatibility router.'; exit 1; }
+            grep -Fq "url.pathname==='/cloudco'" scripts/build-commercial-worker.py
+            grep -Fq "url.pathname='/investment'" scripts/build-commercial-worker.py
+            ! grep -Fq 'CLOUDCO_' scripts/build-commercial-worker.py
+            ! grep -Fq 'cloudco-investment-lead' scripts/build-commercial-worker.py
+          fi
+          echo 'Legacy URL compatibility is redirect-only / LISTIA-backed.'
 
       - name: Enforce LISTIA-scoped provider secrets
         shell: bash
@@ -58,10 +68,7 @@ jobs:
             [[ -e "$p" ]] && roots+=("$p")
           done
           [[ ${#roots[@]} -gt 0 ]] || exit 0
-          if grep -RInE --binary-files=without-match \
-            --exclude='*.md' --exclude='*.txt' \
-            '(^|[^A-Z0-9_])(RESEND_API_KEY|BREVO_API_KEY|MAILGUN_API_KEY|SENDGRID_API_KEY|POSTMARK_SERVER_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)([^A-Z0-9_]|$)' \
-            "${roots[@]}"; then
+          if grep -RInE --binary-files=without-match --exclude='*.md' --exclude='*.txt' '(^|[^A-Z0-9_])(RESEND_API_KEY|BREVO_API_KEY|MAILGUN_API_KEY|SENDGRID_API_KEY|POSTMARK_SERVER_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)([^A-Z0-9_]|$)' "${roots[@]}"; then
             echo 'ERROR: unscoped provider secret detected. LISTIA integrations must use LISTIA_* secret names.'
             exit 1
           fi
