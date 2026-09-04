@@ -1,0 +1,46 @@
+name: LISTIA Conversion Dispatch Privacy V2 Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/patch-listia-conversion-dispatch-privacy-v2.py'
+      - '.github/workflows/listia-conversion-dispatch-privacy-v2-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-conversion-dispatch-privacy-v2-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply dispatcher privacy hardening
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/patch-listia-conversion-dispatch-privacy-v2.py
+          grep -Fq 'user.externalIds=[await sha256(String(lead.id))]' supabase/functions/conversion-signal-dispatch/index.ts
+          grep -Fq 'minQ!==null&&(q===null||q<minQ)' supabase/functions/conversion-signal-dispatch/index.ts
+      - name: Persist dispatcher privacy hardening
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet -- supabase/functions/conversion-signal-dispatch/index.ts; then
+            echo 'Dispatcher privacy hardening already present.'
+            exit 0
+          fi
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add supabase/functions/conversion-signal-dispatch/index.ts
+          git commit -m 'Harden LISTIA conversion dispatcher privacy gates'
+          git push origin main
