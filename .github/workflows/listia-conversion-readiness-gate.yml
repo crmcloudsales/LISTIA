@@ -45,9 +45,8 @@ jobs:
           grep -Fq "token:{present:" "$edge"
           grep -Fq "google_datamanager_scope" "$edge"
           grep -Fq "google_ads_customer" "$edge"
-          grep -Fq "google_qualified_lead_action" "$edge"
-          grep -Fq "google_appointment_action" "$edge"
-          grep -Fq "google_conversion_action" "$edge"
+          grep -Fq "for(const k of ['qualified_lead','appointment','conversion'])" "$edge"
+          grep -Fq 'missing.push(`google_${k}_action`)' "$edge"
           if grep -Eq 'account_id:m|customer_id:m|dataset_id:m|advertiser_id:m|conversion_id:m' "$edge"; then
             echo 'ERROR: conversion readiness API exposes raw provider identifiers.'
             exit 1
