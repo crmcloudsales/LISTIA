@@ -12,7 +12,7 @@ function localizeError(error) {
     "Email not confirmed": "msg.email_not_confirmed",
     "User already registered": "msg.user_exists",
     "Signup requires a valid password": "msg.password_min8_signup",
-    "free_property_limit": "msg.free_property_limit",
+    "property_limit_reached": "msg.free_property_limit",
     "material_required": "msg.property_material_required",
     "rate_limited": "msg.rate_limited"
   };
@@ -26,7 +26,7 @@ function localizeError(error) {
     "msg.discovery_completed"
   ];
   if (localKeys.some(key => raw === t(key))) return raw;
-  if (raw === "free_property_limit") return t("msg.free_property_limit");
+  if (raw === "property_limit_reached") return t("msg.free_property_limit");
   if (raw === "material_required") return t("msg.property_material_required");
   if (raw === "file_too_large") return t("msg.file_too_large");
   if (raw === "file_type_not_allowed") return t("msg.file_type_not_allowed");
