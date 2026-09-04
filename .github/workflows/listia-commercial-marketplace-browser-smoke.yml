@@ -22,24 +22,39 @@ jobs:
   mobile-browser:
     if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
-      - name: Install Playwright Chromium
+      - name: Prepare browser runtime without unnecessary Chromium download
+        shell: bash
         run: |
           set -Eeuo pipefail
           mkdir -p /tmp/listia-commercial-browser && cd /tmp/listia-commercial-browser
           npm init -y >/dev/null 2>&1
-          npm install playwright@latest >/dev/null 2>&1
-          npx playwright install --with-deps chromium >/dev/null 2>&1
+          chrome="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)"
+          if [[ -n "$chrome" ]]; then
+            npm install playwright-core@latest >/dev/null 2>&1
+            echo "LISTIA_PW_PACKAGE=playwright-core" >> "$GITHUB_ENV"
+            echo "LISTIA_CHROME_PATH=$chrome" >> "$GITHUB_ENV"
+            echo "Using runner Chrome: $chrome"
+          else
+            npm install playwright@latest >/dev/null 2>&1
+            npx playwright install --with-deps chromium >/dev/null 2>&1
+            echo "LISTIA_PW_PACKAGE=playwright" >> "$GITHUB_ENV"
+            echo "LISTIA_CHROME_PATH=" >> "$GITHUB_ENV"
+            echo 'Runner Chrome unavailable; installed Playwright Chromium fallback.'
+          fi
 
       - name: Verify public Marketplace in a real mobile browser
         run: |
           set -Eeuo pipefail
           cd /tmp/listia-commercial-browser
           cat > smoke.js <<'NODE'
-          const { chromium, devices } = require('playwright');
+          const pw = require(process.env.LISTIA_PW_PACKAGE || 'playwright');
+          const { chromium, devices } = pw;
           (async()=>{
-            const browser=await chromium.launch({headless:true});
+            const launch={headless:true};
+            if(process.env.LISTIA_CHROME_PATH)launch.executablePath=process.env.LISTIA_CHROME_PATH;
+            const browser=await chromium.launch(launch);
             const context=await browser.newContext({...devices['Pixel 7'],locale:'es-MX'});
             const page=await context.newPage();
             const feed=[]; const errors=[];
