@@ -1,11 +1,15 @@
-LISTIA COMMERCIAL + MARKETPLACE DEPLOYMENT VERIFIED
-verified_at_utc=2026-08-31T22:34:01Z
-source_commit=1bb77b48b7b73542a63a38fce785603ee48c7ac3
+LISTIA COMMERCIAL + MARKETPLACE + INVESTMENT DEPLOYMENT VERIFIED
+verified_at_utc=2026-09-04T08:45:00Z
+source_commit=b499c9fa6edfae0e29ecde275ae1d9138e0806bb
 marketplace_live=true
 marketplace_url=https://listiaapp.com/marketplace
 marketplace_map=true
-marketplace_in_sitemap=true
-commercial_worker_minified=true
+investment_live=true
+investment_url=https://listiaapp.com/investment
+legacy_cloudco_route=redirect_only
+resource_boundary=LISTIA_ONLY
+commercial_worker_minified=false
+commercial_worker_bundled_by_wrangler=true
 commercial_worker_fingerprinted=true
 languages=es,en,fr,it,pt-BR,de,ar-AE,ru,he,zh-CN,ja
 terms_version=1.4
