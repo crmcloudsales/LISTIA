@@ -1,0 +1,63 @@
+name: LISTIA Calendar Sync Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/appointment-calendar-sync/**'
+      - 'supabase/functions/google-oauth-start/**'
+      - 'supabase/migrations/20260904161800_add_appointment_google_calendar_sync_outbox.sql'
+      - 'supabase/migrations/20260904162400_backfill_calendar_sync_on_google_connect.sql'
+      - '.github/workflows/listia-calendar-sync-gate.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/appointment-calendar-sync/**'
+      - 'supabase/functions/google-oauth-start/**'
+      - 'supabase/migrations/20260904161800_add_appointment_google_calendar_sync_outbox.sql'
+      - 'supabase/migrations/20260904162400_backfill_calendar_sync_on_google_connect.sql'
+      - '.github/workflows/listia-calendar-sync-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calendar-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify durable LISTIA Calendar sync
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          worker='supabase/functions/appointment-calendar-sync/index.ts'
+          outbox='supabase/migrations/20260904161800_add_appointment_google_calendar_sync_outbox.sql'
+          reconnect='supabase/migrations/20260904162400_backfill_calendar_sync_on_google_connect.sql'
+          oauth='supabase/functions/google-oauth-start/index.ts'
+
+          grep -Fq 'private.appointment_calendar_sync_jobs' "$outbox"
+          grep -Fq 'enable row level security' "$outbox"
+          grep -Fq 'revoke all on private.appointment_calendar_sync_jobs from public, anon, authenticated' "$outbox"
+          grep -Fq "'listia_calendar_sync_secret'" "$outbox"
+          grep -Fq 'dispatch_appointment_calendar_sync' "$outbox"
+          grep -Fq "'listia_appointment_calendar_sync_v1'" "$outbox"
+          grep -Fq "'* * * * *'" "$outbox"
+
+          grep -Fq 'refresh_google_calendar_sync_queue' "$reconnect"
+          grep -Fq "desired_action='upsert'" "$reconnect"
+
+          grep -Fq "https://www.googleapis.com/auth/calendar.app.created" "$oauth"
+          grep -Fq "x-listia-calendar-sync-key" "$worker"
+          grep -Fq "listia_calendar_sync_secret" "$worker"
+          grep -Fq "https://oauth2.googleapis.com/token" "$worker"
+          grep -Fq "https://www.googleapis.com/calendar/v3/calendars/" "$worker"
+          grep -Fq "function eventId" "$worker"
+          grep -Fq "r.status===409" "$worker"
+          grep -Fq "external_event_id" "$worker"
+          grep -Fq "status=${terminal?'failed':'retry'}" "$worker"
+
+          ! grep -Fqi 'cloudsales.app' "$worker"
+          ! grep -Fqi 'cloudco' "$worker"
+          ! grep -Fqi 'marketplace' "$worker"
+          echo 'LISTIA_CALENDAR_SYNC_BOUNDARY_OK'
