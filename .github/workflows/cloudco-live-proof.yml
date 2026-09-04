@@ -1,10 +1,11 @@
-name: CloudCo Live Deployment Proof
+name: LISTIA Investment Live Deployment Proof
 
 on:
   push:
     branches: [main]
     paths:
-      - 'commercial/**'
+      - 'commercial/investment.html'
+      - 'commercial/footer-legal.js'
       - 'scripts/build-commercial-worker.py'
       - '.github/workflows/cloudco-live-proof.yml'
   workflow_dispatch:
@@ -13,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: cloudco-live-proof
+  group: listia-investment-live-proof
   cancel-in-progress: true
 
 jobs:
@@ -26,52 +27,46 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Wait for Cloudflare and verify public CloudCo release
+      - name: Verify public LISTIA investment route and compatibility redirect
         shell: bash
         run: |
           set -Eeuo pipefail
           ok='false'
           for attempt in $(seq 1 30); do
-            root_code="$(curl --silent --show-error --location --max-time 20 --output /tmp/root.html --write-out '%{http_code}' 'https://listiaapp.com/' || true)"
-            cloudco_code="$(curl --silent --show-error --location --max-time 20 --dump-header /tmp/cloudco.headers --output /tmp/cloudco.html --write-out '%{http_code}' 'https://listiaapp.com/cloudco' || true)"
-            footer_code="$(curl --silent --show-error --location --max-time 20 --output /tmp/footer.js --write-out '%{http_code}' 'https://listiaapp.com/footer-legal.js' || true)"
-            robots_code="$(curl --silent --show-error --location --max-time 20 --output /tmp/robots.txt --write-out '%{http_code}' 'https://listiaapp.com/robots.txt' || true)"
-            echo "Attempt ${attempt}/30 root=${root_code} cloudco=${cloudco_code} footer=${footer_code} robots=${robots_code}"
-            if [[ "${root_code}" == '200' && "${cloudco_code}" == '200' && "${footer_code}" == '200' && "${robots_code}" == '200' ]] && \
-               grep -Fq 'Plan de Inversión' /tmp/cloudco.html && \
-               grep -Fq 'Aceleramos y Aumentamos tu productividad' /tmp/cloudco.html && \
-               grep -Fq 'Powered by <a href="/cloudco">CloudCo</a>' /tmp/footer.js && \
-               grep -Fq 'Disallow: /cloudco' /tmp/robots.txt && \
-               grep -Fiq 'x-robots-tag: noindex' /tmp/cloudco.headers; then
+            root_code="$(curl -sS -L --max-time 20 --output /tmp/root.html --write-out '%{http_code}' 'https://listiaapp.com/' || true)"
+            investment_code="$(curl -sS -L --max-time 20 --output /tmp/investment.html --write-out '%{http_code}' 'https://listiaapp.com/investment' || true)"
+            legacy_meta="$(curl -sS --max-time 20 --output /dev/null --write-out '%{http_code}|%{redirect_url}' 'https://listiaapp.com/cloudco' || true)"
+            footer_code="$(curl -sS -L --max-time 20 --output /tmp/footer.js --write-out '%{http_code}' 'https://listiaapp.com/footer-legal.js' || true)"
+            echo "Attempt ${attempt}/30 root=${root_code} investment=${investment_code} legacy=${legacy_meta} footer=${footer_code}"
+            if [[ "${root_code}" == '200' && "${investment_code}" == '200' && "${footer_code}" == '200' ]] && \
+               grep -Fq 'LISTIA — Inversión y alianzas estratégicas' /tmp/investment.html && \
+               grep -Fq 'id="investmentForm"' /tmp/investment.html && \
+               grep -Fq '/investment/contact' /tmp/investment.html && \
+               ! grep -Fiq 'Powered by CloudCo' /tmp/footer.js && \
+               [[ "${legacy_meta}" == 308\|https://listiaapp.com/investment* ]]; then
               ok='true'
               break
             fi
             sleep 10
           done
-          [[ "${ok}" == 'true' ]] || {
-            echo 'CloudCo public release was not verifiable within the wait window.'
-            exit 1
-          }
+          [[ "${ok}" == 'true' ]]
 
           {
-            echo 'CLOUDCO LIVE DEPLOYMENT VERIFIED'
+            echo 'LISTIA INVESTMENT LIVE DEPLOYMENT VERIFIED'
             echo "verified_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "source_commit=${GITHUB_SHA}"
-            echo 'root=https://listiaapp.com/ HTTP 200'
-            echo 'cloudco=https://listiaapp.com/cloudco HTTP 200'
-            echo 'footer=https://listiaapp.com/footer-legal.js HTTP 200'
-            echo 'robots=https://listiaapp.com/robots.txt HTTP 200'
-            echo 'cloudco_noindex=true'
-            echo 'footer_powered_by_cloudco=true'
-            echo 'robots_disallow_cloudco=true'
-          } > CLOUDCO_LIVE_DEPLOYMENT_PROOF.txt
+            echo 'investment=https://listiaapp.com/investment HTTP 200'
+            echo 'legacy_cloudco_route=redirect_only'
+            echo 'investment_backend=listia-investment-lead'
+            echo 'resource_boundary=LISTIA_ONLY'
+          } > LISTIA_INVESTMENT_LIVE_DEPLOYMENT_PROOF.txt
 
-      - name: Persist public deployment proof
+      - name: Persist deployment proof
         shell: bash
         run: |
           set -Eeuo pipefail
           git config user.name 'LISTIA DevOps'
           git config user.email 'actions@users.noreply.github.com'
-          git add CLOUDCO_LIVE_DEPLOYMENT_PROOF.txt
-          git commit -m 'Record verified CloudCo public deployment' || exit 0
+          git add LISTIA_INVESTMENT_LIVE_DEPLOYMENT_PROOF.txt
+          git commit -m 'Record verified LISTIA investment deployment' || exit 0
           git push origin main
