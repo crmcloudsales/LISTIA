@@ -1,0 +1,110 @@
+name: LISTIA Fix Commercial Build Determinism
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-fix-commercial-build-determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: listia-fix-commercial-build-determinism
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Remove blocking whole-worker minification and add feed smoke
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/listia-commercial-global-i18n-v1.yml')
+          s=p.read_text(encoding='utf-8')
+          old="timeout --signal=TERM 120s env npm_config_fetch_retries=2 npm_config_fetch_retry_maxtimeout=20000 npx --yes terser@5 /tmp/listia-commercial-worker.source.mjs --module --compress passes=2,drop_console=false --mangle --comments false --output /tmp/listia-commercial-worker.mjs"
+          new="cp /tmp/listia-commercial-worker.source.mjs /tmp/listia-commercial-worker.mjs"
+          if old not in s: raise SystemExit('Expected Terser command not found; refusing broad edit')
+          s=s.replace(old,new,1)
+
+          preview_anchor="""          grep -Fq 'id=\"investmentForm\"' /tmp/investment.html
+          for path in global-locales.js japanese-locale.js terms.html privacy.html sitemap.xml; do
+"""
+          preview_insert="""          grep -Fq 'id=\"investmentForm\"' /tmp/investment.html
+          feed_code=\"$(curl -sS -L --max-time 20 -o /tmp/marketplace-feed.json -w '%{http_code}' -X POST \"${base%/}/marketplace/api/feed\" -H 'content-type: application/json' --data '{\"p_limit\":3,\"p_offset\":0}')\"
+          test \"${feed_code}\" = 200
+          python3 - <<'PYFEED'
+          import json
+          rows=json.load(open('/tmp/marketplace-feed.json'))
+          assert isinstance(rows,list) and len(rows)>0, rows
+          assert all(isinstance(x,dict) and x.get('id') for x in rows)
+          print(f'Preview Marketplace real feed OK rows={len(rows)}')
+          PYFEED
+          for path in global-locales.js japanese-locale.js terms.html privacy.html sitemap.xml; do
+"""
+          if preview_anchor not in s: raise SystemExit('Preview smoke anchor missing')
+          s=s.replace(preview_anchor,preview_insert,1)
+
+          live_anchor="""          [[ \"$ok\" == true ]]
+          for lang in \"${languages[@]}\"; do
+"""
+          live_insert="""          [[ \"$ok\" == true ]]
+          feed_code=\"$(curl -sS -L --max-time 20 -o /tmp/marketplace-live-feed.json -w '%{http_code}' -X POST 'https://listiaapp.com/marketplace/api/feed' -H 'content-type: application/json' --data '{\"p_limit\":3,\"p_offset\":0}')\"
+          test \"${feed_code}\" = 200
+          python3 - <<'PYFEED'
+          import json
+          rows=json.load(open('/tmp/marketplace-live-feed.json'))
+          assert isinstance(rows,list) and len(rows)>0, rows
+          assert all(isinstance(x,dict) and x.get('id') for x in rows)
+          print(f'Live Marketplace real feed OK rows={len(rows)}')
+          PYFEED
+          for lang in \"${languages[@]}\"; do
+"""
+          if live_anchor not in s: raise SystemExit('Live verification anchor missing')
+          s=s.replace(live_anchor,live_insert,1)
+          s=s.replace("echo 'commercial_worker_minified=true'","echo 'commercial_worker_minified=false'\n            echo 'commercial_worker_bundled_by_wrangler=true'",1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Verify deterministic release workflow
+        run: |
+          set -Eeuo pipefail
+          grep -Fq 'cp /tmp/listia-commercial-worker.source.mjs /tmp/listia-commercial-worker.mjs' .github/workflows/listia-commercial-global-i18n-v1.yml
+          ! grep -Fq 'terser@5' .github/workflows/listia-commercial-global-i18n-v1.yml
+          grep -Fq 'Preview Marketplace real feed OK' .github/workflows/listia-commercial-global-i18n-v1.yml
+          grep -Fq 'Live Marketplace real feed OK' .github/workflows/listia-commercial-global-i18n-v1.yml
+          grep -Fq 'commercial_worker_bundled_by_wrangler=true' .github/workflows/listia-commercial-global-i18n-v1.yml
+
+      - name: Commit deterministic commercial workflow
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/workflows/listia-commercial-global-i18n-v1.yml
+          git commit -m 'ci: remove blocking minifier and require real Marketplace feed'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Dispatch canonical commercial release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${REPO}/actions/workflows/listia-commercial-global-i18n-v1.yml/dispatches" \
+            --data '{"ref":"main"}'
+          echo 'Deterministic commercial release dispatched.'
