@@ -1,0 +1,58 @@
+name: LISTIA Release Metadata
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/release-listia-metadata.py'
+      - '.github/workflows/listia-release-metadata.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-release-metadata
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Synchronize release metadata
+        run: python scripts/release-listia-metadata.py
+      - name: Verify release parity
+        run: |
+          node --check public/config.js
+          node --check public/sw.js
+          python - <<'PY'
+          from pathlib import Path
+          import json,re
+          version='0.28.0'
+          config=Path('public/config.js').read_text(encoding='utf-8')
+          sw=Path('public/sw.js').read_text(encoding='utf-8')
+          icon=Path('public/APP_ICON_VERSION.txt').read_text(encoding='utf-8')
+          build=json.loads(Path('public/BUILD_INFO.json').read_text(encoding='utf-8'))
+          assert f'BOOTSTRAP_VERSION:"{version}"' in config
+          assert re.search(rf'const CACHE="listia-pwa-v{re.escape(version)}(?:-|\")',sw)
+          assert f'release={version}' in icon and f'pwa_release={version}' in icon
+          assert build['release']==version
+          assert build['bootstrap_version']==version
+          assert build['service_worker_release']==version
+          assert build['app_icon_version']=='17'
+          assert build['billing_env']=='hold' and build['billing_enabled'] is False
+          assert build['resource_boundary']=='LISTIA_ONLY'
+          print('LISTIA release parity verified:',version)
+          PY
+      - name: Commit synchronized metadata
+        run: |
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/config.js public/sw.js public/APP_ICON_VERSION.txt public/BUILD_INFO.json
+          git commit -m 'release: synchronize LISTIA 0.28.0 metadata' || exit 0
+          git pull --rebase origin main
+          git push origin main
