@@ -8,6 +8,7 @@ on:
       - 'listia-app-worker/**'
       - 'supabase/functions/**'
       - 'supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+      - 'supabase/migrations/20260904160900_move_property_ai_to_listia_native_runtime.sql'
       - '.github/workflows/listia-independence-gate.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - 'listia-app-worker/**'
       - 'supabase/functions/**'
       - 'supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+      - 'supabase/migrations/20260904160900_move_property_ai_to_listia_native_runtime.sql'
       - '.github/workflows/listia-independence-gate.yml'
   workflow_dispatch:
 
@@ -32,15 +34,19 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          # LISTIA runtime must never depend on CloudSales.
-          if grep -RniE 'cloudsales(\.app|crm|\.com)?|fkahaqprzgcimgyathqx' public listia-app-worker supabase/functions --exclude-dir=node_modules; then
-            echo 'CloudSales dependency detected in LISTIA runtime.'
+          # Block actual cross-product resources. The GitHub owner name crmcloudsales
+          # is not itself a product dependency and is intentionally not matched.
+          forbidden='cloudsales\.app|@cloudsales\.app|cloudsalescrm\.com|CLOUDSALES_[A-Z0-9_]*|fkahaqprzgcimgyathqx|listia_cloudco_nvidia_gateway_token|nvidia:cloudco|cloudco_gateway'
+          if grep -RniE "$forbidden" public listia-app-worker supabase/functions --exclude-dir=node_modules; then
+            echo 'Cross-product dependency detected in LISTIA runtime.'
             exit 1
           fi
 
           legacy='supabase/functions/cloudco-investment-lead/index.ts'
           canonical='supabase/functions/listia-investment-lead/index.ts'
-          migration='supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+          property_ai='supabase/functions/property-ai-worker/index.ts'
+          legacy_migration='supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
+          ai_migration='supabase/migrations/20260904160900_move_property_ai_to_listia_native_runtime.sql'
 
           # Historical CloudCo-named public form endpoint is allowed only as a
           # no-I/O tombstone. It must never regain database or external transport access.
@@ -58,12 +64,27 @@ jobs:
           grep -Fq 'listia_public_form_rate_limit_consume' "$canonical"
           grep -Fq 'listia_email_enqueue' "$canonical"
           grep -Fq "boundary:'LISTIA_ONLY'" "$canonical"
-          ! grep -Fqi 'cloudsales' "$canonical"
           ! grep -Fq 'formsubmit.co' "$canonical"
 
+          # Property AI is LISTIA-owned. NVIDIA, when configured, is called directly;
+          # otherwise the deterministic LISTIA fallback keeps the pipeline operational.
+          grep -Fq "RUNTIME_KEY = 'nvidia:listia_direct'" "$property_ai"
+          grep -Fq "API_SECRET_NAME = 'listia_nvidia_api_key'" "$property_ai"
+          grep -Fq "DIRECT_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions'" "$property_ai"
+          grep -Fq "LOCAL_MODEL = 'deterministic-property-type-v1'" "$property_ai"
+          ! grep -Fq 'fkahaqprzgcimgyathqx' "$property_ai"
+          ! grep -Fq 'listia_cloudco_nvidia_gateway_token' "$property_ai"
+          ! grep -Fq 'cloudco_gateway' "$property_ai"
+
           # Legacy tables remain historical only and are closed to browser roles.
-          grep -Fq 'revoke all on public.cloudco_investment_leads from public, anon, authenticated' "$migration"
-          grep -Fq 'revoke all on public.cloudco_form_rate_limits from public, anon, authenticated' "$migration"
-          grep -Fq 'LEGACY RETIRED' "$migration"
+          grep -Fq 'revoke all on public.cloudco_investment_leads from public, anon, authenticated' "$legacy_migration"
+          grep -Fq 'revoke all on public.cloudco_form_rate_limits from public, anon, authenticated' "$legacy_migration"
+          grep -Fq 'LEGACY RETIRED' "$legacy_migration"
+
+          # Active provider registry moves to a LISTIA-owned direct runtime.
+          grep -Fq "'nvidia:listia_direct'" "$ai_migration"
+          grep -Fq "'listia_nvidia_api_key'" "$ai_migration"
+          grep -Fq "'credential_owner', 'listia'" "$ai_migration"
+          grep -Fq "'deterministic_property_type_v1'" "$ai_migration"
 
           echo 'LISTIA_RUNTIME_INDEPENDENCE_OK'
