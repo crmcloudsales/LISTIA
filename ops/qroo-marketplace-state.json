@@ -2,7 +2,7 @@
   "territory": "Quintana Roo",
   "territory_code": "MX-ROO",
   "status": "active_maintenance_and_completion",
-  "updated_at": "2026-09-04T16:48:34Z",
+  "updated_at": "2026-09-04T17:08:31Z",
   "next_territories_parallel_discovery": ["Yucatán", "Ciudad de México"],
   "mandatory_order": [
     "Quintana Roo",
@@ -66,7 +66,7 @@
   },
   "adaptive_operations": {
     "source_refresh_state_rows": 108,
-    "due_sources_at_checkpoint": 108,
+    "due_sources_at_checkpoint": 105,
     "active_leases_at_checkpoint": 0,
     "contact_enrichment_queue_qroo": 93,
     "contact_queue_needs_email": 20,
@@ -76,6 +76,25 @@
     "inventory_global_property_resolution_queue_qroo": 7457,
     "source_locking": "FOR UPDATE SKIP LOCKED + two-hour worker lease",
     "refresh_policy": "content hash + adaptive next_check_at"
+  },
+  "controlled_refresh_2026_09_04": {
+    "workflow_run_id": 33898856491,
+    "sources_processed": 3,
+    "sources_succeeded": 2,
+    "sources_failed": 1,
+    "candidate_pages": 109,
+    "accepted_property_pages": 90,
+    "new_public_listings": 0,
+    "unchanged_existing_inventory": true,
+    "succeeded": [
+      "100% Inmobiliaria Sur Quintana Roo — 26 accepted",
+      "AMORAMAR Real Estate — 64 accepted"
+    ],
+    "failed": [
+      "Acanto Condominiums Playa del Carmen — no accepted property pages"
+    ],
+    "next_retry_at": "2026-09-06T17:08:31Z",
+    "active_leases_after_cleanup": 0
   },
   "batch_2026_09_04": {
     "sources_researched": 3,
@@ -136,5 +155,5 @@
     "Most generic-portal inventory remains correctly suppressed from unrelated claim routing",
     "No behavioral demand or identified lead data exists yet"
   ],
-  "exact_next_action": "Run a controlled leased direct-source refresh, then resolve a first evidence-backed global-property batch before expanding Jalisco."
+  "exact_next_action": "Resolve the first evidence-backed global-property batch in Quintana Roo, then continue the due source and contact-enrichment queues."
 }
