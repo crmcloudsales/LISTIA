@@ -1,0 +1,12 @@
+{
+  "product": "LISTIA",
+  "release": "0.28.0",
+  "bootstrap_version": "0.28.0",
+  "service_worker_release": "0.28.0",
+  "app_icon_version": "17",
+  "billing_env": "hold",
+  "billing_enabled": false,
+  "generated_by": "scripts/release-listia-metadata.py",
+  "release_contract": "config/sw/app-icon/build-info parity",
+  "resource_boundary": "LISTIA_ONLY"
+}
