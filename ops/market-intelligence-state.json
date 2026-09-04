@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-04T16:48:34Z",
+  "updated_at": "2026-09-04T17:08:31Z",
   "status": "active",
   "owner_workstream": "listia_marketplace_and_real_estate_intelligence_operations",
   "product_name": "LISTIA Market Intelligence",
@@ -124,6 +124,13 @@
     "google_drive_excel": "https://docs.google.com/spreadsheets/d/1Yxw5_sk_htki-8ajtJoWhZNYqfPe5to7/edit",
     "library_folder": "/LISTIA/Marketplace/Market Intelligence"
   },
-  "exact_next_action": "Execute one controlled leased direct-source refresh and begin the first evidence-backed global-property entity-resolution batch in Quintana Roo.",
+  "latest_controlled_refresh": {
+    "workflow_run_id": 33898856491,
+    "sources_processed": 3,
+    "accepted_property_pages": 90,
+    "new_public_listings": 0,
+    "result": "inventory unchanged; two sources scheduled for normal recheck and one source scheduled for retry"
+  },
+  "exact_next_action": "Begin the first evidence-backed global-property entity-resolution batch in Quintana Roo, then continue due adaptive source refreshes.",
   "continuation_rule": "Recover this file, production Supabase, latest GitHub, Drive and Library before the next batch; do not restart research from zero."
 }
