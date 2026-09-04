@@ -6,6 +6,17 @@ on:
     paths:
       - 'public/config.js'
       - 'public/sw.js'
+      - 'public/index.html'
+      - 'public/manifest*.webmanifest'
+      - 'public/APP_ICON_VERSION.txt'
+      - '.github/workflows/listia-pwa-release-lock.yml'
+  pull_request:
+    paths:
+      - 'public/config.js'
+      - 'public/sw.js'
+      - 'public/index.html'
+      - 'public/manifest*.webmanifest'
+      - 'public/APP_ICON_VERSION.txt'
       - '.github/workflows/listia-pwa-release-lock.yml'
   workflow_dispatch:
 
@@ -34,3 +45,43 @@ jobs:
           if(!sw.includes('marketplace-v14')) throw new Error('Expected Marketplace runtime cache generation v14');
           console.log(`PWA release lock OK: release=${app[1]} cache-generation=marketplace-v14`);
           NODE
+
+      - name: Verify approved LISTIA launcher icon v17 identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          pub=Path('public')
+          note=(pub/'APP_ICON_VERSION.txt').read_text(encoding='utf-8')
+          required_note=(
+              'version=17','icon_version=17','release=0.28.0','pwa_release=0.28.0',
+              'artwork=user-approved official master; house, lighting, volume and gradient preserved',
+              'redraw=none','recolor=none','cache_strategy=physical-versioned-filenames','cache_version=v17'
+          )
+          missing=[x for x in required_note if x not in note]
+          if missing: raise SystemExit('ICON_V17_NOTE_DRIFT=' + ','.join(missing))
+
+          manifests=list(pub.glob('manifest*.webmanifest'))
+          if not manifests: raise SystemExit('NO_PWA_MANIFESTS')
+          for manifest in manifests:
+              data=json.loads(manifest.read_text(encoding='utf-8'))
+              refs=[str(i.get('src','')) for i in data.get('icons',[])]
+              if not refs or not all('listia-app-icon-v17-' in ref and '?v=' not in ref for ref in refs):
+                  raise SystemExit(f'ICON_MANIFEST_DRIFT={manifest.name}:{refs}')
+
+          index=(pub/'index.html').read_text(encoding='utf-8')
+          config=(pub/'config.js').read_text(encoding='utf-8')
+          sw=(pub/'sw.js').read_text(encoding='utf-8')
+          if "const v='17'" not in config: raise SystemExit('CONFIG_ICON_VERSION_NOT_V17')
+          for ref in ('/listia-app-icon-v17-32.png','/listia-app-icon-v17-180.png'):
+              if ref not in index and ref not in config:
+                  raise SystemExit(f'ACTIVE_ICON_REF_MISSING={ref}')
+          if '-icon-v17' not in sw: raise SystemExit('SW_ICON_CACHE_NOT_V17')
+          active='\n'.join([index,config,sw]+[p.read_text(encoding='utf-8') for p in manifests])
+          stale=sorted(set(re.findall(r'listia-app-icon-v(?:15|16)-[^"\'\s)>,]+',active)))
+          if stale: raise SystemExit('STALE_ACTIVE_ICON_REFS=' + ','.join(stale))
+          print(f'LISTIA launcher icon v17 lock OK across {len(manifests)} manifests')
+          PY
