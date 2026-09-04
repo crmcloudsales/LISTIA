@@ -26,9 +26,11 @@ const COPY={
 };
 
 function compact(v){return String(v||'').normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
+function words(v){return String(v||'').normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'').split(/[^a-z0-9]+/).map(compact).filter(Boolean)}
 function language(){const raw=window.LISTIA_I18N?.getLanguage?.()||document.documentElement.dataset.listiaLanguage||document.documentElement.lang||'es';if(COPY[raw])return raw;const base=String(raw).split('-')[0];if(base==='pt')return'pt-BR';if(base==='ar')return'ar-AE';if(base==='zh')return'zh-CN';return COPY[base]?base:'en'}
 function copy(){return COPY[language()]||COPY.en}
-function personalTokens(context={}){const values=[context.name,String(context.email||'').split('@')[0]];return values.flatMap(v=>compact(v).split(/\s+/)).filter(v=>v.length>=4)}
+function personalTokens(context={}){const emailLocal=String(context.email||'').split('@')[0];return [...words(context.name),...words(emailLocal)].filter(v=>v.length>=4)}
+function hasSequence(flat){for(const seq of SEQUENCES){for(let i=0;i<=seq.length-6;i++){if(flat.includes(seq.slice(i,i+6)))return true}}return false}
 function evaluate(password,context={}){
   const raw=String(password||''),flat=compact(raw);
   if(raw.length<MIN_LENGTH)return{ok:false,reason:'too_short'};
@@ -36,7 +38,7 @@ function evaluate(password,context={}){
   if(new Set(raw).size<6)return{ok:false,reason:'low_variety'};
   if(/(.)\1{5,}/i.test(raw))return{ok:false,reason:'repeated'};
   if(COMMON.has(flat))return{ok:false,reason:'common'};
-  if(SEQUENCES.some(seq=>seq.includes(flat)||flat.includes(seq.slice(0,6))||flat.includes(seq.slice(-6))))return{ok:false,reason:'sequence'};
+  if(hasSequence(flat))return{ok:false,reason:'sequence'};
   for(const token of personalTokens(context)){
     const i=flat.indexOf(token);
     if(i>=0&&flat.length-token.length<6)return{ok:false,reason:'personal'};
