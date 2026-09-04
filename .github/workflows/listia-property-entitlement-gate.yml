@@ -1,0 +1,68 @@
+name: LISTIA Property Entitlement Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/property-intake-start/index.ts'
+      - 'supabase/functions/development-unit-promote/index.ts'
+      - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+      - '.github/workflows/listia-property-entitlement-gate.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/property-intake-start/index.ts'
+      - 'supabase/functions/development-unit-promote/index.ts'
+      - 'supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+      - '.github/workflows/listia-property-entitlement-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  entitlement-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify canonical LISTIA property entitlement boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          intake='supabase/functions/property-intake-start/index.ts'
+          promote='supabase/functions/development-unit-promote/index.ts'
+          migration='supabase/migrations/20260904123943_enforce_property_plan_limit_at_database_boundary.sql'
+
+          # Browser/Edge intake must use the canonical entitlement table and
+          # serialize count + insert in the same transaction.
+          grep -Fq 'private.plan_entitlements' "$intake"
+          grep -Fq 'pg_advisory_xact_lock' "$intake"
+          grep -Fq "status <> 'archived'" "$intake"
+          grep -Fq "error: 'property_limit_reached'" "$intake"
+          grep -Fq "error: 'plan_entitlement_unavailable'" "$intake"
+          grep -Fq 'await sql.begin' "$intake"
+
+          # The quota must not drift back to a hard-coded free-only check.
+          ! grep -Eq "plan\s*===\s*['\"]free['\"].*(>=\s*3|>\s*2)" "$intake"
+          ! grep -Fq 'free_property_limit' "$intake"
+
+          # Database trigger is the final authority for every property creation
+          # path, including future service-role Edge Functions.
+          grep -Fq 'create or replace function private.enforce_property_plan_limit()' "$migration"
+          grep -Fq 'create trigger enforce_property_plan_limit' "$migration"
+          grep -Fq 'before insert or update of status, organization_id on public.properties' "$migration"
+          grep -Fq 'private.plan_entitlements' "$migration"
+          grep -Fq 'pg_advisory_xact_lock' "$migration"
+          grep -Fq "new.status = 'archived'" "$migration"
+          grep -Fq "p.status <> 'archived'" "$migration"
+          grep -Fq "message = 'property_limit_reached'" "$migration"
+          grep -Fq "message = 'plan_entitlement_unavailable'" "$migration"
+
+          # Development-unit promotion must surface the database entitlement
+          # result instead of masking it as a server error.
+          grep -Fq "diagnostic.includes('property_limit_reached')" "$promote"
+          grep -Fq "return out({ error: 'property_limit_reached' }, 409" "$promote"
+          grep -Fq "diagnostic.includes('plan_entitlement_unavailable')" "$promote"
+          grep -Fq "return out({ error: 'plan_entitlement_unavailable' }, 503" "$promote"
+
+          echo 'LISTIA_PROPERTY_ENTITLEMENT_BOUNDARY_OK'
