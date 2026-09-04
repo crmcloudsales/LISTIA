@@ -48,6 +48,9 @@ jobs:
               "if(decision!=='accepted')return json({ok:true})",
               "disposable_email",
               "canonical_edge_verified",
+              "test_mirror_no_commercial_routing",
+              "cross_organization_listing",
+              "String(l.organization_id||'')!==oid",
               ".rpc('submit_marketplace_interest'",
               "source:'listia_managed_site'",
               "quality_score:score",
@@ -57,9 +60,12 @@ jobs:
           missing += [f'edge:{x}' for x in edge_required if x not in edge]
           if missing:
               raise SystemExit('PENNYWORTH_CANONICAL_CONTRACT_MISSING=' + ','.join(missing))
+
+          mirror_pos=edge.index('test_mirror_no_commercial_routing')
+          ownership_pos=edge.index('cross_organization_listing')
           accepted_pos=edge.index("if(decision!=='accepted')return json({ok:true})")
           pipeline_pos=edge.index(".rpc('submit_marketplace_interest'")
-          if pipeline_pos <= accepted_pos:
+          if not (mirror_pos < pipeline_pos and ownership_pos < pipeline_pos and accepted_pos < pipeline_pos):
               raise SystemExit('PENNYWORTH_PIPELINE_ORDER_INVALID')
           print('PENNYWORTH_CANONICAL_SOURCE_CONTRACT_OK')
           PY
