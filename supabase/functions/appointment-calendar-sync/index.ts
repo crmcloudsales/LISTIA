@@ -121,7 +121,7 @@ async function processOne(){
   try{
     row=await appointmentContext(job)
     if(!row){await sql`delete from private.appointment_calendar_sync_jobs where appointment_id=${job.appointment_id}::uuid`;return{status:'discarded',appointment_id:job.appointment_id,reason:'appointment_missing'}}
-    --job.desired_action is coalesced by the trigger; appointment state is rechecked here.
+    // The outbox coalesces writes; current appointment state is authoritative at dispatch time.
     const action=row.status==='cancelled'?'delete':row.status==='scheduled'||row.status==='confirmed'?'upsert':null
     if(!action){await sql`delete from private.appointment_calendar_sync_jobs where appointment_id=${job.appointment_id}::uuid`;return{status:'discarded',appointment_id:job.appointment_id,reason:'state_no_longer_syncable'}}
     const externalId=action==='delete'?await deleteEvent(row):await upsertEvent(row)
