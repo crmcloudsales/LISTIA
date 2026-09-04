@@ -7,6 +7,7 @@ on:
       - 'public/conversion-health.js'
       - 'public/google-ads-connect.js'
       - 'supabase/functions/conversion-integrations-status/**'
+      - 'supabase/functions/conversion-signal-dispatch/**'
       - 'supabase/functions/google-ads-config/**'
       - 'supabase/functions/google-oauth-start/**'
       - 'supabase/functions/google-oauth-callback/**'
@@ -16,6 +17,7 @@ on:
       - 'public/conversion-health.js'
       - 'public/google-ads-connect.js'
       - 'supabase/functions/conversion-integrations-status/**'
+      - 'supabase/functions/conversion-signal-dispatch/**'
       - 'supabase/functions/google-ads-config/**'
       - 'supabase/functions/google-oauth-start/**'
       - 'supabase/functions/google-oauth-callback/**'
@@ -78,4 +80,17 @@ jobs:
           grep -Fq "if(caps.includes('ads'))for(const s of ADS_SCOPES)scopeSet.add(s)" "$start"
           grep -Fq 'function uniqScopes(existing:unknown,incoming:string)' "$callback"
           grep -Fq 'refresh_token_secret_id=coalesce(excluded.refresh_token_secret_id' "$callback"
-          echo 'LISTIA conversion readiness contract passed.'
+
+      - name: Validate conversion dispatch privacy and quality gates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          dispatch='supabase/functions/conversion-signal-dispatch/index.ts'
+          grep -Fq "blockedVerification=new Set(['bot','suspicious','duplicate','fake','invalid','blocked','junk','spam'])" "$dispatch"
+          grep -Fq "if(requireConsent&&!granted)" "$dispatch"
+          grep -Fq "last_error='marketing_consent_required'" "$dispatch"
+          grep -Fq "minQ!==null&&(q===null||q<minQ)" "$dispatch"
+          grep -Fq "last_error='lead_quality_gate'" "$dispatch"
+          grep -Fq 'user.externalIds=[await sha256(String(lead.id))]' "$dispatch"
+          ! grep -Fq 'user.externalIds=[String(lead.id)]' "$dispatch"
+          echo 'LISTIA conversion readiness and dispatch privacy contract passed.'
