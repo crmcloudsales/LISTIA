@@ -108,3 +108,5 @@ jobs:
             "https://api.github.com/repos/${REPO}/actions/workflows/listia-commercial-global-i18n-v1.yml/dispatches" \
             --data '{"ref":"main"}'
           echo 'Deterministic commercial release dispatched.'
+
+# trigger-v2
