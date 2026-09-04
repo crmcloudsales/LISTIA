@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: listia-commercial-global-i18n
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy-commercial-worker:
@@ -46,7 +46,7 @@ jobs:
           python3 -m py_compile scripts/build-commercial-worker.py
           python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.source.mjs
           node --check /tmp/listia-commercial-worker.source.mjs
-          npx --yes terser@5 /tmp/listia-commercial-worker.source.mjs --module --compress passes=2,drop_console=false --mangle --comments false --output /tmp/listia-commercial-worker.mjs
+          timeout --signal=TERM 120s env npm_config_fetch_retries=2 npm_config_fetch_retry_maxtimeout=20000 npx --yes terser@5 /tmp/listia-commercial-worker.source.mjs --module --compress passes=2,drop_console=false --mangle --comments false --output /tmp/listia-commercial-worker.mjs
           printf '\nconst __LISTIA_RELEASE_FINGERPRINT="%s";\n' "${GITHUB_SHA}" >> /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
           rm -f /tmp/listia-commercial-worker.source.mjs
@@ -76,7 +76,7 @@ jobs:
           for candidate in primary security; do
             if [[ "${candidate}" == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
             [[ -n "${token}" ]] || continue
-            if CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-marketplace-${GITHUB_SHA:0:12}" --message "LISTIA protected commercial release ${GITHUB_SHA:0:12}" --preview-alias commercial-marketplace 2>&1 | tee /tmp/upload.log; then
+            if CLOUDFLARE_API_TOKEN="${token}" timeout --signal=TERM 180s env npm_config_fetch_retries=2 npm_config_fetch_retry_maxtimeout=20000 npx --yes wrangler@${WRANGLER_VERSION} versions upload /tmp/listia-commercial-worker.mjs --name "${WORKER_NAME}" --compatibility-date 2026-08-24 --keep-vars --tag "commercial-marketplace-${GITHUB_SHA:0:12}" --message "LISTIA protected commercial release ${GITHUB_SHA:0:12}" --preview-alias commercial-marketplace 2>&1 | tee /tmp/upload.log; then
               selected="${candidate}"
               version="$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/upload.log | tail -1)"
               preview="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' /tmp/upload.log | head -1 | sed 's/[),]$//' || true)"
@@ -122,7 +122,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           if [[ '${{ steps.upload.outputs.token_kind }}' == primary ]]; then token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; else token="${CLOUDFLARE_API_TOKEN_SECURITY}"; fi
-          CLOUDFLARE_API_TOKEN="${token}" npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA protected commercial release ${GITHUB_SHA:0:12}" --yes
+          CLOUDFLARE_API_TOKEN="${token}" timeout --signal=TERM 180s env npm_config_fetch_retries=2 npm_config_fetch_retry_maxtimeout=20000 npx --yes wrangler@${WRANGLER_VERSION} versions deploy '${{ steps.upload.outputs.version_id }}@100%' --name "${WORKER_NAME}" --message "Deploy LISTIA protected commercial release ${GITHUB_SHA:0:12}" --yes
 
       - name: Verify live commercial site, marketplace and investment
         shell: bash
