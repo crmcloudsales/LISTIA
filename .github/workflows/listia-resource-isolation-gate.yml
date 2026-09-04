@@ -39,7 +39,7 @@ jobs:
             exit 0
           fi
 
-          forbidden='cloudsales\.app|@cloudsales\.app|CLOUDSALES_[A-Z0-9_]*|CLOUDCO_[A-Z0-9_]*|cloudco-investment-lead|cloudco_form_rate_limits|cloudco_investment_leads|/cloudco(?:[/?"'"'[:space:]]|$)'
+          forbidden='cloudsales\.app|@cloudsales\.app|CLOUDSALES_[A-Z0-9_]*|CLOUDCO_[A-Z0-9_]*|cloudco-investment-lead|cloudco_form_rate_limits|cloudco_investment_leads|/cloudco([/?[:space:]]|$)'
           if grep -RInE --binary-files=without-match \
             --exclude='*.md' --exclude='*.txt' --exclude='*.map' \
             "$forbidden" "${roots[@]}"; then
