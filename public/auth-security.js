@@ -48,7 +48,14 @@ function evaluate(password,context={}){
 function showWeak(){const toast=document.getElementById('toast');if(!toast)return;toast.textContent=copy().weak;toast.className='toast error';toast.hidden=false;clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>{toast.hidden=true},5200)}
 function hardenInputs(){
   for(const id of ['signupPassword','resetPassword','resetPasswordConfirm']){
-    const input=document.getElementById(id);if(!input)continue;input.minLength=MIN_LENGTH;input.maxLength=MAX_LENGTH;input.setAttribute('aria-describedby',`${id}SecurityHint`);
+    const input=document.getElementById(id);if(!input)continue;
+    input.minLength=MIN_LENGTH;
+    input.maxLength=MAX_LENGTH;
+    input.autocomplete='new-password';
+    input.spellcheck=false;
+    input.setAttribute('autocapitalize','none');
+    input.dataset.passwordPolicy='strong-12';
+    input.setAttribute('aria-describedby',`${id}SecurityHint`);
     let hint=document.getElementById(`${id}SecurityHint`);if(!hint){hint=document.createElement('small');hint.id=`${id}SecurityHint`;hint.className='listia-password-security-hint';input.closest('.password-wrap')?.after(hint)||input.after(hint)}
     hint.textContent=copy().hint;
   }
