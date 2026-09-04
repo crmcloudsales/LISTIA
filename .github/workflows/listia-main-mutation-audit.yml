@@ -1,8 +1,11 @@
-name: LISTIA Main Mutation Audit
+name: LISTIA Main Mutation Boundary
 
 on:
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/**'
+  pull_request:
     paths:
       - '.github/workflows/**'
   workflow_dispatch:
@@ -16,7 +19,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Inventory workflows capable of mutating main
+      - name: Reject new workflows capable of mutating main
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -24,21 +27,69 @@ jobs:
           from pathlib import Path
           import re
 
-          root=Path('.github/workflows')
-          rows=[]
-          for p in sorted(root.glob('*.yml')):
-              text=p.read_text(encoding='utf-8',errors='replace')
-              indicators=[]
-              if re.search(r'(?m)^\s*contents:\s*write\s*$',text): indicators.append('contents:write')
-              if re.search(r'(?m)\bgit\s+push\b',text): indicators.append('git-push')
-              if re.search(r'(?m)\bgit\s+commit\b',text): indicators.append('git-commit')
-              if '/contents/' in text and re.search(r'(?i)\b(PUT|PATCH|DELETE)\b',text): indicators.append('contents-api-write')
-              if re.search(r'(?i)gh\s+api.*(--method|-X)\s+(POST|PUT|PATCH|DELETE)',text): indicators.append('gh-api-write')
-              if indicators:
-                  rows.append((p.as_posix(),','.join(indicators)))
-          print('LISTIA_MAIN_MUTATION_AUDIT_BEGIN')
-          for path,flags in rows:
-              print(f'{path}\t{flags}')
-          print(f'LISTIA_MAIN_MUTATION_WORKFLOWS={len(rows)}')
-          print('LISTIA_MAIN_MUTATION_AUDIT_END')
+          self_path='.github/workflows/listia-main-mutation-audit.yml'
+          allowed={
+            '.github/workflows/cloudco-live-proof.yml',
+            '.github/workflows/deploy-cloudflare-pages.yml',
+            '.github/workflows/listia-app-icon-v12.yml',
+            '.github/workflows/listia-app-route-cutover-v1.yml',
+            '.github/workflows/listia-billing-webhook-repo-sync-v8.yml',
+            '.github/workflows/listia-cloudflare-saas-audit.yml',
+            '.github/workflows/listia-commercial-global-i18n-v1.yml',
+            '.github/workflows/listia-commercial-isolation-apply.yml',
+            '.github/workflows/listia-iad-inventory-crawl.yml',
+            '.github/workflows/listia-listings-site-runtime.yml',
+            '.github/workflows/listia-managed-resolver-secret-guard.yml',
+            '.github/workflows/listia-managed-site-pennyworth-v1-apply.yml',
+            '.github/workflows/listia-managed-site-pennyworth-v2-apply.yml',
+            '.github/workflows/listia-market-intelligence-runtime.yml',
+            '.github/workflows/listia-marketplace-exemplary-v6.yml',
+            '.github/workflows/listia-marketplace-interest-fix-v6.yml',
+            '.github/workflows/listia-marketplace-runtime-sync.yml',
+            '.github/workflows/listia-marketplace-search-race-fix.yml',
+            '.github/workflows/listia-marketplace-v7-polish.yml',
+            '.github/workflows/listia-marketplace-visible-mobile.yml',
+            '.github/workflows/listia-oauth-login.yml',
+            '.github/workflows/listia-pwa-audit-fix-v1.yml',
+            '.github/workflows/listia-pwa-behavior-fix-v1.yml',
+            '.github/workflows/listia-pwa-brand-v9-apply.yml',
+            '.github/workflows/listia-pwa-i18n-manifest-fix.yml',
+            '.github/workflows/listia-release-metadata.yml',
+            '.github/workflows/listia-turnstile-provision.yml',
+            '.github/workflows/listia-workspace-lookup-audit-v1.yml',
+          }
+
+          def mutation_flags(text):
+              flags=[]
+              if re.search(r'(?m)^\s*contents:\s*write\s*$',text): flags.append('contents:write')
+              if re.search(r'(?m)\bgit\s+push\b',text): flags.append('git-push')
+              if re.search(r'(?m)\bgit\s+commit\b',text): flags.append('git-commit')
+              if '/contents/' in text and re.search(r'(?i)\b(PUT|PATCH|DELETE)\b',text): flags.append('contents-api-write')
+              if re.search(r'(?i)gh\s+api.*(--method|-X)\s+(POST|PUT|PATCH|DELETE)',text): flags.append('gh-api-write')
+              return flags
+
+          actual={}
+          for p in sorted(Path('.github/workflows').glob('*.yml')):
+              path=p.as_posix()
+              if path==self_path:
+                  continue
+              flags=mutation_flags(p.read_text(encoding='utf-8',errors='replace'))
+              if flags:
+                  actual[path]=flags
+
+          unexpected=sorted(set(actual)-allowed)
+          retired=sorted(allowed-set(actual))
+          print('LISTIA_MAIN_MUTATION_BOUNDARY_BEGIN')
+          for path in sorted(actual):
+              print(f'{path}\t{",".join(actual[path])}')
+          print(f'ACTIVE_MUTATION_WORKFLOWS={len(actual)}')
+          if retired:
+              print('ALLOWLIST_ENTRIES_NOW_NON_MUTATING=' + ','.join(retired))
+          if unexpected:
+              print('UNAPPROVED_MUTATION_WORKFLOWS=' + ','.join(unexpected))
+              raise SystemExit(41)
+          if len(actual)>len(allowed):
+              raise SystemExit('MUTATION_SURFACE_GREW')
+          print('LISTIA_MAIN_MUTATION_BOUNDARY_OK')
+          print('LISTIA_MAIN_MUTATION_BOUNDARY_END')
           PY
