@@ -1,0 +1,48 @@
+name: LISTIA Managed Site Pennyworth V2 Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/patch-listia-managed-site-pennyworth-v2.py'
+      - '.github/workflows/listia-managed-site-pennyworth-v2-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-managed-site-pennyworth-v2-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch canonical LISTIA worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/patch-listia-managed-site-pennyworth-v2.py
+          node --check listia-app-worker/index.js
+          grep -Fq 'form_elapsed_ms:Math.max(0,Date.now()-opened)' listia-app-worker/index.js
+          grep -Fq "'x-listia-client-ua':String(req.headers.get('user-agent')||'').slice(0,500)" listia-app-worker/index.js
+          grep -Fq "'x-listia-country':String(req.cf?.country||'').slice(0,8)" listia-app-worker/index.js
+      - name: Persist patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet -- listia-app-worker/index.js; then
+            echo 'Canonical Pennyworth signals already present.'
+            exit 0
+          fi
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add listia-app-worker/index.js
+          git commit -m 'Strengthen Pennyworth signals on LISTIA Managed Sites'
+          git push origin main
