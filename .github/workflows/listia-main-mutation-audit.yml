@@ -1,0 +1,44 @@
+name: LISTIA Main Mutation Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inventory workflows capable of mutating main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root=Path('.github/workflows')
+          rows=[]
+          for p in sorted(root.glob('*.yml')):
+              text=p.read_text(encoding='utf-8',errors='replace')
+              indicators=[]
+              if re.search(r'(?m)^\s*contents:\s*write\s*$',text): indicators.append('contents:write')
+              if re.search(r'(?m)\bgit\s+push\b',text): indicators.append('git-push')
+              if re.search(r'(?m)\bgit\s+commit\b',text): indicators.append('git-commit')
+              if '/contents/' in text and re.search(r'(?i)\b(PUT|PATCH|DELETE)\b',text): indicators.append('contents-api-write')
+              if re.search(r'(?i)gh\s+api.*(--method|-X)\s+(POST|PUT|PATCH|DELETE)',text): indicators.append('gh-api-write')
+              if indicators:
+                  rows.append((p.as_posix(),','.join(indicators)))
+          print('LISTIA_MAIN_MUTATION_AUDIT_BEGIN')
+          for path,flags in rows:
+              print(f'{path}\t{flags}')
+          print(f'LISTIA_MAIN_MUTATION_WORKFLOWS={len(rows)}')
+          print('LISTIA_MAIN_MUTATION_AUDIT_END')
+          PY
