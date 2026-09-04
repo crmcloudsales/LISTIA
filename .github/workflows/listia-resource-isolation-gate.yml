@@ -8,14 +8,16 @@ on:
       - 'scripts/**'
       - 'listia-app-worker/**'
       - 'supabase/functions/**'
-      - '.github/workflows/listia-resource-isolation-gate.yml'
+      - 'supabase/migrations/**'
+      - '.github/workflows/**'
   pull_request:
     paths:
       - 'public/**'
       - 'scripts/**'
       - 'listia-app-worker/**'
       - 'supabase/functions/**'
-      - '.github/workflows/listia-resource-isolation-gate.yml'
+      - 'supabase/migrations/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
       - name: Block CloudSales and CloudCo resource dependencies
         shell: bash
         run: |
@@ -42,6 +47,40 @@ jobs:
             exit 1
           fi
           echo 'Cross-product resource dependency scan passed.'
+
+      - name: Protect LISTIA control-plane changes from CloudSales resources
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$EVENT_NAME" == pull_request && -n "${PR_BASE_SHA:-}" ]]; then
+            base="$PR_BASE_SHA"
+            git fetch --no-tags --depth=1 origin "$base" >/dev/null 2>&1 || true
+          elif [[ -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            base="$BEFORE_SHA"
+            git fetch --no-tags --depth=1 origin "$base" >/dev/null 2>&1 || true
+          else
+            base="HEAD^"
+          fi
+
+          changed="$(git diff --name-only "$base" HEAD 2>/dev/null || true)"
+          control="$(printf '%s\n' "$changed" | grep -E '^(supabase/migrations/|\.github/workflows/)' | grep -v '^\.github/workflows/listia-resource-isolation-gate\.yml$' || true)"
+          [[ -n "$control" ]] || { echo 'No changed LISTIA control-plane files require cross-product scanning.'; exit 0; }
+
+          forbidden='cloudsales\.app|@cloudsales\.app|cloudsalescrm\.com|CLOUDSALES_[A-Z0-9_]*|cloudco-investment-lead|CLOUDCO_[A-Z0-9_]*'
+          failed=0
+          while IFS= read -r file; do
+            [[ -f "$file" ]] || continue
+            if grep -InE --binary-files=without-match "$forbidden" "$file"; then
+              echo "ERROR: changed LISTIA control-plane file references a CloudSales/CloudCo resource: $file"
+              failed=1
+            fi
+          done <<< "$control"
+          [[ "$failed" == 0 ]]
+          echo 'Changed LISTIA workflows/migrations are isolated from CloudSales resources.'
 
       - name: Validate narrow legacy URL compatibility
         shell: bash
