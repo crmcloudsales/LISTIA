@@ -29,23 +29,26 @@ jobs:
         run: |
           set -Eeuo pipefail
           page_code=$(curl -sS -L --max-time 20 -o /tmp/marketplace.html -w '%{http_code}' 'https://listiaapp.com/marketplace')
+          echo "page_code=${page_code}"
           test "$page_code" = 200
           grep -Fq 'LISTIA busca por ti' /tmp/marketplace.html
-          grep -Fq 'id="results"' /tmp/marketplace.html
+          grep -Fq 'id="list"' /tmp/marketplace.html
           grep -Fq 'id="map"' /tmp/marketplace.html
 
           feed_code=$(curl -sS -L --max-time 25 -o /tmp/feed.json -w '%{http_code}' \
             -X POST 'https://listiaapp.com/marketplace/api/feed' \
             -H 'content-type: application/json' \
             --data '{"p_limit":6,"p_offset":0}')
-          test "$feed_code" = 200
+          echo "feed_code=${feed_code}"
+          if [[ "$feed_code" != 200 ]]; then head -c 500 /tmp/feed.json || true; echo; exit 1; fi
           python3 -c "import json; rows=json.load(open('/tmp/feed.json')); assert isinstance(rows,list) and len(rows)>0, rows; assert all(isinstance(x,dict) and x.get('id') for x in rows); print('real_inventory_rows=',len(rows))"
 
           filtered_code=$(curl -sS -L --max-time 25 -o /tmp/feed-filtered.json -w '%{http_code}' \
             -X POST 'https://listiaapp.com/marketplace/api/feed' \
             -H 'content-type: application/json' \
             --data '{"p_limit":6,"p_offset":0,"p_q":"Quintana Roo"}')
-          test "$filtered_code" = 200
+          echo "filtered_code=${filtered_code}"
+          if [[ "$filtered_code" != 200 ]]; then head -c 500 /tmp/feed-filtered.json || true; echo; exit 1; fi
           python3 -c "import json; rows=json.load(open('/tmp/feed-filtered.json')); assert isinstance(rows,list), rows; print('filtered_rows=',len(rows))"
 
           echo 'LISTIA commercial Marketplace is live and connected to real inventory.'
