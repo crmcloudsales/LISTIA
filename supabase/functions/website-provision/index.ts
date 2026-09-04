@@ -43,7 +43,7 @@ async function verifyInfra(host: string) {
   for (let attempt = 0; attempt < 4; attempt++) {
     last = await fetchJson(`https://${host}/.well-known/listia-infra-health`);
     const d = last?.data;
-    if (last?.ok && d?.ok === true && d?.host === host && d?.service === 'listia-managed-sites' && d?.route === true && d?.tls === true && d?.turnstile_configured === true) {
+    if (last?.ok && d?.ok === true && d?.host === host && d?.service === 'listia-managed-sites' && d?.route === true && d?.tls === true && d?.turnstile_configured === true && d?.pennyworth_v2 === true) {
       return {ok: true, turnstile: true, status: last.status};
     }
     if (attempt < 3) await sleep(350 * (attempt + 1));
