@@ -66,6 +66,19 @@ def improved_crawl_source(source: dict):
         rows.append(row)
 
     by_slug = {row["slug"]: row for row in rows}
+    fingerprint_rows = [
+        {
+            "slug": row.get("slug"),
+            "title": row.get("title"),
+            "price": row.get("price"),
+            "currency": row.get("currency"),
+            "cover_image_url": row.get("cover_image_url"),
+        }
+        for row in sorted(by_slug.values(), key=lambda item: str(item.get("slug") or ""))
+    ]
+    content_hash = base.hashlib.sha256(
+        base.json.dumps(fingerprint_rows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     meta = {
         "name": source.get("name"),
         "source_url": source_url,
@@ -75,6 +88,7 @@ def improved_crawl_source(source: dict):
         "recovered_unique_gallery_cover": recovered,
         "rejected_no_unique_image": rejected_no_unique,
         "failures": len(failures),
+        "content_hash": content_hash,
     }
     return list(by_slug.values()), meta, failures
 

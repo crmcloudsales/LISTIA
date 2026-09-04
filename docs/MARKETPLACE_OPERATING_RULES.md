@@ -1,10 +1,26 @@
 # LISTIA Marketplace — Permanent Operating Rules
 
-Last confirmed: 2026-08-30
+Last confirmed: 2026-09-04
 Owner: LISTIA — MARKETPLACE
+Operating version: PERMANENT OPERATING SYSTEM
 
 ## Mission
-Expand the LISTIA Marketplace to achieve the broadest practical inventory coverage in Mexico, state by state, without interfering with LISTIA — DESARROLLO, CLOUDSALES — DESARROLLO, or LISTIA — LANZAMIENTO.
+Operate LISTIA Marketplace as a continuously refreshed global real-estate knowledge graph: territory mapping, inventory, companies, professionals, developers, decision makers, verified business contacts, subscriber prospects, localization, Market Intelligence, opportunity intelligence and evidence-backed lead routing.
+
+This workstream does not modify CloudSales and does not start unrelated LISTIA product work.
+
+## Primary economic rule
+Operate in `ZERO_INCREMENTAL_EXTERNAL_SPEND` mode unless the user explicitly approves otherwise.
+Prefer existing LISTIA/Supabase/GitHub/Drive/Library data, official sites, public business profiles, public directories, permitted listings, sitemaps and structured data. Do not activate paid databases, proxies, crawling platforms, enrichment providers, verification services, external AI APIs or other paid services without approval.
+
+Cache, reuse and incrementally refresh verified knowledge. Do not research a recently verified fact again and do not perform blind daily full-world crawls.
+
+## Canonical graph and flywheel
+Keep conceptually separate: global property, listing, source, party, professional, company, developer, project, account, lead, interest, evidence and territory.
+
+A physical property can have multiple listings and sources. Syndication does not create additional physical supply. Resolve one global property to many listings and responsible parties using address, coordinates, project/tower/unit, price, rooms, area, media fingerprints, source identifiers, descriptions, advertiser and phone signals.
+
+Every territory must produce localization + company map + professional map + source map + inventory + Market Intelligence. Every source visit should produce as many reusable assets as verifiably possible: provenance, company, decision makers, contacts, inventory, claim readiness and market signals.
 
 ## Mandatory geographic order
 1. Quintana Roo — finish and checkpoint before advancing.
@@ -13,7 +29,8 @@ Expand the LISTIA Marketplace to achieve the broadest practical inventory covera
 4. Guadalajara / Jalisco.
 5. Monterrey / Nuevo León.
 6. Puebla.
-7. Continue through the remaining Mexican states until nationwide coverage is as complete as practical.
+7. Querétaro.
+8. Continue through the remaining Mexican states until nationwide coverage is as complete as practical.
 
 Do not skip ahead without a clear checkpoint for the current territory.
 
@@ -65,7 +82,7 @@ Record provenance and freshness. Historical contacts may be preserved but must b
 Never infer an email address from a naming pattern and never invent a phone/WhatsApp number.
 A public phone or WhatsApp is a valid verified contact even if no email is found; continue searching for the missing channels rather than downgrading the verified channel.
 
-Purpose: build the future LISTIA/CloudCo subscriber base in parallel with Marketplace expansion. LISTIA — MARKETPLACE only collects, verifies, preserves, and maps this data. Campaigns, email automation, billing, and subscription offers belong to their own workstreams.
+Purpose: build the future LISTIA subscriber base in parallel with Marketplace expansion. LISTIA — MARKETPLACE owns claim-opportunity preparation, routing evidence and notification readiness. General billing, unrelated campaigns and unrelated product modules remain outside this workstream.
 
 Routing priority: listing-specific contact > agent/realtor > branch > company/developer > direct source. Generic portals are provenance, not automatic lead recipients. If an aggregator does not initially expose the advertiser, attempt to resolve it from the listing/profile and cross-web enrichment before classifying the listing as not lead-routeable.
 Never invent CEO/owner/contact data. If legal ownership is not proven, store the commercial responsible party and label the role accurately.
@@ -74,8 +91,48 @@ Canonical storage: Supabase marketplace_parties, marketplace_source_parties, mar
 Drive backup: LISTIA Marketplace — Fuentes y Prospectos and LISTIA Marketplace — Backup Fuentes Quintana Roo while Q.Roo is active.
 Persistent rule mirrors: TAREAS, GitHub docs/MARKETPLACE_OPERATING_RULES.md, ChatGPT Library /LISTIA/LISTIA_MARKETPLACE_OPERATING_RULES.md.
 
+## `ME INTERESA`, interest and lead rule
+`ME INTERESA` is the only commercial property CTA. Functional navigation such as search, map, filters and favorites is allowed.
+
+The click must immediately and idempotently:
+1. create an Interest Event or `PENDING_INTEREST` with the known visitor/session, property, listing, global property, source, party, account, territory, attribution and permitted device metadata;
+2. open the detailed property page without additional friction.
+
+When identity becomes known, enrich the same interest into one identified lead. Repeated clicks and click + form submission must not create duplicate leads.
+
+Lead-recipient priority is: explicitly associated LISTIA account; uploader/publisher; verified listing-specific agent; verified commercial office; verified brokerage; verified developer; verified commercial source of truth. A portal is provenance unless evidence proves the commercial relationship.
+
+## Canonical form and anti-bot rule
+Use one canonical form per LISTIA account/subscription, embedded across that account's properties and approved surfaces. Canonical fields: Nombre y apellido, Correo, Phone o WhatsApp, Fecha de entrega. Delivery options: inmediata, 3–6 meses, 6 meses o más.
+
+Reuse the canonical Cloudflare/Turnstile, server verification, rate limit, honeypot, idempotency, spam/junk/duplicate detection and origin protection architecture. Rejected traffic must never become a valid lead or pollute demand/conversion analytics.
+
+## Claim and WhatsApp rule
+Subscriber leads are delivered according to entitlement. A verified responsible non-subscriber produces a claimable lead opportunity and a masked preview; do not claim a profile/account is ready unless it actually exists.
+
+WhatsApp mapping is mandatory when a public professional business number is verifiable, but mapping and messaging permission are separate facts. Preserve raw/normalized number, evidence, verification time, business status, contact status, opt-in source/time and opt-out state where supported.
+
+Automation must use only the official WhatsApp Business Platform / Cloud API with approved templates, delivery/read/failure events, retries, localization, suppression and permission controls. Never use browser bots, WhatsApp Web simulation or personal accounts.
+
 ## Market Intelligence reuse rule
 Every inventory pass should also preserve data useful for LISTIA Market Intelligence: geography, operation (sale/rent), property type, price/currency, bedrooms, bathrooms, area, price/m² when valid, source freshness, contact coverage and data-quality coverage. Observed supply must never be mislabeled as demand. Demand/opportunity signals require user-engagement evidence.
+
+## Continuous operational queues
+Maintain one shared source of truth with these reusable queues rather than separate prospect lists:
+- territory expansion and maintenance queue;
+- adaptive source refresh queue with volatility, business value, inventory size, last-change rate, next check, worker lease and checkpoint;
+- contact enrichment queue;
+- inventory/global-property resolution queue;
+- claim-readiness queue using the canonical claim views.
+
+Workers must claim source batches with a worker ID and lease. Expired leases may be retried; active leases must not be processed by a second worker. Global company/property deduplication remains shared.
+
+Very active/high-value sources receive shorter checks. Stable or low-value sources receive longer checks. Use content hashes, source IDs, timestamps and prior fingerprints to process only changed content whenever possible. Preserve history and explicit lifecycle states: NEW, UPDATED, PRICE_CHANGED, SOLD, RENTED, RESERVED, REMOVED, INACTIVE and RESPONSIBLE_PARTY_CHANGED.
+
+## Localization and evidence rule
+Localization is semantic and commercial, not literal translation. Preserve local geography, address/ZIP conventions, timezone, languages, currency, phone prefix, area/distance units, terminology, property categories, portals, associations, MLS structure, developments, microzones and aliases.
+
+Critical values and all professional contacts require value + source URL + observed/verified time + confidence. Use NULL for unknown, CONFLICT for contradictions, UNVERIFIED when unverified and DATA_INSUFFICIENT when evidence is insufficient. Never invent data to improve completeness metrics.
 
 ## State completion checkpoint
 Before moving to the next state, record at minimum:

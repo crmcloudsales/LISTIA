@@ -71,12 +71,24 @@ Deno.serve(async (req: Request) => {
   if (req.method === "GET") {
     const requested = Number(new URL(req.url).searchParams.get("limit") || "100");
     const limit = Number.isFinite(requested) ? Math.max(1, Math.min(Math.trunc(requested), 200)) : 100;
-    const { data, error } = await admin.rpc("list_qroo_direct_sources", { p_limit: limit });
+    const workerId = `github:${String(claims.run_id || claims.jti || "unknown")}`;
+    const { data, error } = await admin.rpc("claim_marketplace_source_batch", {
+      p_territory_code: "MX-ROO",
+      p_worker_id: workerId,
+      p_limit: limit,
+    });
     if (error) {
       console.error("qroo_direct_source_list_failed", { code: error.code, message: error.message, run_id: claims.run_id });
       return json(500, { error: "source_list_failed", code: error.code || null });
     }
-    return json(200, { ok: true, territory: "Quintana Roo", sources: data, run_id: String(claims.run_id || "") });
+    return json(200, {
+      ok: true,
+      territory: "Quintana Roo",
+      territory_code: "MX-ROO",
+      worker_id: workerId,
+      sources: data,
+      run_id: String(claims.run_id || ""),
+    });
   }
 
   let body: unknown;
@@ -85,6 +97,33 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json(400, { error: "invalid_json" });
   }
+  const workerId = `github:${String(claims.run_id || claims.jti || "unknown")}`;
+  const refreshResults = (body as { refresh_results?: unknown })?.refresh_results;
+  if (Array.isArray(refreshResults)) {
+    if (refreshResults.length > MAX_BATCH) {
+      return json(400, { error: "invalid_refresh_result_size", max_batch: MAX_BATCH });
+    }
+    const { data, error } = await admin.rpc("complete_marketplace_source_batch", {
+      p_territory_code: "MX-ROO",
+      p_worker_id: workerId,
+      p_results: refreshResults,
+    });
+    if (error) {
+      console.error("qroo_direct_refresh_complete_failed", {
+        code: error.code,
+        message: error.message,
+        run_id: claims.run_id,
+      });
+      return json(500, { error: "refresh_complete_failed", code: error.code || null });
+    }
+    return json(200, {
+      ok: true,
+      run_id: String(claims.run_id || ""),
+      workflow_sha: String(claims.workflow_sha || ""),
+      refresh_result: data,
+    });
+  }
+
   const batch = (body as { batch?: unknown })?.batch;
   if (!Array.isArray(batch) || batch.length < 1 || batch.length > MAX_BATCH) return json(400, { error: "invalid_batch_size", max_batch: MAX_BATCH });
 

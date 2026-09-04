@@ -53,7 +53,9 @@ def main() -> int:
     static = json.loads(static_path.read_text(encoding="utf-8")) if static_path.is_file() else {"sources": []}
     merged = []
     seen = set()
-    for source in list(static.get("sources", [])) + list(payload["sources"]):
+    # Adaptive leased sources come first. Static entries remain only as a
+    # continuity fallback when a source is not present in the current lease.
+    for source in list(payload["sources"]) + list(static.get("sources", [])):
         url = str(source.get("source_url") or "").strip()
         if not url or url in seen:
             continue

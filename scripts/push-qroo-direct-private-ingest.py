@@ -69,6 +69,34 @@ def post(endpoint: str, token: str, batch: list[dict]) -> dict:
     return payload
 
 
+def post_refresh_results(endpoint: str, token: str, refresh_results: list[dict]) -> dict:
+    body = json.dumps(
+        {"refresh_results": refresh_results},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "LISTIA-QROO-Direct-GitHub-Actions/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        text = exc.read().decode("utf-8", errors="replace")[:2000]
+        raise RuntimeError(f"direct refresh completion HTTP {exc.code}: {text}") from exc
+    if payload.get("ok") is not True or not isinstance(payload.get("refresh_result"), dict):
+        raise RuntimeError(f"unexpected refresh completion response: {payload}")
+    return payload
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: push-qroo-direct-private-ingest.py <crawl-output-dir>", file=sys.stderr)
@@ -98,6 +126,26 @@ def main() -> int:
             for key in ("payload", "valid", "invalid", "inserted", "duplicate_or_existing"):
                 totals[key] += int(result.get(key, 0) or 0)
             print(json.dumps({"chunk": chunk_name, "offset": start, "batch": len(batch), "result": result, "run_id": response.get("run_id")}, ensure_ascii=False), flush=True)
+
+    refresh_results = [
+        {
+            "source_url": str(item.get("source_url") or ""),
+            "content_hash": str(item.get("content_hash") or ""),
+            "candidates": int(item.get("candidates", 0) or 0),
+            "accepted": int(item.get("accepted", 0) or 0),
+            "failures": int(item.get("failures", 0) or 0),
+        }
+        for item in manifest.get("summaries", [])
+        if item.get("source_url")
+    ]
+    if refresh_results:
+        if not token or exp <= int(time.time()) + 60:
+            token, exp = request_oidc_token()
+        refresh_response = post_refresh_results(endpoint, token, refresh_results)
+        print(json.dumps({
+            "refresh_completion": refresh_response["refresh_result"],
+            "run_id": refresh_response.get("run_id"),
+        }, ensure_ascii=False), flush=True)
     print(json.dumps({"summary": totals}, ensure_ascii=False), flush=True)
     return 0 if totals["invalid"] == 0 else 3
 
