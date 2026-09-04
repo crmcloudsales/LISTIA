@@ -49,7 +49,7 @@ jobs:
           printf '\nconst __LISTIA_RELEASE_FINGERPRINT="%s";\n' "${GITHUB_SHA}" >> /tmp/listia-commercial-worker.mjs
           node --check /tmp/listia-commercial-worker.mjs
           test "$(grep -c '<option value=' commercial/index.html)" -eq 7
-          grep -Fq 'https://listiaapp.com/marketplace' commercial/marketplace.html
+          grep -Fq '__SEO_CANONICAL__' commercial/marketplace.html
           grep -Fq 'LISTIA busca por ti' commercial/marketplace.html
           grep -Fq 'id="map"' commercial/marketplace.html
           grep -Fq "ru:" commercial/global-locales.js
