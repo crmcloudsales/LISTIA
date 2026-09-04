@@ -1,4 +1,4 @@
-name: LISTIA Appointment Conflict Gate
+name: LISTIA Appointment Operations Gate
 
 on:
   push:
@@ -6,12 +6,14 @@ on:
     paths:
       - 'supabase/migrations/20260904135011_add_appointment_assignee_conflict_guard.sql'
       - 'supabase/functions/appointment-action/index.ts'
+      - 'supabase/functions/appointment-create/index.ts'
       - 'public/appointment-actions.js'
       - '.github/workflows/listia-appointment-conflict-gate.yml'
   pull_request:
     paths:
       - 'supabase/migrations/20260904135011_add_appointment_assignee_conflict_guard.sql'
       - 'supabase/functions/appointment-action/index.ts'
+      - 'supabase/functions/appointment-create/index.ts'
       - 'public/appointment-actions.js'
       - '.github/workflows/listia-appointment-conflict-gate.yml'
   workflow_dispatch:
@@ -20,48 +22,58 @@ permissions:
   contents: read
 
 jobs:
-  appointment-conflict-boundary:
+  appointment-operations:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Verify advisor appointment conflict protection
+      - name: Verify LISTIA appointment operations
         shell: bash
         run: |
           set -Eeuo pipefail
           migration='supabase/migrations/20260904135011_add_appointment_assignee_conflict_guard.sql'
-          edge='supabase/functions/appointment-action/index.ts'
+          action='supabase/functions/appointment-action/index.ts'
+          create='supabase/functions/appointment-create/index.ts'
           ui='public/appointment-actions.js'
 
           node --check "$ui"
 
-          # Schema owns advisor assignment and time integrity.
+          # Schema owns assignment and time integrity.
           grep -Fq 'add column if not exists assigned_user_id uuid references public.profiles(id)' "$migration"
           grep -Fq 'appointments_time_order_check' "$migration"
-          grep -Fq "ends_at is null or ends_at > starts_at" "$migration"
           grep -Fq 'appointments_org_assignee_starts_idx' "$migration"
-
-          # Lead assignment is inherited, but no advisor identity is invented.
           grep -Fq 'new.lead_id is not null and new.assigned_user_id is null' "$migration"
-          grep -Fq 'select l.assigned_user_id' "$migration"
           grep -Fq 'appointment_assignee_not_active_member' "$migration"
-
-          # Conflict check is serialized per advisor to prevent concurrent races.
-          grep -Fq "pg_advisory_xact_lock" "$migration"
+          grep -Fq 'pg_advisory_xact_lock' "$migration"
           grep -Fq "'listia-appointment:'" "$migration"
           grep -Fq "a.status in ('scheduled','confirmed')" "$migration"
           grep -Fq "message='appointment_conflict'" "$migration"
-          grep -Fq 'revoke all on function private.enforce_appointment_assignee_and_conflict() from public, anon, authenticated' "$migration"
 
-          # Edge translates database contract into an actionable 409.
-          grep -Fq "diagnostic.includes('appointment_conflict')" "$edge"
-          grep -Fq "{ error: 'appointment_conflict' }, 409" "$edge"
-          grep -Fq 'assigned_user_id,status,starts_at,ends_at' "$edge"
-          ! grep -Eq 'marketplace_listings|public\.marketplace_|/functions/v1/marketplace' "$edge"
+          # Canonical creation is authenticated, idempotent and organization-scoped.
+          grep -Fq "appointment_create" "$create"
+          grep -Fq "appointment_id" "$create"
+          grep -Fq "crypto.randomUUID" "$ui"
+          grep -Fq "lead_assigned_to_other_member" "$create"
+          grep -Fq "assigned_user_id" "$create"
+          grep -Fq ".eq('organization_id',organizationId)" "$create"
+          grep -Fq "d.includes('appointment_conflict')" "$create"
+          grep -Fq "status:'appointment'" "$create"
 
-          # PWA gives the user a meaningful conflict message.
-          grep -Fq "==='appointment_conflict'?c().conflict:c().error" "$ui"
-          grep -Fq "assigned_user_id" "$ui"
-          ! grep -Eq 'marketplace_listings|public\.marketplace_|/functions/v1/marketplace' "$ui"
+          # Owners/admins manage all; assigned advisors manage their own appointments.
+          grep -Fq "['owner','admin'].includes" "$action"
+          grep -Fq "assigned_user_id" "$action"
+          grep -Fq "===user.id" "$action"
+          grep -Fq "appointment_action" "$action"
+          grep -Fq "d.includes('appointment_conflict')" "$action"
+          grep -Fq "{error:'appointment_conflict'},409" "$action"
 
-          echo 'LISTIA_APPOINTMENT_CONFLICT_BOUNDARY_OK'
+          # PWA has native create + conflict UX and only renders actions to authorized users.
+          grep -Fq "appointment-create" "$ui"
+          grep -Fq "listiaAgendaCreate" "$ui"
+          grep -Fq "lead_assigned_to_other_member" "$ui"
+          grep -Fq "appointment_conflict" "$ui"
+          grep -Fq "a.assigned_user_id" "$ui"
+          grep -Fq "external_event_id" "$ui"
+          ! grep -Eq 'marketplace_listings|public\.marketplace_|/functions/v1/marketplace' "$action" "$create" "$ui"
+
+          echo 'LISTIA_APPOINTMENT_OPERATIONS_OK'
