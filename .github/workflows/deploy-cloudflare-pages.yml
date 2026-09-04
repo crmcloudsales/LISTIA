@@ -21,7 +21,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN_PRIMARY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -41,6 +41,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          node --check listia-app-worker/index.js
           grep -Fq "ru:" public/global-locales.js
           grep -Fq "he:" public/global-locales.js
           grep -Fq "'zh-CN':" public/global-locales.js
@@ -62,7 +63,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          rm -rf dist-pwa public-source
+          rm -rf dist-pwa public-source /tmp/listia-build-tools
+          npm install --prefix /tmp/listia-build-tools --no-save --ignore-scripts --no-audit --no-fund terser@5 csso-cli@4 wrangler@${WRANGLER_VERSION} >/dev/null
+          TERSER=/tmp/listia-build-tools/node_modules/.bin/terser
+          CSSO=/tmp/listia-build-tools/node_modules/.bin/csso
+          WRANGLER=/tmp/listia-build-tools/node_modules/.bin/wrangler
+          test -x "$TERSER"
+          test -x "$CSSO"
+          test -x "$WRANGLER"
           cp -a public dist-pwa
           find dist-pwa -type f \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \) -delete
           find dist-pwa -type f -name '.deploy-trigger-*' -delete
@@ -70,13 +78,13 @@ jobs:
           for file in dist-pwa/*.js; do
             [[ -f "$file" ]] || continue
             tmp="${file}.protected"
-            npx --yes terser@5 "$file" --compress passes=2,drop_console=false --mangle --comments false --output "$tmp"
+            "$TERSER" "$file" --compress passes=2,drop_console=false --mangle --comments false --output "$tmp"
             mv "$tmp" "$file"
           done
           for file in dist-pwa/*.css; do
             [[ -f "$file" ]] || continue
             tmp="${file}.protected"
-            npx --yes csso-cli@4 "$file" --output "$tmp"
+            "$CSSO" "$file" --output "$tmp"
             mv "$tmp" "$file"
           done
           printf '\n;Object.defineProperty(window,"LISTIA_BUILD_FINGERPRINT",{value:"%s",writable:false,configurable:false});\n' "${GITHUB_SHA}" >> dist-pwa/config.js
@@ -97,12 +105,14 @@ jobs:
           set -Eeuo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
           test -n "${CLOUDFLARE_API_TOKEN_PRIMARY}${CLOUDFLARE_API_TOKEN_SECURITY}" || { echo 'No Cloudflare token is configured'; exit 1; }
+          WRANGLER=/tmp/listia-build-tools/node_modules/.bin/wrangler
+          test -x "${WRANGLER}"
           selected=''; preview_url=''
           for source in security primary; do
             if [[ "${source}" == security ]]; then token="${CLOUDFLARE_API_TOKEN_SECURITY}"; else token="${CLOUDFLARE_API_TOKEN_PRIMARY}"; fi
             [[ -n "${token}" ]] || continue
             echo "Trying Workers Static Assets deployment with ${source} token"
-            if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" npx --yes wrangler@${WRANGLER_VERSION} deploy --config wrangler-listia-app.jsonc 2>&1 | tee "/tmp/listia-app-${source}.log"; then
+            if CLOUDFLARE_API_TOKEN="${token}" CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" "${WRANGLER}" deploy --config wrangler-listia-app.jsonc 2>&1 | tee "/tmp/listia-app-${source}.log"; then
               selected="${source}"
               preview_url="$(grep -Eo 'https://[^[:space:]]+workers\.dev[^[:space:]]*' "/tmp/listia-app-${source}.log" | head -1 | sed 's/[),]$//' || true)"
               break
