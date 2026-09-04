@@ -1,0 +1,68 @@
+name: LISTIA Auth Security Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/auth-security.js'
+      - 'public/config.js'
+      - 'public/app.js'
+      - 'public/index.html'
+      - '.github/workflows/listia-auth-security-gate.yml'
+  pull_request:
+    paths:
+      - 'public/auth-security.js'
+      - 'public/config.js'
+      - 'public/app.js'
+      - 'public/index.html'
+      - '.github/workflows/listia-auth-security-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auth-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate password security contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check public/auth-security.js
+          grep -Fq 'const MIN_LENGTH=12' public/auth-security.js
+          grep -Fq "document.addEventListener('submit',intercept,true)" public/auth-security.js
+          grep -Fq 'auth-security.js?v=1' public/config.js
+          grep -Fq 'grant_type=password' public/app.js
+          grep -Fq 'if (password.length < 8)' public/app.js
+          ! grep -Fq 'fetch(' public/auth-security.js
+
+          node <<'NODE'
+          const fs=require('fs'),vm=require('vm');
+          const code=fs.readFileSync('public/auth-security.js','utf8');
+          const context={
+            console,setTimeout,clearTimeout,
+            HTMLFormElement:class HTMLFormElement{},
+            window:{LISTIA_I18N:{getLanguage:()=> 'en'},addEventListener(){}},
+            document:{readyState:'loading',documentElement:{dataset:{},lang:'en'},addEventListener(){},getElementById(){return null},createElement(){return {}}}
+          };
+          vm.createContext(context);
+          vm.runInContext(code,context);
+          const security=context.window.LISTIA_AUTH_SECURITY;
+          if(!security||security.MIN_LENGTH!==12)throw new Error('auth_security_not_loaded');
+          const weak=[
+            ['password1234',{}],
+            ['123456789012',{}],
+            ['aaaaaaaaaaaa',{}],
+            ['ABCDEF-7890!!',{}],
+            ['Jalil-2026!!!',{name:'Jalil Cruz',email:'jalil@example.com'}]
+          ];
+          for(const [password,ctx] of weak){if(security.evaluate(password,ctx).ok)throw new Error(`weak_password_accepted:${password}`)}
+          const strong=['Nube-cafe-rio-2026!','tigre-nube-rio-cafe'];
+          for(const password of strong){if(!security.evaluate(password,{}).ok)throw new Error(`strong_password_rejected:${password}`)}
+          console.log('LISTIA_AUTH_PASSWORD_POLICY_OK');
+          NODE
+
+          echo 'LISTIA_AUTH_SECURITY_GATE_OK'
