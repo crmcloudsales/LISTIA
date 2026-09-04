@@ -14,9 +14,25 @@ new_health = "if(url.pathname==='/.well-known/listia-infra-health'){const firewa
 old_provision = "if (last?.ok && d?.ok === true && d?.host === host && d?.service === 'listia-managed-sites' && d?.route === true && d?.tls === true && d?.turnstile_configured === true) {"
 new_provision = "if (last?.ok && d?.ok === true && d?.host === host && d?.service === 'listia-managed-sites' && d?.route === true && d?.tls === true && d?.turnstile_configured === true && d?.pennyworth_v2 === true) {"
 
+old_render_intro = "function renderManagedSite(payload,host,sitekey=''){const org=payload.organization||{},brand=payload.branding||{},items=Array.isArray(payload.inventory)?payload.inventory:[];const name="
+new_render_intro = "function renderManagedSite(payload,host,sitekey=''){const org=payload.organization||{},brand=payload.branding||{},items=Array.isArray(payload.inventory)?payload.inventory:[],mirror=payload.mirror===true;const name="
+
+old_button = '<button class="interest" data-id="${esc(x.id)}" data-title="${esc(x.title)}">Solicitar información</button>'
+new_button = '${mirror?\'<button class="interest" type="button" disabled aria-disabled="true">Vista de prueba</button>\':`<button class="interest" data-id="${esc(x.id)}" data-title="${esc(x.title)}">Solicitar información</button>`}'
+
+old_selector = "document.querySelectorAll('.interest').forEach"
+new_selector = "document.querySelectorAll('.interest[data-id]').forEach"
+
+old_mirror_note = "Vista de prueba con inventario público de Quintana Roo."
+new_mirror_note = "Vista de prueba con inventario público de Quintana Roo. Los formularios no generan contactos comerciales."
+
 for label, old, new in [
     ('worker private Pennyworth health probe', old_boundary, new_boundary),
     ('worker infrastructure health gate', old_health, new_health),
+    ('QA mirror render flag', old_render_intro, new_render_intro),
+    ('QA mirror commercial CTA disable', old_button, new_button),
+    ('commercial CTA selector', old_selector, new_selector),
+    ('QA mirror disclosure', old_mirror_note, new_mirror_note),
 ]:
     if new in worker:
         print(f'{label}: already applied')
@@ -40,11 +56,15 @@ required_worker = [
     'async function pennyworthHealth(env)',
     "d?.error==='required_fields_missing'",
     'pennyworth_v2:firewall',
+    'mirror=payload.mirror===true',
+    'disabled aria-disabled="true">Vista de prueba',
+    "document.querySelectorAll('.interest[data-id]')",
+    'Los formularios no generan contactos comerciales.',
 ]
 required_provision = ["d?.pennyworth_v2 === true"]
 for needle in required_worker:
     if needle not in worker:
-        raise SystemExit(f'missing worker health contract: {needle}')
+        raise SystemExit(f'missing worker health/UI contract: {needle}')
 for needle in required_provision:
     if needle not in provision:
         raise SystemExit(f'missing provisioning health contract: {needle}')
