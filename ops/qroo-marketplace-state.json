@@ -119,6 +119,11 @@
       "public.marketplace_claim_opportunities_v2"
     ]
   },
+  "checkpoint_backups": {
+    "google_drive": "https://drive.google.com/file/d/14H6F4B0jXUOrzti6PE-Wl41hMJX_d022/view?usp=drivesdk",
+    "chatgpt_library_file_id": "libfile_e7f07b146f288191af41d18ce7e9f23c",
+    "file_name": "LISTIA_MARKETPLACE_CHECKPOINT_2026-09-04.md"
+  },
   "canonical_storage": {
     "supabase": [
       "marketplace_listings",
