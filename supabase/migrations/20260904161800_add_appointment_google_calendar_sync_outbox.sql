@@ -77,15 +77,6 @@ create trigger enqueue_appointment_calendar_sync
 after insert or update of organization_id,title,starts_at,ends_at,meeting_type,status
 on public.appointments
 for each row
-when (
-  tg_op = 'INSERT'
-  or old.organization_id is distinct from new.organization_id
-  or old.title is distinct from new.title
-  or old.starts_at is distinct from new.starts_at
-  or old.ends_at is distinct from new.ends_at
-  or old.meeting_type is distinct from new.meeting_type
-  or old.status is distinct from new.status
-)
 execute function private.enqueue_appointment_calendar_sync();
 
 -- Private dispatch secret. Its value is generated in-database and never committed.
