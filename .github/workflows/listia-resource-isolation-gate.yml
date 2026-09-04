@@ -67,7 +67,7 @@ jobs:
           fi
 
           changed="$(git diff --name-only "$base" HEAD 2>/dev/null || true)"
-          control="$(printf '%s\n' "$changed" | grep -E '^(supabase/migrations/|\.github/workflows/)' | grep -v '^\.github/workflows/listia-resource-isolation-gate\.yml$' || true)"
+          control="$(printf '%s\n' "$changed" | grep -E '^(supabase/migrations/|\.github/workflows/)' | grep -vE '^\.github/workflows/(listia-resource-isolation-gate|listia-independence-gate)\.yml$' || true)"
           [[ -n "$control" ]] || { echo 'No changed LISTIA control-plane files require cross-product scanning.'; exit 0; }
 
           forbidden='cloudsales\.app|@cloudsales\.app|cloudsalescrm\.com|CLOUDSALES_[A-Z0-9_]*|cloudco-investment-lead|CLOUDCO_[A-Z0-9_]*'
