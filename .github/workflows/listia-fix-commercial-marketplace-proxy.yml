@@ -1,0 +1,82 @@
+name: LISTIA Fix Commercial Marketplace Proxy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/listia-fix-commercial-marketplace-proxy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: listia-fix-commercial-marketplace-proxy
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Repair Marketplace proxy contract exactly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/build-commercial-worker.py')
+          s=p.read_text(encoding='utf-8')
+          old="""async function marketplaceFeed(request){const ct=(request.headers.get('content-type')||'').toLowerCase();if(!ct.includes('application/json'))return response(JSON.stringify({error:'json_required'}),415,'application/json; charset=UTF-8','GET',apiHeaders,'no-store');const raw=await request.text();if(new TextEncoder().encode(raw).byteLength>12000)return response(JSON.stringify({error:'payload_too_large'}),413,'application/json; charset=UTF-8','GET',apiHeaders,'no-store');let p={};try{p=JSON.parse(raw||'{}')}catch{return response(JSON.stringify({error:'invalid_json'}),400,'application/json; charset=UTF-8','GET',apiHeaders,'no-store')}const body={p_search:clean(p.p_search,120)||null,p_country_code:'MX',p_state_region:clean(p.p_state_region,80)||null,p_city:clean(p.p_city,80)||null,p_operation_type:['sale','rent'].includes(clean(p.p_operation_type,12))?clean(p.p_operation_type,12):null,p_property_type:clean(p.p_property_type,80)||null,p_bedrooms_min:finite(p.p_bedrooms_min),p_price_min:finite(p.p_price_min),p_price_max:finite(p.p_price_max),p_limit:Math.min(48,Math.max(1,Math.floor(finite(p.p_limit)||24))),p_offset:Math.max(0,Math.floor(finite(p.p_offset)||0))};const upstream=await fetch(MARKETPLACE_FEED_ENDPOINT,{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-listia-client-ip':request.headers.get('cf-connecting-ip')||''},body:JSON.stringify(body)});return response(await upstream.text(),upstream.status,'application/json; charset=UTF-8','GET',apiHeaders,'no-store')}"""
+          new="""async function marketplaceFeed(request){const ct=(request.headers.get('content-type')||'').toLowerCase();if(!ct.includes('application/json'))return response(JSON.stringify({error:'json_required'}),415,'application/json; charset=UTF-8','GET',apiHeaders,'no-store');const raw=await request.text();if(new TextEncoder().encode(raw).byteLength>12000)return response(JSON.stringify({error:'payload_too_large'}),413,'application/json; charset=UTF-8','GET',apiHeaders,'no-store');let p={};try{p=JSON.parse(raw||'{}')}catch{return response(JSON.stringify({error:'invalid_json'}),400,'application/json; charset=UTF-8','GET',apiHeaders,'no-store')}const body={p_limit:Math.min(48,Math.max(1,Math.floor(finite(p.p_limit)||24))),p_offset:Math.max(0,Math.floor(finite(p.p_offset)||0)),p_q:clean(p.p_q,120)||null,p_operation:['sale','rent'].includes(clean(p.p_operation,12))?clean(p.p_operation,12):null,p_property_type:clean(p.p_property_type,80)||null,p_min_price:finite(p.p_min_price),p_max_price:finite(p.p_max_price),p_bedrooms:finite(p.p_bedrooms),p_lat:finite(p.p_lat),p_lng:finite(p.p_lng)};const upstream=await fetch(MARKETPLACE_FEED_ENDPOINT,{method:'POST',headers:{'content-type':'application/json','accept':'application/json','origin':'https://listiaapp.com','x-listia-source':'listia-commercial-marketplace-v1','x-listia-client-ip':request.headers.get('cf-connecting-ip')||''},body:JSON.stringify(body)});return response(await upstream.text(),upstream.status,'application/json; charset=UTF-8','GET',apiHeaders,'no-store')}"""
+          if old not in s:
+              raise SystemExit('Expected defective Marketplace proxy block was not found; refusing broad edit')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Verify repaired proxy and builder syntax
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile scripts/build-commercial-worker.py
+          grep -Fq "p_q:clean(p.p_q,120)" scripts/build-commercial-worker.py
+          grep -Fq "p_min_price:finite(p.p_min_price)" scripts/build-commercial-worker.py
+          grep -Fq "p_max_price:finite(p.p_max_price)" scripts/build-commercial-worker.py
+          grep -Fq "p_bedrooms:finite(p.p_bedrooms)" scripts/build-commercial-worker.py
+          grep -Fq "'origin':'https://listiaapp.com'" scripts/build-commercial-worker.py
+          if grep -Fq "p_search:clean(p.p_search" scripts/build-commercial-worker.py; then
+            echo 'Legacy incompatible Marketplace proxy contract remains'; exit 1
+          fi
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.contract-test.mjs
+          node --check /tmp/listia-commercial-worker.contract-test.mjs
+          grep -Fq "p_q:" /tmp/listia-commercial-worker.contract-test.mjs
+          grep -Fq "origin':'https://listiaapp.com" /tmp/listia-commercial-worker.contract-test.mjs
+
+      - name: Commit repaired source
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/build-commercial-worker.py
+          git commit -m 'fix: align commercial Marketplace feed with app Worker contract'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Dispatch canonical commercial release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${REPO}/actions/workflows/listia-commercial-global-i18n-v1.yml/dispatches" \
+            --data '{"ref":"main"}'
+          echo 'Commercial release dispatched after Marketplace proxy repair.'
