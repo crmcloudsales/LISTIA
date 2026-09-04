@@ -1,0 +1,52 @@
+name: LISTIA Commercial Isolation Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tools/migrate-commercial-to-listia-investment.py'
+      - '.github/workflows/listia-commercial-isolation-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listia-commercial-isolation-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply isolated LISTIA investment migration
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tools/migrate-commercial-to-listia-investment.py
+          python3 -m py_compile scripts/build-commercial-worker.py
+          python3 scripts/build-commercial-worker.py commercial/index.html /tmp/listia-commercial-worker.mjs
+          node --check /tmp/listia-commercial-worker.mjs
+          grep -Fq 'listia-investment-lead' scripts/build-commercial-worker.py
+          grep -Fq '/investment/contact' scripts/build-commercial-worker.py
+          grep -Fq "url.pathname==='/cloudco'" scripts/build-commercial-worker.py
+          grep -Fq "url.pathname='/investment'" scripts/build-commercial-worker.py
+          ! grep -Fq 'cloudco-investment-lead' scripts/build-commercial-worker.py
+          ! grep -Fiq 'Powered by CloudCo' commercial/affiliate.html
+          ! grep -Fiq 'Powered by CloudCo' commercial/footer-legal.js
+      - name: Commit isolated runtime source
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'LISTIA DevOps'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/build-commercial-worker.py commercial/affiliate.html
+          git commit -m 'fix: isolate LISTIA commercial runtime from CloudCo resources' || exit 0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt*2))
+          done
+          exit 1
