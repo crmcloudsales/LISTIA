@@ -1,0 +1,68 @@
+name: LISTIA Resource Isolation Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'scripts/**'
+      - 'listia-app-worker/**'
+      - 'supabase/functions/**'
+      - '.github/workflows/listia-resource-isolation-gate.yml'
+  pull_request:
+    paths:
+      - 'public/**'
+      - 'scripts/**'
+      - 'listia-app-worker/**'
+      - 'supabase/functions/**'
+      - '.github/workflows/listia-resource-isolation-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Block CloudSales and CloudCo runtime dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          roots=()
+          for p in public scripts listia-app-worker supabase/functions; do
+            [[ -e "$p" ]] && roots+=("$p")
+          done
+          if [[ ${#roots[@]} -eq 0 ]]; then
+            echo 'No runtime paths found.'
+            exit 0
+          fi
+
+          forbidden='cloudsales\.app|@cloudsales\.app|CLOUDSALES_[A-Z0-9_]*|CLOUDCO_[A-Z0-9_]*|cloudco-investment-lead|cloudco_form_rate_limits|cloudco_investment_leads|/cloudco(?:[/?"'"'[:space:]]|$)'
+          if grep -RInE --binary-files=without-match \
+            --exclude='*.md' --exclude='*.txt' --exclude='*.map' \
+            "$forbidden" "${roots[@]}"; then
+            echo 'ERROR: LISTIA runtime contains a forbidden CloudSales/CloudCo dependency.'
+            echo 'Reimplement the resource inside LISTIA instead of sharing another product resource.'
+            exit 1
+          fi
+          echo 'LISTIA resource isolation verified.'
+
+      - name: Enforce LISTIA-scoped provider secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          roots=()
+          for p in public scripts listia-app-worker supabase/functions; do
+            [[ -e "$p" ]] && roots+=("$p")
+          done
+          [[ ${#roots[@]} -gt 0 ]] || exit 0
+          if grep -RInE --binary-files=without-match \
+            --exclude='*.md' --exclude='*.txt' \
+            '(^|[^A-Z0-9_])(RESEND_API_KEY|BREVO_API_KEY|MAILGUN_API_KEY|SENDGRID_API_KEY|POSTMARK_SERVER_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)([^A-Z0-9_]|$)' \
+            "${roots[@]}"; then
+            echo 'ERROR: unscoped provider secret detected. LISTIA integrations must use LISTIA_* secret names.'
+            exit 1
+          fi
+          echo 'LISTIA provider secret naming verified.'
