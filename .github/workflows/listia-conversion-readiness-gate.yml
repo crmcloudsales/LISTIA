@@ -5,12 +5,20 @@ on:
     branches: [main]
     paths:
       - 'public/conversion-health.js'
+      - 'public/google-ads-connect.js'
       - 'supabase/functions/conversion-integrations-status/**'
+      - 'supabase/functions/google-ads-config/**'
+      - 'supabase/functions/google-oauth-start/**'
+      - 'supabase/functions/google-oauth-callback/**'
       - '.github/workflows/listia-conversion-readiness-gate.yml'
   pull_request:
     paths:
       - 'public/conversion-health.js'
+      - 'public/google-ads-connect.js'
       - 'supabase/functions/conversion-integrations-status/**'
+      - 'supabase/functions/google-ads-config/**'
+      - 'supabase/functions/google-oauth-start/**'
+      - 'supabase/functions/google-oauth-callback/**'
       - '.github/workflows/listia-conversion-readiness-gate.yml'
   workflow_dispatch:
 
@@ -28,12 +36,15 @@ jobs:
         run: |
           set -Eeuo pipefail
           node --check public/conversion-health.js
+          node --check public/google-ads-connect.js
           grep -Fq 'missing_requirements' public/conversion-health.js
           grep -Fq 'function requirementGroup(code)' public/conversion-health.js
           grep -Fq 'signal-health-needs' public/conversion-health.js
           grep -Fq "need_permission" public/conversion-health.js
           grep -Fq "need_account" public/conversion-health.js
           grep -Fq "need_events" public/conversion-health.js
+          grep -Fq "['qualified_lead','appointment','conversion'].every" public/google-ads-connect.js
+          grep -Fq 'actions for qualified lead, appointment and conversion' public/google-ads-connect.js
 
       - name: Validate safe readiness API contract
         shell: bash
@@ -51,4 +62,20 @@ jobs:
             echo 'ERROR: conversion readiness API exposes raw provider identifiers.'
             exit 1
           fi
+
+      - name: Validate Google Ads full-readiness flow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          config='supabase/functions/google-ads-config/index.ts'
+          start='supabase/functions/google-oauth-start/index.ts'
+          callback='supabase/functions/google-oauth-callback/index.ts'
+          grep -Fq "const requiredActions=['qualified_lead','appointment','conversion'] as const" "$config"
+          grep -Fq 'const ready=requiredActions.every' "$config"
+          grep -Fq 'missing_actions:requiredActions.filter' "$config"
+          ! grep -Fq 'ok:true,google_ads_customer_id:' "$config"
+          grep -Fq "const ADS_SCOPES=['https://www.googleapis.com/auth/datamanager']" "$start"
+          grep -Fq "if(caps.includes('ads'))for(const s of ADS_SCOPES)scopeSet.add(s)" "$start"
+          grep -Fq 'function uniqScopes(existing:unknown,incoming:string)' "$callback"
+          grep -Fq 'refresh_token_secret_id=coalesce(excluded.refresh_token_secret_id' "$callback"
           echo 'LISTIA conversion readiness contract passed.'
