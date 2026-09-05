@@ -9,6 +9,7 @@ const sql=postgres(DB,{prepare:false})
 const allowedOrigins=new Set(['https://listia-pwa.pages.dev','https://app.listiaapp.com','https://listiaapp.com','https://www.listiaapp.com'])
 function cors(req:Request){const o=req.headers.get('origin')||'';return{'access-control-allow-origin':allowedOrigins.has(o)?o:'https://app.listiaapp.com','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'authorization, content-type, apikey, x-client-info','vary':'Origin'}}
 const json=(req:Request,b:unknown,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors(req),'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}})
+const freeClasses=new Set(['free_first','free_tier_candidate','free_endpoint_candidate','self_hosted','local_free','not_required'])
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(req)})
@@ -29,6 +30,9 @@ Deno.serve(async(req:Request)=>{
   if(!/^[0-9a-f-]{36}$/i.test(organizationId))return json(req,{error:'organization_id_required'},400)
   const {data:member}=await admin.from('organization_members').select('role,status').eq('organization_id',organizationId).eq('user_id',user.id).eq('status','active').maybeSingle()
   if(!member||!['owner','admin'].includes(String(member.role||'')))return json(req,{error:'admin_required'},403)
+
+  const [policy]=await sql`select mode,paid_fallback_enabled,monthly_paid_budget_usd,private_data_google_free_enabled,notes,updated_at from private.ai_engine_policy where singleton=true limit 1`
+  const enginePolicy=policy||{mode:'free_only',paid_fallback_enabled:false,monthly_paid_budget_usd:0,private_data_google_free_enabled:false,notes:'fail_closed_default',updated_at:null}
 
   const rows=await sql`
     with route_use as (
@@ -56,6 +60,7 @@ Deno.serve(async(req:Request)=>{
            r.runtime_key,r.adapter_key,r.enabled,r.credential_status,r.health_status,
            coalesce(r.configuration->>'cost_class','unspecified') as cost_class,
            coalesce((r.configuration->>'requires_dedicated_listia_credentials')::boolean,false) as dedicated_listia_credentials,
+           coalesce((r.configuration->>'privacy_review_required_for_private_data')::boolean,false) as private_data_review_required,
            coalesce(mc.model_count,0) as model_count,coalesce(mc.usable_model_count,0) as usable_model_count,
            coalesce(pr.routed_model_count,0) as routed_model_count,coalesce(pr.route_placements,0) as route_placements,
            coalesce(pr.tasks,array[]::text[]) as tasks,
@@ -75,30 +80,40 @@ Deno.serve(async(req:Request)=>{
     left join provider_routes pr on pr.provider_key=p.provider_key
     where p.lifecycle_status not in ('removed')
     order by
-      case coalesce(r.configuration->>'cost_class','') when 'free_first' then 0 when 'free_tier_candidate' then 1 else 2 end,
+      case coalesce(r.configuration->>'cost_class','') when 'free_first' then 0 when 'free_tier_candidate' then 1 when 'free_endpoint_candidate' then 2 when 'premium' then 9 else 5 end,
       p.display_name,r.runtime_key
   `
 
-  const providers=rows.map((r:any)=>({
-    provider_key:r.provider_key,
-    display_name:r.display_name,
-    provider_status:r.lifecycle_status,
-    runtime_key:r.runtime_key||null,
-    adapter:r.adapter_key||null,
-    enabled:Boolean(r.enabled),
-    configured:['configured','not_required'].includes(String(r.credential_status||'')),
-    credential_status:r.credential_status||'not_configured',
-    health:r.health_status||'unknown',
-    cost_class:r.cost_class,
-    dedicated_listia_credentials:Boolean(r.dedicated_listia_credentials),
-    model_count:Number(r.model_count||0),
-    usable_model_count:Number(r.usable_model_count||0),
-    routed_model_count:Number(r.routed_model_count||0),
-    route_placements:Number(r.route_placements||0),
-    tasks:Array.isArray(r.tasks)?r.tasks:[],
-    readiness:r.readiness,
-    last_healthcheck_at:r.last_healthcheck_at||null,
-  }))
+  const mode=String(enginePolicy.mode||'free_only')
+  const providers=rows.map((r:any)=>{
+    const costClass=String(r.cost_class||'unspecified')
+    const premiumAllowed=mode!=='free_only'&&enginePolicy.paid_fallback_enabled===true&&Number(enginePolicy.monthly_paid_budget_usd||0)>0
+    const allowedByCost=costClass==='premium'?premiumAllowed:(mode==='free_only'?freeClasses.has(costClass):true)
+    const publicOnly=Boolean(r.private_data_review_required)&&enginePolicy.private_data_google_free_enabled!==true
+    return{
+      provider_key:r.provider_key,
+      display_name:r.display_name,
+      provider_status:r.lifecycle_status,
+      runtime_key:r.runtime_key||null,
+      adapter:r.adapter_key||null,
+      enabled:Boolean(r.enabled),
+      configured:['configured','not_required'].includes(String(r.credential_status||'')),
+      credential_status:r.credential_status||'not_configured',
+      health:r.health_status||'unknown',
+      cost_class:costClass,
+      allowed_by_cost_policy:allowedByCost,
+      private_data_allowed:!publicOnly,
+      public_only_under_current_policy:publicOnly,
+      dedicated_listia_credentials:Boolean(r.dedicated_listia_credentials),
+      model_count:Number(r.model_count||0),
+      usable_model_count:Number(r.usable_model_count||0),
+      routed_model_count:Number(r.routed_model_count||0),
+      route_placements:Number(r.route_placements||0),
+      tasks:Array.isArray(r.tasks)?r.tasks:[],
+      readiness:r.readiness,
+      last_healthcheck_at:r.last_healthcheck_at||null,
+    }
+  })
 
-  return json(req,{ok:true,boundary:'LISTIA_ONLY',organization_id:organizationId,summary:{total:providers.length,ready:providers.filter((p:any)=>p.readiness==='ready').length,free_first_ready:providers.filter((p:any)=>p.readiness==='ready'&&p.cost_class==='free_first').length,needs_credentials:providers.filter((p:any)=>p.readiness==='credential_required').length},providers})
+  return json(req,{ok:true,boundary:'LISTIA_ONLY',organization_id:organizationId,engine_policy:{mode,paid_fallback_enabled:Boolean(enginePolicy.paid_fallback_enabled),monthly_paid_budget_usd:Number(enginePolicy.monthly_paid_budget_usd||0),private_data_google_free_enabled:Boolean(enginePolicy.private_data_google_free_enabled),premium_spend_blocked:mode==='free_only'||enginePolicy.paid_fallback_enabled!==true||Number(enginePolicy.monthly_paid_budget_usd||0)<=0,updated_at:enginePolicy.updated_at||null},summary:{total:providers.length,ready:providers.filter((p:any)=>p.readiness==='ready'&&p.allowed_by_cost_policy).length,free_first_ready:providers.filter((p:any)=>p.readiness==='ready'&&p.allowed_by_cost_policy&&['free_first','free_tier_candidate','free_endpoint_candidate'].includes(p.cost_class)).length,needs_credentials:providers.filter((p:any)=>p.readiness==='credential_required'&&p.allowed_by_cost_policy).length,blocked_by_cost_policy:providers.filter((p:any)=>!p.allowed_by_cost_policy).length},providers})
 })
