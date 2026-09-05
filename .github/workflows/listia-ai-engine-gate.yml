@@ -11,6 +11,7 @@ on:
       - 'supabase/functions/property-ai-worker/**'
       - 'supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
       - 'supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+      - 'supabase/migrations/20260905122107_listia_ai_engine_free_first_providers.sql'
       - '.github/workflows/listia-ai-engine-gate.yml'
   pull_request:
     paths:
@@ -21,6 +22,7 @@ on:
       - 'supabase/functions/property-ai-worker/**'
       - 'supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
       - 'supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+      - 'supabase/migrations/20260905122107_listia_ai_engine_free_first_providers.sql'
       - '.github/workflows/listia-ai-engine-gate.yml'
   workflow_dispatch:
 
@@ -41,6 +43,7 @@ jobs:
           adapters='supabase/functions/listia-ai-engine/adapters.ts'
           migration='supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
           tts_migration='supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
+          free_migration='supabase/migrations/20260905122107_listia_ai_engine_free_first_providers.sql'
           consumers=(
             'supabase/functions/listia-conversation/index.ts'
             'supabase/functions/listia-public-chat/index.ts'
@@ -52,8 +55,14 @@ jobs:
           grep -Fq 'https://api.openai.com/v1/responses' "$adapters"
           grep -Fq 'https://api.openai.com/v1/audio/speech' "$adapters"
           grep -Fq 'https://integrate.api.nvidia.com/v1/chat/completions' "$adapters"
+          grep -Fq 'https://api.groq.com/openai/v1/chat/completions' "$adapters"
+          grep -Fq 'https://generativelanguage.googleapis.com/v1beta/models/' "$adapters"
+          grep -Fq 'https://api.cloudflare.com/client/v4/accounts/' "$adapters"
           grep -Fq "from './adapters.ts'" "$engine"
           grep -Fq "name='listia_ai_engine_secret'" "$engine"
+          grep -Fq "case'groq'" "$engine"
+          grep -Fq "case'google'" "$engine"
+          grep -Fq "case'cloudflare'" "$engine"
           grep -Fq "task==='tts'" "$engine"
           grep -Fq 'private.ai_runs' "$engine"
           grep -Fq 'private.ai_route_policies' "$engine"
@@ -63,7 +72,7 @@ jobs:
           for file in "${consumers[@]}"; do
             grep -Fq '/functions/v1/listia-ai-engine' "$file"
             grep -Fq 'listia_ai_engine_secret' "$file"
-            if grep -Eqi 'api\.openai\.com|integrate\.api\.nvidia\.com|OPENAI_API_KEY|NVIDIA_API_KEY|NIM_API_KEY|LISTIA_LLM_API_KEY|brain\.listiaapp\.com' "$file"; then
+            if grep -Eqi 'api\.openai\.com|integrate\.api\.nvidia\.com|api\.groq\.com|generativelanguage\.googleapis\.com|api\.cloudflare\.com/client/v4/accounts/.*/ai|OPENAI_API_KEY|NVIDIA_API_KEY|NIM_API_KEY|GROQ_API_KEY|GOOGLE_GENAI_API_KEY|CLOUDFLARE_AI_TOKEN|LISTIA_LLM_API_KEY|brain\.listiaapp\.com' "$file"; then
               echo "Direct provider dependency found outside LISTIA AI Engine: $file"
               exit 1
             fi
@@ -81,7 +90,19 @@ jobs:
           grep -Fq "'openai:gpt-4o-mini-tts'" "$tts_migration"
           grep -Fq "'tts','q1'" "$tts_migration"
 
-          # Engine itself is LISTIA-only and does not cross into Marketplace product data.
+          # Free-first providers must remain LISTIA-owned and fail-closed until configured.
+          grep -Fq "'cloudflare:workers_ai'" "$free_migration"
+          grep -Fq "'listia_cloudflare_ai_token'" "$free_migration"
+          grep -Fq "'listia_cloudflare_account_id'" "$free_migration"
+          grep -Fq "'groq:direct'" "$free_migration"
+          grep -Fq "'listia_groq_api_key'" "$free_migration"
+          grep -Fq "'google:direct'" "$free_migration"
+          grep -Fq "'listia_google_genai_api_key'" "$free_migration"
+          grep -Fq "'not_configured'" "$free_migration"
+          grep -Fq "'cloudflare:nemotron-3-120b-a12b'" "$free_migration"
+          grep -Fq "'groq:gpt-oss-120b'" "$free_migration"
+
+          # Engine itself is LISTIA-only and does not cross into Marketplace or another product.
           ! grep -Eqi 'cloudsales|cloudco|marketplace_listings|public\.marketplace_|/functions/v1/marketplace' "$engine" "$adapters"
 
           echo 'LISTIA_AI_ENGINE_BOUNDARY_OK'
