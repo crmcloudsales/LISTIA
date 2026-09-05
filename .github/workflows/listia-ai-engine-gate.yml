@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/listia-ai-engine/**'
+      - 'supabase/functions/listia-ai-readiness/**'
       - 'supabase/functions/listia-conversation/**'
       - 'supabase/functions/listia-public-chat/**'
       - 'supabase/functions/listia-tts/**'
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - 'supabase/functions/listia-ai-engine/**'
+      - 'supabase/functions/listia-ai-readiness/**'
       - 'supabase/functions/listia-conversation/**'
       - 'supabase/functions/listia-public-chat/**'
       - 'supabase/functions/listia-tts/**'
@@ -41,15 +43,15 @@ jobs:
           set -Eeuo pipefail
           engine='supabase/functions/listia-ai-engine/index.ts'
           adapters='supabase/functions/listia-ai-engine/adapters.ts'
+          readiness='supabase/functions/listia-ai-readiness/index.ts'
           migration='supabase/migrations/20260904171619_consolidate_listia_ai_engine.sql'
           tts_migration='supabase/migrations/20260904172548_add_ai_engine_tts_route.sql'
           free_migration='supabase/migrations/20260905122107_listia_ai_engine_free_first_providers.sql'
-          consumers=(
-            'supabase/functions/listia-conversation/index.ts'
-            'supabase/functions/listia-public-chat/index.ts'
-            'supabase/functions/listia-tts/index.ts'
-            'supabase/functions/property-ai-worker/index.ts'
-          )
+          conversation='supabase/functions/listia-conversation/index.ts'
+          public_chat='supabase/functions/listia-public-chat/index.ts'
+          tts='supabase/functions/listia-tts/index.ts'
+          property_worker='supabase/functions/property-ai-worker/index.ts'
+          consumers=("$conversation" "$public_chat" "$tts" "$property_worker")
 
           # Provider endpoints and provider protocol live only in adapters.
           grep -Fq 'https://api.openai.com/v1/responses' "$adapters"
@@ -67,6 +69,24 @@ jobs:
           grep -Fq 'private.ai_runs' "$engine"
           grep -Fq 'private.ai_route_policies' "$engine"
           grep -Fq 'private.ai_provider_runtimes' "$engine"
+
+          # Cost policy must fail closed: free-only, paid disabled, premium budget zero.
+          grep -Fq "mode:'free_only'" "$engine"
+          grep -Fq 'paid_fallback_enabled:false' "$engine"
+          grep -Fq 'monthly_paid_budget_usd:0' "$engine"
+          grep -Fq "costClass==='premium'" "$engine"
+          grep -Fq "mode!=='free_only'" "$engine"
+          grep -Fq "data_classification||''" "$engine"
+          grep -Fq ":'private'" "$engine"
+          grep -Fq "mode:'free_only'" "$readiness"
+          grep -Fq 'monthly_paid_budget_usd:0' "$readiness"
+          grep -Fq 'premium_spend_blocked' "$readiness"
+
+          # Every consumer explicitly classifies data at the Engine boundary.
+          grep -Fq "data_classification:'private'" "$conversation"
+          grep -Fq "data_classification:'public'" "$public_chat"
+          grep -Fq "data_classification:'private'" "$tts"
+          grep -Fq "data_classification:'private'" "$property_worker"
 
           # Product functions may know the Engine, never provider URLs or raw provider secrets.
           for file in "${consumers[@]}"; do
@@ -90,7 +110,7 @@ jobs:
           grep -Fq "'openai:gpt-4o-mini-tts'" "$tts_migration"
           grep -Fq "'tts','q1'" "$tts_migration"
 
-          # Free-first providers must remain LISTIA-owned and fail-closed until configured.
+          # Free-first providers remain LISTIA-owned and fail-closed until configured.
           grep -Fq "'cloudflare:workers_ai'" "$free_migration"
           grep -Fq "'listia_cloudflare_ai_token'" "$free_migration"
           grep -Fq "'listia_cloudflare_account_id'" "$free_migration"
