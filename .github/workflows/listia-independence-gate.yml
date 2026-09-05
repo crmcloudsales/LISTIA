@@ -45,6 +45,7 @@ jobs:
           legacy='supabase/functions/cloudco-investment-lead/index.ts'
           canonical='supabase/functions/listia-investment-lead/index.ts'
           property_ai='supabase/functions/property-ai-worker/index.ts'
+          ai_engine='supabase/functions/listia-ai-engine/index.ts'
           legacy_migration='supabase/migrations/20260904140142_retire_legacy_cloudco_investment_resources.sql'
           ai_migration='supabase/migrations/20260904160900_move_property_ai_to_listia_native_runtime.sql'
 
@@ -66,22 +67,32 @@ jobs:
           grep -Fq "boundary:'LISTIA_ONLY'" "$canonical"
           ! grep -Fq 'formsubmit.co' "$canonical"
 
-          # Property AI is LISTIA-owned. NVIDIA, when configured, is called directly;
-          # otherwise the deterministic LISTIA fallback keeps the pipeline operational.
-          grep -Fq "RUNTIME_KEY = 'nvidia:listia_direct'" "$property_ai"
-          grep -Fq "API_SECRET_NAME = 'listia_nvidia_api_key'" "$property_ai"
-          grep -Fq "DIRECT_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions'" "$property_ai"
-          grep -Fq "LOCAL_MODEL = 'deterministic-property-type-v1'" "$property_ai"
+          # Property AI remains LISTIA-owned, but provider routing is now centralized
+          # behind the authenticated LISTIA AI engine rather than hard-coded in this worker.
+          grep -Fq "name='listia_ai_engine_secret'" "$property_ai"
+          grep -Fq '/functions/v1/listia-ai-engine' "$property_ai"
+          grep -Fq "task_type:'property_extract'" "$property_ai"
+          grep -Fq "data_classification:'private'" "$property_ai"
+          grep -Fq "LOCAL_MODEL='deterministic-property-type-v1'" "$property_ai"
           ! grep -Fq 'fkahaqprzgcimgyathqx' "$property_ai"
           ! grep -Fq 'listia_cloudco_nvidia_gateway_token' "$property_ai"
           ! grep -Fq 'cloudco_gateway' "$property_ai"
+
+          # Central engine is authenticated with a LISTIA-owned secret and enforces
+          # the free-only default before a provider adapter can execute.
+          grep -Fq "name='listia_ai_engine_secret'" "$ai_engine"
+          grep -Fq "mode:'free_only'" "$ai_engine"
+          grep -Fq 'paid_fallback_enabled:false' "$ai_engine"
+          grep -Fq "data_classification" "$ai_engine"
+          grep -Fq "premium_spend_blocked" "$ai_engine"
 
           # Legacy tables remain historical only and are closed to browser roles.
           grep -Fq 'revoke all on public.cloudco_investment_leads from public, anon, authenticated' "$legacy_migration"
           grep -Fq 'revoke all on public.cloudco_form_rate_limits from public, anon, authenticated' "$legacy_migration"
           grep -Fq 'LEGACY RETIRED' "$legacy_migration"
 
-          # Active provider registry moves to a LISTIA-owned direct runtime.
+          # Historical migration established the LISTIA-owned provider registry.
+          # Runtime execution may now be centralized through listia-ai-engine.
           grep -Fq "'nvidia:listia_direct'" "$ai_migration"
           grep -Fq "'listia_nvidia_api_key'" "$ai_migration"
           grep -Fq "'credential_owner', 'listia'" "$ai_migration"
