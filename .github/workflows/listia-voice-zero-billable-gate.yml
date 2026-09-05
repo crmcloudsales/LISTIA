@@ -1,0 +1,38 @@
+name: LISTIA Voice Zero-Billable Gate
+
+on:
+  pull_request:
+    paths:
+      - 'public/listia-voice.js'
+      - 'public/voice-lab.js'
+      - 'public/voice-lab.html'
+      - 'scripts/audit-listia-voice-free-policy.py'
+      - '.github/workflows/listia-voice-zero-billable-gate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/listia-voice.js'
+      - 'public/voice-lab.js'
+      - 'public/voice-lab.html'
+      - 'scripts/audit-listia-voice-free-policy.py'
+      - '.github/workflows/listia-voice-zero-billable-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  voice-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check public/listia-voice.js
+          node --check public/voice-lab.js
+
+      - name: Enforce zero-billable voice policy
+        run: python3 scripts/audit-listia-voice-free-policy.py
