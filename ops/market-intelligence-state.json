@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-04T17:08:31Z",
+  "updated_at": "2026-09-05T13:34:00Z",
   "status": "active",
   "owner_workstream": "listia_marketplace_and_real_estate_intelligence_operations",
   "product_name": "LISTIA Market Intelligence",
@@ -17,9 +17,12 @@
       "private.marketplace_inventory_resolution_queue",
       "private.marketplace_state_expansion_queue"
     ],
-    "snapshot_segments_saved": 4934,
-    "snapshot_range": ["2026-08-30", "2026-09-04"],
-    "latest_snapshot_captured_at": "2026-09-04T06:10:00.166558Z",
+    "snapshot_segments_saved": 5779,
+    "snapshot_range": [
+      "2026-08-30",
+      "2026-09-05"
+    ],
+    "latest_snapshot_captured_at": "2026-09-05T13:33:55.456462Z",
     "snapshot_cron": {
       "job_name": "listia-market-intelligence-daily-snapshot",
       "schedule_utc": "10 6 * * *",
@@ -33,11 +36,11 @@
     "premium": "pro_plus_segment_intelligence_demand_signals_trends_and_developer_mode"
   },
   "quintana_roo": {
-    "total_rows": 7519,
-    "public_published": 7457,
-    "public_with_cover_photo": 7457,
-    "sale": 5978,
-    "rent": 1479,
+    "total_rows": 7534,
+    "public_published": 7471,
+    "public_with_cover_photo": 7471,
+    "sale": 5984,
+    "rent": 1487,
     "sources": 107,
     "currency": {
       "MXN": 6910,
@@ -76,24 +79,24 @@
     },
     "global_property_resolution": {
       "resolved": 0,
-      "queued": 7457,
-      "status": "critical_gap"
+      "queued": 7471,
+      "status": "critical_gap_missing_canonical_marketplace_global_property_object"
     },
     "contact_coverage": {
       "source_backups": 108,
       "email": 88,
       "phone": 97,
       "whatsapp": 34,
-      "decision_maker": 29,
+      "decision_maker": 30,
       "provenance": 108
     },
     "routing": {
-      "claimable_listings": 1092,
-      "ready_email": 998,
+      "claimable_listings": 1106,
+      "ready_email": 1012,
       "ready_phone_only": 59,
       "needs_contact_enrichment": 35,
       "do_not_contact": 6365,
-      "with_mapped_whatsapp": 659
+      "with_mapped_whatsapp": 667
     }
   },
   "demand": {
@@ -122,15 +125,31 @@
     "google_drive_folder": "https://drive.google.com/drive/folders/1KWchwAx4aOAj92G-i38KZcTGdVntbofv",
     "google_doc_master": "https://docs.google.com/document/d/1tpU34c4bawrWHEkoIaJULx6TRdLK3vHMniTEHtHl7CA",
     "google_drive_excel": "https://docs.google.com/spreadsheets/d/1Yxw5_sk_htki-8ajtJoWhZNYqfPe5to7/edit",
-    "library_folder": "/LISTIA/Marketplace/Market Intelligence"
+    "library_folder": "/LISTIA/Marketplace/Market Intelligence",
+    "latest_checkpoint_drive": "https://drive.google.com/file/d/1xflWl7z_6kLpa3px0DJQORKtcZgpGne9/view?usp=drivesdk",
+    "latest_checkpoint_library_file_id": "libfile_2b57bd38e7188191bcc644ae5c832bd1"
   },
   "latest_controlled_refresh": {
-    "workflow_run_id": 33898856491,
+    "workflow_run_id": 33968705823,
     "sources_processed": 3,
-    "accepted_property_pages": 90,
-    "new_public_listings": 0,
-    "result": "inventory unchanged; two sources scheduled for normal recheck and one source scheduled for retry"
+    "accepted_property_pages": 89,
+    "new_public_rows_inserted": 15,
+    "duplicate_or_existing": 74,
+    "result": "two direct sources succeeded; generic portal returned no accepted detail pages and was adaptively scheduled for retry"
   },
-  "exact_next_action": "Begin the first evidence-backed global-property entity-resolution batch in Quintana Roo, then continue due adaptive source refreshes.",
-  "continuation_rule": "Recover this file, production Supabase, latest GitHub, Drive and Library before the next batch; do not restart research from zero."
+  "exact_next_action": "Create the missing canonical Marketplace global-property object and listing relation without reusing organization-owned public.properties; migrate the exact Casa Akau pair as the first one-global-property/many-listings example; then process the next three due Q.Roo sources with the same lease and 80-detail limits.",
+  "continuation_rule": "Recover this file, production Supabase, latest GitHub, Drive and Library before the next batch; do not restart research from zero.",
+  "latest_entity_resolution": {
+    "exact_public_duplicates_archived": 1,
+    "example": "Casa Akau localized source URL variants",
+    "global_property_links_created": 0,
+    "reason": "public.properties is organization/user-owned and is not the canonical global physical-property object"
+  },
+  "latest_professional_enrichment": {
+    "name": "Rogelio Piedra",
+    "role": "CEO",
+    "company": "Plalla Real Estate",
+    "evidence_rows_added": 2,
+    "source": "https://plalla.com/en/about-us/"
+  }
 }
