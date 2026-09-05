@@ -2,8 +2,11 @@
   "territory": "Quintana Roo",
   "territory_code": "MX-ROO",
   "status": "active_maintenance_and_completion",
-  "updated_at": "2026-09-04T17:08:31Z",
-  "next_territories_parallel_discovery": ["Yucatán", "Ciudad de México"],
+  "updated_at": "2026-09-05T13:34:00Z",
+  "next_territories_parallel_discovery": [
+    "Yucatán",
+    "Ciudad de México"
+  ],
   "mandatory_order": [
     "Quintana Roo",
     "Yucatán",
@@ -31,15 +34,15 @@
     "observed_supply_is_not_demand": true
   },
   "production_checkpoint": {
-    "total_rows": 7519,
-    "public_published": 7457,
-    "public_with_photo": 7457,
-    "sale": 5978,
-    "rent": 1479,
+    "total_rows": 7534,
+    "public_published": 7471,
+    "public_with_photo": 7471,
+    "sale": 5984,
+    "rent": 1487,
     "sources_used": 107,
     "with_global_property_id": 0,
     "with_raw_coordinates": 5,
-    "last_listing_update": "2026-09-01T15:27:26.671386Z"
+    "last_listing_update": "2026-09-05T13:31:17.598073Z"
   },
   "source_prospect_checkpoint": {
     "qroo_source_backups": 108,
@@ -47,33 +50,33 @@
     "with_email": 88,
     "with_phone": 97,
     "with_whatsapp": 34,
-    "with_principal_person": 29,
+    "with_principal_person": 30,
     "with_provenance": 108,
-    "party_evidence_rows_global": 30,
+    "party_evidence_rows_global": 32,
     "parties_with_evidence_global": 15
   },
   "lead_routing_checkpoint": {
-    "public_qroo_listings_evaluated": 7457,
-    "claimable": 1092,
-    "ready_email": 998,
+    "public_qroo_listings_evaluated": 7471,
+    "claimable": 1106,
+    "ready_email": 1012,
     "ready_phone_only": 59,
     "needs_contact_enrichment": 35,
     "do_not_contact": 6365,
-    "with_mapped_whatsapp": 659,
+    "with_mapped_whatsapp": 667,
     "identified_leads": 0,
     "claim_candidate_queue": 0,
     "demand_interpretation": "DATA_INSUFFICIENT"
   },
   "adaptive_operations": {
     "source_refresh_state_rows": 108,
-    "due_sources_at_checkpoint": 105,
+    "due_sources_at_checkpoint": 102,
     "active_leases_at_checkpoint": 0,
-    "contact_enrichment_queue_qroo": 93,
+    "contact_enrichment_queue_qroo": 92,
     "contact_queue_needs_email": 20,
     "contact_queue_needs_phone": 11,
     "contact_queue_needs_whatsapp": 74,
-    "contact_queue_needs_decision_maker": 79,
-    "inventory_global_property_resolution_queue_qroo": 7457,
+    "contact_queue_needs_decision_maker": 78,
+    "inventory_global_property_resolution_queue_qroo": 7471,
     "source_locking": "FOR UPDATE SKIP LOCKED + two-hour worker lease",
     "refresh_policy": "content hash + adaptive next_check_at"
   },
@@ -104,7 +107,10 @@
       "Michele Vitali — CEO/Founder — iMéxico Real Estate"
     ],
     "new_email": "hello@plalla.com",
-    "new_whatsapp": ["+529842181599", "+529841005806"],
+    "new_whatsapp": [
+      "+529842181599",
+      "+529841005806"
+    ],
     "evidence_rows_added": 10,
     "duplicate_primary_source_party_groups_resolved": 2
   },
@@ -120,9 +126,9 @@
     ]
   },
   "checkpoint_backups": {
-    "google_drive": "https://drive.google.com/file/d/14H6F4B0jXUOrzti6PE-Wl41hMJX_d022/view?usp=drivesdk",
-    "chatgpt_library_file_id": "libfile_e7f07b146f288191af41d18ce7e9f23c",
-    "file_name": "LISTIA_MARKETPLACE_CHECKPOINT_2026-09-04.md"
+    "google_drive": "https://drive.google.com/file/d/1xflWl7z_6kLpa3px0DJQORKtcZgpGne9/view?usp=drivesdk",
+    "chatgpt_library_file_id": "libfile_2b57bd38e7188191bcc644ae5c832bd1",
+    "file_name": "LISTIA_MARKETPLACE_CHECKPOINT_2026-09-05.md"
   },
   "canonical_storage": {
     "supabase": [
@@ -154,11 +160,50 @@
     ]
   },
   "gaps": [
-    "7457 public Q.Roo listings still require global_property resolution",
+    "7471 public Q.Roo listings still require a canonical Marketplace global-property relation",
     "74 Q.Roo source prospects still lack verified WhatsApp",
-    "79 Q.Roo source prospects still lack a verified decision maker",
+    "78 Q.Roo source prospects still lack a verified decision maker",
     "Most generic-portal inventory remains correctly suppressed from unrelated claim routing",
     "No behavioral demand or identified lead data exists yet"
   ],
-  "exact_next_action": "Resolve the first evidence-backed global-property batch in Quintana Roo, then continue the due source and contact-enrichment queues."
+  "exact_next_action": "Create the missing canonical Marketplace global-property object and listing relation without reusing organization-owned public.properties; migrate the exact Casa Akau pair as the first one-global-property/many-listings example; then process the next three due Q.Roo sources with the same lease and 80-detail limits.",
+  "controlled_refresh_2026_09_05": {
+    "workflow_run_id": 33968705823,
+    "sources_processed": 3,
+    "sources_succeeded": 2,
+    "sources_failed": 1,
+    "candidate_pages": 160,
+    "accepted_property_pages": 89,
+    "unique_cover_images": 89,
+    "new_public_rows_inserted": 15,
+    "duplicate_or_existing": 74,
+    "invalid_payload_rows": 0,
+    "succeeded": [
+      "Astamar Realty — 43 accepted",
+      "Plalla Real Estate — 46 accepted"
+    ],
+    "failed": [
+      "Quintana Roo Public Inventory / propiedades.com — no accepted property pages"
+    ],
+    "next_retry_at": "2026-09-07T13:31:17.598073Z",
+    "active_leases_after_completion": 0
+  },
+  "batch_2026_09_05": {
+    "professionals_verified": [
+      "Rogelio Piedra — CEO — Plalla Real Estate"
+    ],
+    "evidence_rows_added": 2,
+    "exact_duplicate_public_listings_archived": 1,
+    "duplicate_example": "Casa Akau localized URL variants; history and provenance preserved",
+    "global_property_status": "blocked_by_missing_canonical_marketplace_global_property_object; organization-owned public.properties was not misused"
+  },
+  "market_intelligence_snapshot": {
+    "segments_refreshed": 845,
+    "total_segments": 5779,
+    "range": [
+      "2026-08-30",
+      "2026-09-05"
+    ],
+    "captured_at": "2026-09-05T13:33:55.456462Z"
+  }
 }
