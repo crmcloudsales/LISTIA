@@ -1,0 +1,32 @@
+name: LISTIA Workspace Session Safety Gate
+
+on:
+  pull_request:
+    paths:
+      - 'public/workspace-context.js'
+      - 'scripts/audit-listia-workspace-session-safety.py'
+      - '.github/workflows/listia-workspace-session-safety-gate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/workspace-context.js'
+      - 'scripts/audit-listia-workspace-session-safety.py'
+      - '.github/workflows/listia-workspace-session-safety-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace-session-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        run: node --check public/workspace-context.js
+
+      - name: Enforce workspace session safety
+        run: python3 scripts/audit-listia-workspace-session-safety.py
