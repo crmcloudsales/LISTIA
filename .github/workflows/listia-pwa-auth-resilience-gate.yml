@@ -1,0 +1,36 @@
+name: LISTIA PWA Auth Resilience Gate
+
+on:
+  pull_request:
+    paths:
+      - 'public/install.js'
+      - 'public/oauth-auth.js'
+      - 'scripts/audit-listia-pwa-auth-resilience.py'
+      - '.github/workflows/listia-pwa-auth-resilience-gate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/install.js'
+      - 'public/oauth-auth.js'
+      - 'scripts/audit-listia-pwa-auth-resilience.py'
+      - '.github/workflows/listia-pwa-auth-resilience-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pwa-auth-resilience:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check public/install.js
+          node --check public/oauth-auth.js
+
+      - name: Enforce PWA and OAuth resilience
+        run: python3 scripts/audit-listia-pwa-auth-resilience.py
