@@ -25,7 +25,7 @@ Deno.serve(async(req:Request)=>{
  const internalKey=await engineKey();if(!internalKey)return fail(req,'service_unavailable',503)
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000)
  try{
-  const r=await fetch(`${SUPABASE_URL}/functions/v1/listia-ai-engine`,{method:'POST',headers:{'x-listia-ai-engine-key':internalKey,'content-type':'application/json'},body:JSON.stringify({task_type:'tts',quality_tier:'q1',text,instructions,voice:'coral',speed:1.08}),signal:controller.signal})
+  const r=await fetch(`${SUPABASE_URL}/functions/v1/listia-ai-engine`,{method:'POST',headers:{'x-listia-ai-engine-key':internalKey,'content-type':'application/json'},body:JSON.stringify({task_type:'tts',quality_tier:'q1',data_classification:'private',text,instructions,voice:'coral',speed:1.08}),signal:controller.signal})
   if(!r.ok)return fail(req,'voice_unavailable',r.status===503?503:502)
   return new Response(r.body,{status:200,headers:{...cors(req),'content-type':'audio/mpeg','cache-control':'private,no-store','x-content-type-options':'nosniff','cross-origin-resource-policy':'same-site','x-listia-ai-engine':'v1'}})
  }catch{return fail(req,'voice_unavailable',502)}finally{clearTimeout(timer)}
