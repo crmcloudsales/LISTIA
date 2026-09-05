@@ -1,0 +1,32 @@
+name: LISTIA Contact Engine Core Gate
+
+on:
+  pull_request:
+    paths:
+      - 'public/contact-engine.js'
+      - 'scripts/audit-listia-contact-engine-core.py'
+      - '.github/workflows/listia-contact-engine-core-gate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/contact-engine.js'
+      - 'scripts/audit-listia-contact-engine-core.py'
+      - '.github/workflows/listia-contact-engine-core-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contact-engine-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        run: node --check public/contact-engine.js
+
+      - name: Enforce contact-engine invariants
+        run: python3 scripts/audit-listia-contact-engine-core.py
